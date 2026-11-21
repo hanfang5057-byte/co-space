@@ -919,6 +919,9 @@ export function apply(ctx) {
 - 冲突列表/解决；Conflict Review UI；`space_wait_sync`。
 - 验收：双实例配对、双向同步、冲突可解决、断网重连追平。
 
+
+> 2026-11-21 Univer 评估：实际跑通 Docs/Sheets 1.6.0，但无 1.6 Slides；Office/CSV 导入导出依赖 Pro 后端与商业 License；快照 JSON 与开放文本/三方合并冲突；主包约 6.7MB/1.69MB gzip。结论：不替换当前 open-text 内核。详见 [评估报告](research/2026-11-21-univer-evaluation.md)。
+
 ### M3：完整 Web UI
 
 - 模板库、搜索、Recent/Trash、CodeMirror 编辑器替换 textarea。
