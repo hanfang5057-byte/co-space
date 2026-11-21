@@ -13,7 +13,7 @@ Spike：`research/univer-spike/`
 - 实际跑通：
   - `@univerjs/preset-docs-core` 1.6.0：文档可编辑、可保存快照
   - `@univerjs/preset-sheets-core` 1.6.0：表格可编辑、可保存快照
-- 未跑通：
+- 额外试了 Slides 1.3.1（与 Docs/Sheets 1.6.0 不同版本）：
   - 没有 `@univerjs/preset-slides-core` 1.6.0
   - `@univerjs/slides` / `@univerjs/slides-ui` 停留在 1.3.1，依赖 `@univerjs/core@1.3.1`
   - Docs/Sheets 1.6.0 与 Slides 1.3.1 不能按 Univer 官方“所有 `@univerjs/*` 同版本”的要求共存
@@ -22,8 +22,18 @@ Spike：`research/univer-spike/`
 
 - [Docs](univer-spike/screenshots/docs.png)
 - [Sheets](univer-spike/screenshots/sheets.png)
+- [Slides 1.3.1 空编辑器](univer-spike/screenshots/slides-1.3.1.png)
 
 ---
+
+### Slides 1.3.1 实测
+
+- 用 `@univerjs/presets@1.3.1` + Docs preset + `UniverSlidesPlugin` + `UniverSlidesUIPlugin` 启动
+- 能渲染出 Slides 编辑器外壳（“新增幻灯片”按钮、空白画布）
+- 但“新增幻灯片”没有在空白画布上产生可编辑页；“新增幻灯片”不是普通可点击按钮，1.3.1 的 UI/命令接线明显不完整
+- 与 1.6 Docs/Sheets 版本线冲突；不能作为当前 1.6 组合里的 Slides 编辑器
+
+结论：**Univer Slides 仍处于早期，不能作为 M3 的稳定幻灯片编辑方案。**
 
 ## 2. 存储格式：不是 Markdown / CSV / Marp
 
@@ -87,6 +97,17 @@ Spike：`research/univer-spike/`
 - 更不能直接读写 Markdown / Marp
 
 ---
+
+## 3.5 幻灯片备选方案
+
+| 方案 | 类型 | License | 问题 |
+|---|---|---|---|
+| Univer Slides 1.3.1 | 可视化 PPT 编辑器 | Apache-2.0 | 版本停在 1.3.1；1.6 无 Slides preset；实测新增页不可用 |
+| PPTist | Vue 3 可视化 PPT 编辑器 | **AGPL-3.0** | 不是 React 库；AGPL 网络使用义务；PPTist JSON/PPTX，不是 Marp |
+| Slidev | Markdown 幻灯片应用 | MIT | Vue 应用，不是可嵌入 React 编辑器；编辑仍是 Markdown |
+| Marp | 渲染器 | MIT | 只有渲染，没有官方编辑器 |
+| reveal.js / Spectacle | 演示运行时 | MIT | 没有编辑器 |
+| 自研结构化 Marp 编辑器 | 表单/缩略图/预览 | 自有 | 不是完整 WYSIWYG，但能解决“只能编辑源码”的体验 |
 
 ## 4. 包体
 
