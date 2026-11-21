@@ -165,9 +165,9 @@ Description [__________________________]
 ```
 
 - **Preview**：服务端渲染的 Markdown HTML（已 sanitize），使用 `.space-prose` 样式；标题层级、表格、代码、任务列表与宿主一致。
-- **Edit**（M2 已实现）：
-  - `textarea` 编辑器 + 保存/取消 + 未保存提示；保存带 `expectedSha256`。
-  - M3：CodeMirror 6 或等价编辑器；支持大纲、快捷键、查找。
+- **Edit**（M3a 已实现）：
+  - CodeMirror 6 Markdown 编辑器，支持语法高亮、撤销、搜索、Tab 缩进、行内主题 tokens。
+  - 保存/取消 + 未保存提示；保存带 `expectedSha256`。
 - 顶部显示相对路径，点击可复制。
 - `Chat about this`：创建一个带 `space_context` + 当前页面内容的 DSH 会话；按钮在 Preview 和 Edit 都可用。
 - 页面不存在：EmptyState “页面不存在，可能已被移动/删除” + 返回树。
@@ -288,14 +288,12 @@ Need: 0 files
 
 ### 4.3 组件库与构建
 
-**结论：React 18 + React Aria Components（headless）+ TanStack Virtual；不使用 Ant Design / MUI / Mantine 这类带样式的整套组件库。**
+**结论：React 18 + React Aria Components（headless）+ CodeMirror 6 + react-data-grid；不使用 Ant Design / MUI / Mantine 这类带样式的整套组件库。**
 
 | 需求 | 选择 | License | 说明 |
 |---|---|---|---|
 | Dialog / Menu / Tabs / Tooltip / Tree / Table | `react-aria-components` 1.x | Apache-2.0 | 一套 headless、可访问的组件覆盖大部分页面需求；样式由我们用 CSS Modules + tokens 写 |
-| 长列表 / 大 CSV 虚拟滚动 | `@tanstack/react-virtual` 3.x | MIT | DSH 平台模块表已提供，可直接 `require`，不用重复打包 |
-| Markdown/CSV 编辑器（M3） | CodeMirror 6 | MIT | 体积较大，按需 `require.async` 懒加载，不进入首屏 |
-| 表格逻辑（如需要排序/筛选） | `@tanstack/react-table` | MIT | 可选；M1 只读表格用 React Aria Table 足够 |
+| Markdown/CSV 编辑器 | CodeMirror 6（M3a）/ react-data-grid 7 beta（M3b） | MIT | 当前已打包进 client.js；后续可拆按需 chunk |
 | 图标 | 自绘 SVG（12–16 个） | — | 与 DSH 线性图标风格一致；如要加速可用 `lucide-react`（ISC），但需统一线宽/尺寸 |
 
 **不推荐**
@@ -324,7 +322,7 @@ window.__ModuleLoader__.load({
 
 - `react`、`react-dom`、`@tanstack/react-virtual` 标记为 external（宿主模块表已有）；React Aria 等第三方库打进 bundle。
 - `dsh.client.external` 只列“宿主提供的非 baseline 模块”；打进 bundle 的库不要列，避免解析失败。
-- M3 的 CodeMirror 用 `require.async` 拆成按需 chunk；M1 不引入编辑器，减少首屏体积。
+- 当前 CodeMirror/react-data-grid 已打包进 `client.js`（1.54MB / 374KB gzip）；后续可用 `require.async` 拆 chunk。
 - 在 CI 记录 `client.js` 体积；超过预算（例如 500KB gzip 前）时再拆包。
 
 ### 4.4 图标
@@ -467,8 +465,8 @@ export function apply(ctx) {
 | 阶段 | UI 范围 |
 |---|---|
 | **M1（必须）** | 侧边栏入口、Spaces Home、New space、用邀请加入、Space Detail + Page 树、三类内容创建、Preview、Sync 徽标、Invite token 展示、基础错误/空态 |
-| **M2（已实现）** | Page 文本编辑保存、CSV 单元格编辑、Marp 预览、冲突 Review、成员批准、同步状态 |
-| **M3（完整）** | 模板库、树右键菜单、CodeMirror 编辑器、搜索、Recent/Trash、Chat about this、i18n 完整、可访问性打磨 |
+| **M2（已实现）** | Page 编辑保存、CSV 单元格编辑、Marp 预览、冲突 Review、成员批准、同步状态 |
+| **M3（完整）** | 模板库、树右键菜单、搜索、Recent/Trash、Chat about this、i18n 完整、可访问性打磨；CodeMirror/react-data-grid 已落地 |
 | **M4** | 评论 UI、版本历史、页面链接、ODS 表格、主题扩展 |
 
 > M1 的 UI 不是为了“好看”，而是为了让创建、预览、邀请、同步这些核心路径在真实浏览器中可验证；MCP 工具与 UI 共用同一套 Host core，避免两套实现。

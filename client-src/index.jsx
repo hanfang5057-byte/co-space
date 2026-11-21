@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Button, Dialog, DialogTrigger, Heading, Modal, Tab, TabList, TabPanel, Tabs,
-} from 'react-aria-components'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Dialog, Heading, Modal, Tab, TabList, Tabs } from 'react-aria-components'
+import MarkdownEditor from './editors/MarkdownEditor.jsx'
+import CsvGridEditor from './editors/CsvGridEditor.jsx'
+import { RDG_STYLES } from './editors/rdgStyles.js'
 
 const EMPTY = { pages: 0, sheets: 0, slides: 0, assets: 0, files: 0 }
 
@@ -282,7 +283,7 @@ function App() {
 
   return (
     <div className="sp-root">
-      <style>{STYLE}</style>
+      <style>{STYLE}{RDG_STYLES}</style>
       {toast && <div className="sp-toast" role="status">{toast}</div>}
       {error && <div className="sp-error" role="alert">{error}<ButtonBase variant="ghost" onPress={() => setError('')}>关闭</ButtonBase></div>}
       {view.kind === 'home' ? (
@@ -487,7 +488,7 @@ function ContentPane({ content, path, mode, draft, dirty, saving, sheetEdits, on
         content.kind === 'table' ? (
           <SheetEditor content={content} sheetEdits={sheetEdits} onCellChange={onCellChange} onAddRow={onAddRow} />
         ) : (
-          <textarea className="sp-editor" value={draft} onChange={event => onDraftChange(event.target.value)} spellCheck={false} aria-label="编辑内容" />
+          <MarkdownEditor value={draft} onChange={onDraftChange} ariaLabel="编辑内容" minHeight={360} />
         )
       ) : (
         <Preview content={content} />
@@ -498,21 +499,11 @@ function ContentPane({ content, path, mode, draft, dirty, saving, sheetEdits, on
 
 function SheetEditor({ content, sheetEdits, onCellChange, onAddRow }) {
   const columns = content.table?.columns || []
+  const rows = (content.table?.rows || []).map((row, rowIndex) =>
+    row.map((value, columnIndex) => sheetEdits[`${rowIndex}:${columnIndex}`] ?? value ?? ''))
   return (
-    <div className="sp-table-wrap">
-      <table className="sp-table sp-table-edit">
-        <thead><tr>{columns.map(column => <th key={column.key}>{column.title}</th>)}</tr></thead>
-        <tbody>
-          {content.table.rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {columns.map((column, columnIndex) => {
-                const key = `${rowIndex}:${columnIndex}`
-                return <td key={column.key}><input className="sp-cell-input" value={sheetEdits[key] ?? row[columnIndex] ?? ''} onChange={event => onCellChange(rowIndex, columnIndex, event.target.value)} aria-label={`${column.title} 第 ${rowIndex + 1} 行`} /></td>
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="sp-sheet-shell">
+      <CsvGridEditor columns={columns} rows={rows} onCellChange={onCellChange} minHeight={360} />
       <div className="sp-table-foot">
         <p className="sp-muted">{content.table.rows.length} / {content.table.total} 行</p>
         <ButtonBase onPress={onAddRow}><Icon name="plus" size={14} /> 添加空行</ButtonBase>
@@ -977,12 +968,10 @@ const STYLE = `
 .sp-seg{display:flex;padding:2px;background:var(--dsw-alias-bg-layer-2);border-radius:7px}
 .sp-seg button{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;padding:4px 9px;border-radius:5px;cursor:pointer}
 .sp-seg button.active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}
-.sp-editor{flex:1;min-height:360px;width:100%;box-sizing:border-box;resize:none;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);padding:16px 18px;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;tab-size:2}
-.sp-editor:focus{border-color:var(--dsw-alias-brand-primary)}
-.sp-table-edit td{padding:3px 4px}
-.sp-cell-input{width:100%;min-width:90px;box-sizing:border-box;border:1px solid transparent;background:transparent;color:inherit;font:inherit;padding:5px 6px;border-radius:4px;outline:none}
-.sp-cell-input:hover{border-color:var(--dsw-alias-border-l1)}
-.sp-cell-input:focus{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1)}
+.sp-sheet-shell{flex:1;min-height:360px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.sp-csv-grid{--rdg-background-color:var(--dsw-alias-bg-layer-1);--rdg-color:var(--dsw-alias-label-primary);--rdg-border-color:var(--dsw-alias-border-l1);--rdg-header-background-color:var(--dsw-alias-bg-layer-2);--rdg-row-hover-background-color:var(--dsw-alias-bg-layer-2);--rdg-row-selected-background-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,var(--dsw-alias-bg-layer-1));--rdg-row-selected-hover-background-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 15%,var(--dsw-alias-bg-layer-1));--rdg-selection-color:var(--dsw-alias-brand-primary);--rdg-font-size:13px}
+.sp-csv-grid .rdg{height:100%;border:1px solid var(--dsw-alias-border-l1);border-radius:8px}
+.sp-sheet-shell .sp-table-foot{margin-top:0}
 .sp-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .sp-dialog-wide{width:min(880px,100%)}
 .sp-section-title{font-size:13px;margin:18px 0 8px;color:var(--dsw-alias-label-secondary);font-weight:600}

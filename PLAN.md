@@ -799,12 +799,19 @@ MCP Server 运行时依赖：
 
 ```json
 {
+  "@codemirror/state": "^6.7.6",
+  "@codemirror/view": "^6.43.15",
+  "@codemirror/commands": "^6.11.1",
+  "@codemirror/language": "^6.13.1",
+  "@codemirror/search": "^6.7.2",
+  "@codemirror/lang-markdown": "^6.5.2",
+  "react-data-grid": "7.0.0-beta.47",
   "react-aria-components": "^1.22.1",
   "esbuild": "^0.25.0"
 }
 ```
 
-- `react`、`react-dom`、`@tanstack/react-virtual` 由 DSH 平台模块表提供，构建时 external；M3 再加 TanStack Table/CodeMirror。
+- `react`、`react-dom`、`@tanstack/react-virtual` 由 DSH 平台模块表提供，构建时 external；CodeMirror 6 与 `react-data-grid` 打进 `client.js`（当前 1.54MB / 374KB gzip），后续可拆按需 chunk。
 - React Aria 等第三方库打进 `client.js`；不使用 Ant Design/MUI/Mantine。
 - 客户端构建与 DSH 懒工厂格式见 [UI-DESIGN.md](UI-DESIGN.md) 4.3。
 
@@ -861,10 +868,10 @@ export function apply(ctx) {
 - 页面：Spaces Home、New space、Space Detail（Page 树 + 内容区）、Page/Sheet/Deck 预览、Invite、Conflict Review、Sync 状态。
 - M1 最小 UI：列表、创建空间、Page 树、三类内容创建、预览、同步徽标、邀请 token；保证真实浏览器可验证。
 - M2 已实现：页面编辑、CSV 单元格编辑、冲突 Review/合并、成员批准、同步状态。
-- M3 完整 UI：模板库、搜索、Recent/Trash、`Chat about this`、完整 i18n/可访问性、CodeMirror。
+- M3 完整 UI：模板库、搜索、Recent/Trash、`Chat about this`、完整 i18n/可访问性。
 - 视觉只用 `--dsw-alias-*` tokens；控件自建，不 import Harness Client 包；Marp 预览用内容级 sandbox iframe，其余全部 React。
 - Host 通过 WebServer 注册 `POST /dsh-space-api`（same-origin、默认 required auth）给 UI 调用，与 MCP Server 共用 `server/core`；不用 typert Remote，避免安装 bundle 的代码生成依赖。
-- UI 组件：React Aria Components（headless，打包）+ TanStack Virtual（宿主 baseline）+ 自绘图标；样式用 CSS Modules + `--dsw-alias-*` tokens，不 import `dsh-client-ui-primitives`。
+- UI 组件：React Aria Components（headless）+ CodeMirror 6 + react-data-grid + 自绘图标；样式用 CSS Modules + `--dsw-alias-*` tokens，不 import `dsh-client-ui-primitives`。
 
 ---
 
@@ -924,7 +931,7 @@ export function apply(ctx) {
 
 ### M3：完整 Web UI
 
-- 模板库、搜索、Recent/Trash、CodeMirror 编辑器替换 textarea。
+- 文档 CodeMirror 6 与表格 react-data-grid 已落地（M3a/M3b）；剩余模板库、搜索、Recent/Trash。
 - `Chat about this`；完整 i18n/可访问性/窄屏；搜索与 Recent/Trash。
 - 验收：M2 已能完成创建/编辑/邀请/同步/冲突解决；M3 补模板、搜索、历史与 i18n。
 
@@ -964,7 +971,7 @@ export function apply(ctx) {
 | 插件体积 | 只引入必要库；不引入 Office 解析/导出引擎；安装后在 CI 记录体积 |
 | DSH 接口变化 | `engines.dsh` 锁定；只依赖稳定 `mcpManager.register` 与 `webServer.register` |
 | UI Host API | 使用 WebServer `POST /dsh-space-api`；路由默认 required auth，浏览器同源 Cookie 认证；M1 已实测 |
-| 客户端构建 | 预构建 `client.js`；React/React-DOM/TanStack Virtual external，其余打包；CI 记录体积并在 M3 拆分 CodeMirror chunk |
+| 客户端构建 | 预构建 `client.js`；React/React-DOM external；CodeMirror/react-data-grid 打包（1.54MB/374KB gzip）；后续按需拆 chunk |
 | 无法实时协同 | 明确非目标；异步 + 冲突解决 |
 
 ---
@@ -998,6 +1005,16 @@ export function apply(ctx) {
 - 成员与设备：成员列表、连接状态、待批准设备批准、邀请 token 复制；Sync 状态对话框含 peer 完成度与重新扫描。
 - 新增 MCP 工具 `sheet_edit_cells`、`file_conflict_detail`（共 35 个）。
 - 真实浏览器验证：页面编辑保存、CSV 单元格保存、冲突 Review/保留本机、成员对话框、同步对话框。
+
+
+### M3a/M3b 已完成（2026-11-21）
+
+- 文档编辑：CodeMirror 6（`@codemirror/state/view/commands/language/search/lang-markdown`），Markdown 语法、行号/高亮、撤销、搜索、Tab 缩进、DSH tokens 主题。
+- 表格编辑：`react-data-grid@7.0.0-beta.47`，单元格编辑、列宽调整、单页滚动；CSV 仍按单元格增量保存。
+- 组件代码：`client-src/editors/MarkdownEditor.jsx`、`CsvGridEditor.jsx`；`rdgStyles.js` 由构建脚本从依赖生成。
+- 真实浏览器验证：CodeMirror 编辑并保存 Markdown；react-data-grid 编辑 `收入/100` 并保存 CSV。
+- 体积：client.js 1.53MB raw / 371KB gzip；尚未拆按需 chunk。
+- 限制：react-data-grid 仍是 beta；CodeMirror 搜索面板未做 DSH 主题；表格一次编辑当前页最多 200 行。
 
 ## 14. 默认执行项
 
