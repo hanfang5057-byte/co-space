@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import { fileSlug, httpError, resolveInside, sha256 } from './util.mjs'
 import { createDocumentMarkdown, appendDocument } from './markdown.mjs'
 import { createSlidesMarkdown, parseSlides, renderSlides } from './slides.mjs'
-import { createTableText, readTable, updateTableText } from './tables.mjs'
+import { createTableText, readTable, updateTableText, editTableCells } from './tables.mjs'
 import { readFile, writeFile } from './files.mjs'
 import { resolveSpace } from './spaces.mjs'
 
@@ -38,6 +38,12 @@ export async function readSheetFile(client, config, { space, path: rel, offset =
   const text = await fs.readFile(full, 'utf8')
   const table = readTable(text, { offset, limit, hasHeader: header })
   return { path: normalized, ...table, sha256: sha256(Buffer.from(text)) }
+}
+
+export async function editSheetCellsFile(client, config, { space, path: rel, edits, expectedSha256 }) {
+  const current = await readFile(client, config, { space, path: rel })
+  const next = editTableCells(current.text, edits)
+  return writeFile(client, config, { space, path: rel, content: next, expectedSha256: expectedSha256 || current.sha256, overwrite: true, base: 'save' })
 }
 
 export async function updateSheetFile(client, config, { space, path: rel, rows, mode = 'append', expectedSha256 }) {

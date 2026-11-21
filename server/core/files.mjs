@@ -235,3 +235,28 @@ export async function resolveConflict(client, config, { space, conflictPath, act
   await scan(client, folder.id)
   return { resolved: true, path: original, action, conflicts: 0 }
 }
+
+/** Return local/remote/base text for one conflict so a UI can show a real diff. */
+export async function conflictDetail(client, config, { space, conflictPath }) {
+  const { root } = await resolveSpace(client, space, config)
+  const { rel: normalized, full } = await resolveInside(root, conflictPath)
+  if (!normalized.includes('.sync-conflict-')) throw httpError('INVALID_INPUT', 'not a sync conflict file')
+  const original = conflictBaseName(normalized)
+  if (!original) throw httpError('INVALID_INPUT', 'cannot determine original file')
+  const originalFile = await resolveInside(root, original)
+  const local = await fs.readFile(originalFile.full, 'utf8').catch(() => '')
+  const remote = await fs.readFile(full, 'utf8')
+  const base = await fs.readFile(baseFile(root, original), 'utf8').catch(() => '')
+  const kind = fileKind(original, local || remote)
+  return {
+    originalPath: original,
+    conflictPath: normalized,
+    kind,
+    local,
+    remote,
+    base,
+    localExists: Boolean(local),
+    baseExists: Boolean(base),
+    sha256: { local: sha256(Buffer.from(local)), remote: sha256(Buffer.from(remote)), base: sha256(Buffer.from(base)) },
+  }
+}

@@ -12,10 +12,10 @@ import {
 } from './core/spaces.mjs'
 import {
   listFiles, readFile, writeFile, editFile, moveFile, deleteFile, importFile, outlineFile,
-  conflicts, resolveConflict,
+  conflicts, resolveConflict, conflictDetail,
 } from './core/files.mjs'
 import {
-  createDocumentFile, appendDocumentFile, createSheetFile, readSheetFile, updateSheetFile,
+  createDocumentFile, appendDocumentFile, createSheetFile, readSheetFile, updateSheetFile, editSheetCellsFile,
   createSlidesFile, readSlidesFile, updateSlidesFile,
 } from './core/content.mjs'
 
@@ -297,6 +297,14 @@ server.registerTool('file_conflicts', {
   return conflicts(client, config, { space })
 }))
 
+server.registerTool('file_conflict_detail', {
+  description: 'Read local, remote, and base text for one sync conflict.',
+  inputSchema: z.object({ space: spaceRef, conflictPath: relPath }),
+}, wrap(async ({ space, conflictPath }) => {
+  const { client, config } = await context()
+  return conflictDetail(client, config, { space, conflictPath })
+}))
+
 server.registerTool('file_resolve_conflict', {
   description: 'Resolve a sync conflict by keeping local, keeping the conflict version, or three-way merging.',
   inputSchema: z.object({
@@ -360,6 +368,22 @@ server.registerTool('sheet_update', {
 }, wrap(async ({ space, path: rel, rows, mode = 'append', expectedSha256 }) => {
   const { client, config } = await context()
   return updateSheetFile(client, config, { space, path: rel, rows, mode, expectedSha256 })
+}))
+
+server.registerTool('sheet_edit_cells', {
+  description: 'Edit specific CSV cells by row and column without rewriting unrelated rows.',
+  inputSchema: z.object({
+    space: spaceRef, path: relPath,
+    expectedSha256: z.string().optional(),
+    edits: z.array(z.object({
+      row: z.number().int().min(0),
+      column: z.union([z.number().int().min(0), z.string().min(1)]),
+      value: z.string(),
+    })).min(1),
+  }),
+}, wrap(async ({ space, path: rel, expectedSha256, edits }) => {
+  const { client, config } = await context()
+  return editSheetCellsFile(client, config, { space, path: rel, edits, expectedSha256 })
 }))
 
 server.registerTool('slides_create', {

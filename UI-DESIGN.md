@@ -165,8 +165,8 @@ Description [__________________________]
 ```
 
 - **Preview**：服务端渲染的 Markdown HTML（已 sanitize），使用 `.space-prose` 样式；标题层级、表格、代码、任务列表与宿主一致。
-- **Edit**（M1 可选，M3 完整）：
-  - M1：`textarea` 编辑器 + Save/Cancel + dirty 提示；保存走 `file_write`/`file_edit`。
+- **Edit**（M2 已实现）：
+  - `textarea` 编辑器 + 保存/取消 + 未保存提示；保存带 `expectedSha256`。
   - M3：CodeMirror 6 或等价编辑器；支持大纲、快捷键、查找。
 - 顶部显示相对路径，点击可复制。
 - `Chat about this`：创建一个带 `space_context` + 当前页面内容的 DSH 会话；按钮在 Preview 和 Edit 都可用。
@@ -407,6 +407,9 @@ export function apply(ctx) {
 | `get` | 空间详情 + 成员 |
 | `tree` | Page/Sheet/Asset 树 |
 | `read` | Markdown HTML / Marp HTML+CSS / CSV rows |
+| `editSheetCells` | 按行/列增量保存 CSV 单元格 |
+| `conflictDetail` | 读取冲突的本机/对端/基线内容 |
+| `rescan` | 触发 Syncthing 扫描 |
 | `createSpace` | 创建空间 |
 | `createDoc` / `createSlides` / `createSheet` | 创建 Page/Slides/Sheet |
 | `write` / `edit` | 保存编辑 |
@@ -464,8 +467,8 @@ export function apply(ctx) {
 | 阶段 | UI 范围 |
 |---|---|
 | **M1（必须）** | 侧边栏入口、Spaces Home、New space、用邀请加入、Space Detail + Page 树、三类内容创建、Preview、Sync 徽标、Invite token 展示、基础错误/空态 |
-| **M2** | Page 文本编辑保存、CSV 表格查看、Marp 预览、冲突 Review、成员批准 |
-| **M3（完整）** | 模板库、树右键菜单、行内编辑、冲突合并编辑、搜索、Recent/Trash、Chat about this、i18n 完整、可访问性打磨 |
+| **M2（已实现）** | Page 文本编辑保存、CSV 单元格编辑、Marp 预览、冲突 Review、成员批准、同步状态 |
+| **M3（完整）** | 模板库、树右键菜单、CodeMirror 编辑器、搜索、Recent/Trash、Chat about this、i18n 完整、可访问性打磨 |
 | **M4** | 评论 UI、版本历史、页面链接、ODS 表格、主题扩展 |
 
 > M1 的 UI 不是为了“好看”，而是为了让创建、预览、邀请、同步这些核心路径在真实浏览器中可验证；MCP 工具与 UI 共用同一套 Host core，避免两套实现。

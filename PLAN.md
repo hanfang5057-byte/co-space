@@ -860,7 +860,8 @@ export function apply(ctx) {
 - 入口：`sidebar.panellist`（id `spaces`）+ `main` key `spaces`；不把整个页面放进 iframe。
 - 页面：Spaces Home、New space、Space Detail（Page 树 + 内容区）、Page/Sheet/Deck 预览、Invite、Conflict Review、Sync 状态。
 - M1 最小 UI：列表、创建空间、Page 树、三类内容创建、预览、同步徽标、邀请 token；保证真实浏览器可验证。
-- M3 完整 UI：编辑、冲突合并、模板库、搜索、Recent/Trash、`Chat about this`、完整 i18n/可访问性。
+- M2 已实现：页面编辑、CSV 单元格编辑、冲突 Review/合并、成员批准、同步状态。
+- M3 完整 UI：模板库、搜索、Recent/Trash、`Chat about this`、完整 i18n/可访问性、CodeMirror。
 - 视觉只用 `--dsw-alias-*` tokens；控件自建，不 import Harness Client 包；Marp 预览用内容级 sandbox iframe，其余全部 React。
 - Host 通过 WebServer 注册 `POST /dsh-space-api`（same-origin、默认 required auth）给 UI 调用，与 MCP Server 共用 `server/core`；不用 typert Remote，避免安装 bundle 的代码生成依赖。
 - UI 组件：React Aria Components（headless，打包）+ TanStack Virtual（宿主 baseline）+ 自绘图标；样式用 CSS Modules + `--dsw-alias-*` tokens，不 import `dsh-client-ui-primitives`。
@@ -920,9 +921,9 @@ export function apply(ctx) {
 
 ### M3：完整 Web UI
 
-- 页面内编辑（Markdown/CSV/Deck）、冲突 Review/合并、模板库、搜索、Recent/Trash。
-- `Chat about this`；成员/pending 管理；完整 i18n/可访问性/窄屏。
-- 验收：不依赖命令行完成创建、编辑、邀请、同步、冲突解决。
+- 模板库、搜索、Recent/Trash、CodeMirror 编辑器替换 textarea。
+- `Chat about this`；完整 i18n/可访问性/窄屏；搜索与 Recent/Trash。
+- 验收：M2 已能完成创建/编辑/邀请/同步/冲突解决；M3 补模板、搜索、历史与 i18n。
 
 ### M4：协作增强
 
@@ -965,12 +966,12 @@ export function apply(ctx) {
 
 ---
 
-## 13. M1 实现状态（2026-11-21）
+## 13. 实现状态
 
 已落地并实测：
 
 - Bundle：`@local/dsh-space` 安装到当前 Web profile，`fiberPhase: active`。
-- Host plugin：注册 MCP Server（33 个工具）+ `POST /dsh-space-api`（WebServer，same-origin + required auth）。
+- Host plugin：注册 MCP Server（M1 33 个、M2 35 个工具）+ `POST /dsh-space-api`（WebServer，same-origin + required auth）。
 - MCP Server：空间创建/列表/树/上下文、Markdown/CSV/Marp 创建读取编辑、文件读写/移动/删除、邀请/加入/批准/移除、同步状态/等待、冲突列表/合并、daemon 控制。
 - UI：侧边栏 Spaces 入口；Spaces Home；创建空间；用邀请加入；Page 树；文档/幻灯片/表格创建与预览；同步徽标；邀请 token 对话框；空态/错误/加载。
 - 真实浏览器验证（临时 3081 实例）：创建空间 → 创建 Markdown/CSV/Marp → 预览 → 邀请对话框；截图与 DOM 文本已检查。
@@ -984,6 +985,16 @@ export function apply(ctx) {
 - `Personal` 自动创建（M1 先空态，避免隐式写数据）；`space_watch`/SSE；页面拖拽排序。
 - 下载 Syncthing 的 GitHub 路径已实现但未在当前网络实测；M1 验证使用本地 v2.1.7 二进制。
 - 插件卸载不会自动停止 detached daemon；需 `space_daemon stop`。
+
+
+### M2 已完成（2026-11-21）
+
+- 页面/Marp 编辑器：预览/编辑切换、保存、取消、未保存提示、`expectedSha256` 冲突保护。
+- CSV 表格编辑：按单元格增量保存（`sheet_edit_cells`），支持追加空行；不重写未修改行。
+- 冲突处理：空间顶部横幅；Review 对话框展示本机/对端/基线三方内容；保留本机/保留对端/尝试合并；冲突解决后自动刷新。
+- 成员与设备：成员列表、连接状态、待批准设备批准、邀请 token 复制；Sync 状态对话框含 peer 完成度与重新扫描。
+- 新增 MCP 工具 `sheet_edit_cells`、`file_conflict_detail`（共 35 个）。
+- 真实浏览器验证：页面编辑保存、CSV 单元格保存、冲突 Review/保留本机、成员对话框、同步对话框。
 
 ## 14. 默认执行项
 

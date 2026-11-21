@@ -92,3 +92,27 @@ export function updateTableText(text, { rows, mode = 'append', range, hasHeader 
   else nextRows = [...parsed.rows, ...additions]
   return stringify(hasHeader ? [parsed.header, ...nextRows] : nextRows, { delimiter: delimiterFor(String(text ?? ''), delimiter) })
 }
+
+/** Apply cell edits to a CSV table without rewriting unrelated rows. */
+export function editTableCells(text, edits, { delimiter, hasHeader = true } = {}) {
+  if (!Array.isArray(edits) || !edits.length) throw httpError('INVALID_INPUT', 'edits must be a non-empty array')
+  const parsed = parseTable(text, { delimiter, hasHeader })
+  for (const edit of edits) {
+    const rowIndex = Number(edit?.row)
+    if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= parsed.rows.length) {
+      throw httpError('INVALID_INPUT', `row out of range: ${edit?.row}`)
+    }
+    let columnIndex
+    if (typeof edit.column === 'number') columnIndex = edit.column
+    else {
+      const target = String(edit.column ?? '')
+      columnIndex = parsed.header.findIndex(title => title === target)
+      if (columnIndex < 0) columnIndex = parsed.header.findIndex((_, index) => `c${index}` === target)
+    }
+    if (!Number.isInteger(columnIndex) || columnIndex < 0 || columnIndex >= parsed.header.length) {
+      throw httpError('INVALID_INPUT', `column out of range: ${edit?.column}`)
+    }
+    parsed.rows[rowIndex][columnIndex] = String(edit.value ?? '')
+  }
+  return stringify(hasHeader ? [parsed.header, ...parsed.rows] : parsed.rows, { delimiter: delimiterFor(String(text ?? ''), delimiter) })
+}

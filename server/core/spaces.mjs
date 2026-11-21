@@ -305,7 +305,15 @@ export async function memberInfo(client, config, space) {
   for (const member of members) member.connected = Boolean(connections.connections?.[member.deviceId]?.connected)
   const pendingDevices = await client.pendingDevices().catch(() => ({}))
   const pendingFolders = await client.pendingFolders().catch(() => ({}))
-  return { members, pendingDevices, pendingFolders }
+  const localId = await getLocalDeviceId(client).catch(() => null)
+  for (const member of members) member.self = member.deviceId === localId
+  const pending = Object.entries(pendingDevices || {}).map(([deviceId, info]) => ({
+    deviceId,
+    name: info?.name || deviceId.slice(0, 7),
+    address: info?.address || '',
+    time: info?.time || null,
+  }))
+  return { members, pending, pendingDevices, pendingFolders }
 }
 
 export async function inviteSpace(client, config, space) {

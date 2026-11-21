@@ -3,11 +3,11 @@ import { loadConfig, resolveHome, ensureHome } from './config.mjs'
 import { ensureDaemon, daemonStatus, stopDaemon } from './daemon.mjs'
 import {
   listSpaces, getSpace, treeSpace, spaceContext, createSpace, updateSpace, deleteSpace,
-  inviteSpace, joinSpace, memberInfo, approveMember, removeMember, syncStatus, waitSync,
+  inviteSpace, joinSpace, memberInfo, approveMember, removeMember, syncStatus, waitSync, resolveSpace,
 } from './core/spaces.mjs'
-import { readFile, writeFile, editFile, conflicts, resolveConflict } from './core/files.mjs'
+import { readFile, writeFile, editFile, conflicts, resolveConflict, conflictDetail } from './core/files.mjs'
 import {
-  createDocumentFile, appendDocumentFile, createSheetFile, readSheetFile, updateSheetFile,
+  createDocumentFile, appendDocumentFile, createSheetFile, readSheetFile, updateSheetFile, editSheetCellsFile,
   createSlidesFile, readSlidesFile, updateSlidesFile,
 } from './core/content.mjs'
 
@@ -78,6 +78,7 @@ async function dispatch(method, args, home) {
     case 'createSheet': return createSheetFile(client, config, { space: args.space, path: args.path, title: args.title, template: args.template || 'blank', columns: args.columns, rows: args.rows, hasHeader: args.hasHeader !== false })
     case 'readSheet': return readSheetFile(client, config, { space: args.space, path: args.path, offset: args.offset || 0, limit: args.limit || 200, header: args.header !== false })
     case 'updateSheet': return updateSheetFile(client, config, { space: args.space, path: args.path, rows: args.rows, mode: args.mode || 'append', expectedSha256: args.expectedSha256 })
+    case 'editSheetCells': return editSheetCellsFile(client, config, { space: args.space, path: args.path, edits: args.edits, expectedSha256: args.expectedSha256 })
     case 'createSlides': return createSlidesFile(client, config, { space: args.space, path: args.path, parent: args.parent, title: args.title, template: args.template || 'blank', slides: args.slides, markdown: args.markdown })
     case 'readSlides': return readSlidesFile(client, config, { space: args.space, path: args.path })
     case 'updateSlides': return updateSlidesFile(client, config, { space: args.space, path: args.path, markdown: args.markdown, index: args.index || 0, mode: args.mode || 'replace', expectedSha256: args.expectedSha256 })
@@ -90,9 +91,11 @@ async function dispatch(method, args, home) {
     case 'approve': return approveMember(client, config, { space: args.space, deviceId: args.deviceId, name: args.name })
     case 'removeMember': return removeMember(client, config, { space: args.space, deviceId: args.deviceId })
     case 'sync': return syncStatus(client, config, { space: args.space })
+    case 'rescan': { const { folder } = await resolveSpace(client, args.space, config); await client.scan(folder.id, args.sub); return { space: folder.id, scanned: true, sub: args.sub || null } }
     case 'waitSync': return waitSync(client, config, { space: args.space, timeoutMs: args.timeoutMs || 10000 })
     case 'conflicts': return conflicts(client, config, { space: args.space })
     case 'resolveConflict': return resolveConflict(client, config, { space: args.space, conflictPath: args.conflictPath, action: args.action })
+    case 'conflictDetail': return conflictDetail(client, config, { space: args.space, conflictPath: args.conflictPath })
     case 'daemonStatus': return daemonStatus(home || resolveHome())
     case 'daemonStart': { daemonPromise = undefined; await context(home); return daemonStatus(home || resolveHome()) }
     case 'daemonStop': { daemonPromise = undefined; return stopDaemon(home || resolveHome(), logger) }

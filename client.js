@@ -8333,6 +8333,15 @@ function App() {
   const [node, setNode] = (0, import_react62.useState)(null);
   const [content, setContent] = (0, import_react62.useState)(null);
   const [contentLoading, setContentLoading] = (0, import_react62.useState)(false);
+  const [mode, setMode] = (0, import_react62.useState)("preview");
+  const [draft, setDraft] = (0, import_react62.useState)("");
+  const [dirty, setDirty] = (0, import_react62.useState)(false);
+  const [saving, setSaving] = (0, import_react62.useState)(false);
+  const [sheetEdits, setSheetEdits] = (0, import_react62.useState)({});
+  const [conflicts, setConflicts] = (0, import_react62.useState)([]);
+  const [conflictOpen, setConflictOpen] = (0, import_react62.useState)(false);
+  const [membersOpen, setMembersOpen] = (0, import_react62.useState)(false);
+  const [syncOpen, setSyncOpen] = (0, import_react62.useState)(false);
   const [newContentOpen, setNewContentOpen] = (0, import_react62.useState)(false);
   const [newSpaceOpen, setNewSpaceOpen] = (0, import_react62.useState)(false);
   const [joinOpen, setJoinOpen] = (0, import_react62.useState)(false);
@@ -8362,10 +8371,19 @@ function App() {
     setError("");
     setContent(null);
     setNode(null);
+    setMode("preview");
+    setDraft("");
+    setDirty(false);
+    setSheetEdits({});
     try {
-      const [detail, treeResult] = await Promise.all([rpc("get", { space: id }), rpc("tree", { space: id })]);
+      const [detail, treeResult, conflictList] = await Promise.all([
+        rpc("get", { space: id }),
+        rpc("tree", { space: id }),
+        rpc("conflicts", { space: id }).catch(() => [])
+      ]);
       setSpace(detail);
       setTree(treeResult.tree || []);
+      setConflicts(conflictList || []);
       setView({ kind: "space", spaceId: id });
     } catch (e) {
       setError(e.message);
@@ -8383,9 +8401,13 @@ function App() {
     setNode(entry);
     setContentLoading(true);
     setError("");
+    setMode("preview");
+    setDirty(false);
+    setSheetEdits({});
     try {
       const value = await rpc("read", { space: view.spaceId, path: entry.path });
       setContent(value);
+      setDraft(value.text || "");
     } catch (e) {
       setError(e.message);
       setContent(null);
@@ -8393,6 +8415,86 @@ function App() {
       setContentLoading(false);
     }
   }, [view]);
+  const reloadConflicts = (0, import_react62.useCallback)(async () => {
+    if (!view.spaceId) return [];
+    const list = await rpc("conflicts", { space: view.spaceId }).catch(() => []);
+    setConflicts(list);
+    return list;
+  }, [view]);
+  const reloadSpaceMeta = (0, import_react62.useCallback)(async () => {
+    if (!view.spaceId) return;
+    const [treeResult, detail] = await Promise.all([
+      rpc("tree", { space: view.spaceId }),
+      rpc("get", { space: view.spaceId })
+    ]);
+    setTree(treeResult.tree || []);
+    setSpace(detail);
+  }, [view]);
+  const reloadNode = (0, import_react62.useCallback)(async () => {
+    if (!view.spaceId || !node) return;
+    const value = await rpc("read", { space: view.spaceId, path: node.path });
+    setContent(value);
+    setDraft(value.text || "");
+    setSheetEdits({});
+    setDirty(false);
+    return value;
+  }, [view, node]);
+  const changeMode = (0, import_react62.useCallback)((next) => {
+    if (next === "edit") {
+      setDraft(content?.text || "");
+      setSheetEdits({});
+      setDirty(false);
+    }
+    setMode(next);
+  }, [content]);
+  const changeCell = (0, import_react62.useCallback)((row, column, value) => {
+    setSheetEdits((previous) => ({ ...previous, [`${row}:${column}`]: value }));
+    setDirty(true);
+  }, []);
+  const saveContent = (0, import_react62.useCallback)(async () => {
+    if (!view.spaceId || !node || !content) return;
+    setSaving(true);
+    setError("");
+    try {
+      if (content.kind === "table") {
+        const edits = Object.entries(sheetEdits).map(([key, value]) => {
+          const [row, column] = key.split(":").map(Number);
+          return { row, column, value };
+        });
+        if (edits.length) {
+          await rpc("editSheetCells", { space: view.spaceId, path: node.path, expectedSha256: content.sha256, edits });
+        }
+      } else {
+        await rpc("write", { space: view.spaceId, path: node.path, content: draft, expectedSha256: content.sha256, overwrite: true });
+      }
+      await Promise.all([reloadNode(), reloadSpaceMeta(), reloadConflicts()]);
+      setMode("preview");
+      notify("\u5DF2\u4FDD\u5B58");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }, [view, node, content, sheetEdits, draft, reloadNode, reloadSpaceMeta, reloadConflicts, notify]);
+  const discardContent = (0, import_react62.useCallback)(() => {
+    setDraft(content?.text || "");
+    setSheetEdits({});
+    setDirty(false);
+    setMode("preview");
+  }, [content]);
+  const addSheetRow = (0, import_react62.useCallback)(async () => {
+    if (!view.spaceId || !node || !content) return;
+    const columns = content.table?.columns || [];
+    const row = columns.map(() => "");
+    try {
+      await rpc("updateSheet", { space: view.spaceId, path: node.path, rows: [row], mode: "append" });
+      await Promise.all([reloadNode(), reloadSpaceMeta()]);
+      setMode("edit");
+      notify("\u5DF2\u6DFB\u52A0\u7A7A\u884C");
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [view, node, content, reloadNode, reloadSpaceMeta, notify]);
   const createSpace = (0, import_react62.useCallback)(async (name2, description) => {
     const created = await rpc("createSpace", { name: name2, description });
     setNewSpaceOpen(false);
@@ -8419,6 +8521,7 @@ function App() {
     ]);
     setTree(treeResult.tree || []);
     setSpace(detail);
+    setConflicts(await rpc("conflicts", { space: view.spaceId }).catch(() => []));
     notify("\u5185\u5BB9\u5DF2\u521B\u5EFA");
   }, [view, notify]);
   const showInvite = (0, import_react62.useCallback)(async () => {
@@ -8429,6 +8532,12 @@ function App() {
       setError(e.message);
     }
   }, [view]);
+  const afterConflictResolved = (0, import_react62.useCallback)(async () => {
+    const list = await reloadConflicts();
+    await Promise.all([reloadSpaceMeta(), node ? reloadNode() : Promise.resolve()]);
+    if (!list.length) setConflictOpen(false);
+    notify("\u51B2\u7A81\u5DF2\u5904\u7406");
+  }, [reloadConflicts, reloadSpaceMeta, reloadNode, node, notify]);
   const filtered = (0, import_react62.useMemo)(() => {
     const query = search.trim().toLowerCase();
     return spaces.filter((item) => !query || item.name.toLowerCase().includes(query) || item.description?.toLowerCase().includes(query));
@@ -8468,17 +8577,38 @@ function App() {
         content,
         contentLoading,
         counts,
+        conflicts,
+        mode,
+        draft,
+        dirty,
+        saving,
+        sheetEdits,
+        onModeChange: changeMode,
+        onDraftChange: (value) => {
+          setDraft(value);
+          setDirty(true);
+        },
+        onCellChange: changeCell,
+        onSave: saveContent,
+        onDiscard: discardContent,
+        onAddRow: addSheetRow,
         onBack: () => {
           setView({ kind: "home" });
           refreshSpaces();
         },
         onNewContent: () => setNewContentOpen(true),
-        onInvite: showInvite
+        onInvite: showInvite,
+        onMembers: () => setMembersOpen(true),
+        onReviewConflicts: () => setConflictOpen(true),
+        onSync: () => setSyncOpen(true)
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NewContentDialog, { open: newContentOpen, setOpen: setNewContentOpen, onCreate: createContent }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JoinDialog, { open: joinOpen, setOpen: setJoinOpen, onJoin: joinSpace }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InviteDialog, { open: inviteOpen, setOpen: setInviteOpen, invite, notify })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InviteDialog, { open: inviteOpen, setOpen: setInviteOpen, invite, notify }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MembersDialog, { open: membersOpen, setOpen: setMembersOpen, space, notify }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ConflictDialog, { open: conflictOpen, setOpen: setConflictOpen, space, conflicts, onResolved: afterConflictResolved, notify }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SyncDialog, { open: syncOpen, setOpen: setSyncOpen, space, notify })
   ] });
 }
 function Home({ spaces, loading, filter, setFilter, search, setSearch, onOpen, onNewSpace, onJoin, newSpaceOpen, setNewSpaceOpen, onCreate }) {
@@ -8536,7 +8666,7 @@ function Home({ spaces, loading, filter, setFilter, search, setSearch, onOpen, o
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NewSpaceDialog, { open: newSpaceOpen, setOpen: setNewSpaceOpen, onCreate })
   ] });
 }
-function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, contentLoading, counts, onBack, onNewContent, onInvite }) {
+function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, contentLoading, counts, conflicts, mode, draft, dirty, saving, sheetEdits, onModeChange, onDraftChange, onCellChange, onSave, onDiscard, onAddRow, onBack, onNewContent, onInvite, onMembers, onReviewConflicts, onSync }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-detail", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-detail-head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ButtonBase, { variant: "ghost", onPress: onBack, "aria-label": "\u8FD4\u56DE\u7A7A\u95F4\u5217\u8868", children: [
@@ -8545,15 +8675,28 @@ function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, conte
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-detail-title", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: space?.name || "\u7A7A\u95F4" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `sp-badge ${space?.sync?.state === "idle" ? "ok" : "warn"}`, children: statusText(space?.sync) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", className: `sp-badge ${space?.sync?.state === "idle" ? "ok" : "warn"}`, onClick: onSync, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { name: "sync", size: 12 }),
+          " ",
+          statusText(space?.sync)
+        ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-detail-actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ButtonBase, { onPress: onNewContent, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { name: "plus" }),
           " \u65B0\u5EFA"
         ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { onPress: onMembers, children: "\u6210\u5458" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { onPress: onInvite, children: "\u9080\u8BF7" })
       ] })
+    ] }),
+    conflicts.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-conflict-banner", role: "status", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { name: "alert", size: 16 }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+        conflicts.length,
+        " \u4E2A\u6587\u4EF6\u6709\u540C\u6B65\u51B2\u7A81\uFF0C\u9700\u8981\u5904\u7406\u540E\u624D\u80FD\u7EE7\u7EED\u7F16\u8F91\u3002"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { variant: "ghost", onPress: onReviewConflicts, children: "\u5904\u7406\u51B2\u7A81" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-detail-body", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", { className: "sp-tree", "aria-label": "\u7A7A\u95F4\u5185\u5BB9", children: [
@@ -8571,13 +8714,86 @@ function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, conte
             " \u5E7B\u706F\u7247"
           ] })
         ] }),
+        tree.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "sp-tree-empty", children: [
+          "\u7A7A\u95F4\u8FD8\u662F\u7A7A\u7684",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("br", {}),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u70B9\u51FB\u201C\u65B0\u5EFA\u201D\u6DFB\u52A0\u6587\u6863\u3001\u8868\u683C\u6216\u5E7B\u706F\u7247\u3002" })
+        ] }),
         tree.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TreeNode, { entry, depth: 0, expanded, onOpen, activePath }, entry.path))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", { className: "sp-content", children: contentLoading ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "sp-skeleton" }) : content ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Preview, { content }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-empty compact", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", { className: "sp-content", children: contentLoading ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "sp-skeleton" }) : content ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        ContentPane,
+        {
+          content,
+          path: activePath,
+          mode,
+          draft,
+          dirty,
+          saving,
+          sheetEdits,
+          onModeChange,
+          onDraftChange,
+          onCellChange,
+          onSave,
+          onDiscard,
+          onAddRow
+        }
+      ) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-empty compact", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { name: "page", size: 36 }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u9009\u62E9\u4E00\u4E2A\u9875\u9762" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u4ECE\u5DE6\u4FA7\u9009\u62E9 Page\u3001\u8868\u683C\u6216\u5E7B\u706F\u7247\uFF1B\u4E5F\u53EF\u4EE5\u65B0\u5EFA\u5185\u5BB9\u3002" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: tree.length ? "\u9009\u62E9\u4E00\u4E2A\u9875\u9762" : "\u8FD9\u4E2A\u7A7A\u95F4\u8FD8\u662F\u7A7A\u7684" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: tree.length ? "\u4ECE\u5DE6\u4FA7\u9009\u62E9 Page\u3001\u8868\u683C\u6216\u5E7B\u706F\u7247\u3002" : "\u65B0\u5EFA\u4E00\u4E2A Markdown \u6587\u6863\u3001CSV \u8868\u683C\u6216 Marp \u5E7B\u706F\u7247\u5F00\u59CB\u3002" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ButtonBase, { variant: "primary", onPress: onNewContent, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { name: "plus" }),
+          " \u65B0\u5EFA\u5185\u5BB9"
+        ] })
       ] }) })
+    ] })
+  ] });
+}
+function ContentPane({ content, path, mode, draft, dirty, saving, sheetEdits, onModeChange, onDraftChange, onCellChange, onSave, onDiscard, onAddRow }) {
+  const preview = () => {
+    if (dirty && !window.confirm("\u653E\u5F03\u672A\u4FDD\u5B58\u7684\u66F4\u6539\uFF1F")) return;
+    onDiscard();
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-content-inner", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-content-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sp-path", children: path }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-content-actions", children: [
+        dirty && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sp-dirty", children: "\u672A\u4FDD\u5B58" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-seg", role: "group", "aria-label": "\u67E5\u770B\u6A21\u5F0F", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: mode === "preview" ? "active" : "", onClick: preview, children: "\u9884\u89C8" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: mode === "edit" ? "active" : "", onClick: () => onModeChange("edit"), children: "\u7F16\u8F91" })
+        ] }),
+        mode === "edit" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { variant: "ghost", onPress: onDiscard, children: "\u53D6\u6D88" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { variant: "primary", isDisabled: saving || !dirty, onPress: onSave, children: saving ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58" })
+        ] })
+      ] })
+    ] }),
+    mode === "edit" ? content.kind === "table" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SheetEditor, { content, sheetEdits, onCellChange, onAddRow }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "sp-editor", value: draft, onChange: (event) => onDraftChange(event.target.value), spellCheck: false, "aria-label": "\u7F16\u8F91\u5185\u5BB9" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Preview, { content })
+  ] });
+}
+function SheetEditor({ content, sheetEdits, onCellChange, onAddRow }) {
+  const columns = content.table?.columns || [];
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-table-wrap", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "sp-table sp-table-edit", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: columns.map((column) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: column.title }, column.key)) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: content.table.rows.map((row, rowIndex) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: columns.map((column, columnIndex) => {
+        const key = `${rowIndex}:${columnIndex}`;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "sp-cell-input", value: sheetEdits[key] ?? row[columnIndex] ?? "", onChange: (event) => onCellChange(rowIndex, columnIndex, event.target.value), "aria-label": `${column.title} \u7B2C ${rowIndex + 1} \u884C` }) }, column.key);
+      }) }, rowIndex)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-table-foot", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "sp-muted", children: [
+        content.table.rows.length,
+        " / ",
+        content.table.total,
+        " \u884C"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(ButtonBase, { onPress: onAddRow, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { name: "plus", size: 14 }),
+        " \u6DFB\u52A0\u7A7A\u884C"
+      ] })
     ] })
   ] });
 }
@@ -8626,6 +8842,223 @@ function Preview({ content }) {
     ] });
   }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: "sp-pre", children: content.text });
+}
+function MembersDialog({ open, setOpen, space, notify }) {
+  const [data, setData] = (0, import_react62.useState)(null);
+  const [invite, setInvite] = (0, import_react62.useState)(null);
+  const [error, setError] = (0, import_react62.useState)("");
+  const [busy, setBusy] = (0, import_react62.useState)("");
+  const load = (0, import_react62.useCallback)(async () => {
+    if (!space?.id) return;
+    setError("");
+    try {
+      const [members, invitation] = await Promise.all([rpc("members", { space: space.id }), rpc("invite", { space: space.id })]);
+      setData(members);
+      setInvite(invitation);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [space]);
+  (0, import_react62.useEffect)(() => {
+    if (open) load();
+  }, [open, load]);
+  const approve = async (deviceId) => {
+    setBusy(deviceId);
+    setError("");
+    try {
+      await rpc("approve", { space: space.id, deviceId });
+      await load();
+      notify("\u8BBE\u5907\u5DF2\u6279\u51C6");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)($8b8d26808cb8cb53$export$2b77a92f1a5ad772, { isOpen: open, onOpenChange: setOpen, className: "sp-modal-overlay", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)($f2ff30fde7b014be$export$3ddf2d174ce01153, { className: "sp-dialog sp-dialog-wide", "aria-label": "\u6210\u5458", children: ({ close }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)($2ec61d1d4f780267$export$a8a3e93435678ff9, { slot: "title", children: "\u6210\u5458\u4E0E\u8BBE\u5907" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u52A0\u5165\u7A7A\u95F4\u5373\u62E5\u6709\u5168\u90E8\u6587\u4EF6\u7684\u8BFB\u5199\u6743\u9650\uFF1B\u8BBE\u5907\u9700\u8981\u5728\u8FD9\u91CC\u6279\u51C6\u540E\u624D\u4F1A\u540C\u6B65\u3002" }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-form-error", children: error }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "sp-section-title", children: "\u5DF2\u52A0\u5165" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-members", children: [
+      (data?.members || []).map((member) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-member", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `sp-dot ${member.connected ? "on" : ""}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "sp-member-name", children: [
+          member.name,
+          member.self ? "\uFF08\u672C\u673A\uFF09" : ""
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "sp-member-id", children: [
+          member.deviceId.slice(0, 7),
+          "\u2026"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sp-muted", children: member.self ? "\u672C\u673A" : member.connected ? "\u5DF2\u8FDE\u63A5" : "\u79BB\u7EBF" })
+      ] }, member.deviceId)),
+      !data?.members?.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u8FD8\u6CA1\u6709\u6210\u5458\u3002" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "sp-section-title", children: "\u5F85\u6279\u51C6\u8BBE\u5907" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-members", children: [
+      (data?.pending || []).map((device) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-member", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sp-dot" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sp-member-name", children: device.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "sp-member-id", children: [
+          device.deviceId.slice(0, 7),
+          "\u2026"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { variant: "primary", isDisabled: busy === device.deviceId, onPress: () => approve(device.deviceId), children: busy === device.deviceId ? "\u6279\u51C6\u4E2D\u2026" : "\u6279\u51C6" })
+      ] }, device.deviceId)),
+      !data?.pending?.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u6CA1\u6709\u5F85\u6279\u51C6\u8BBE\u5907\u3002" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "sp-section-title", children: "\u9080\u8BF7\u65B0\u8BBE\u5907" }),
+    invite && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "sp-field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u9080\u8BF7 token" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { readOnly: true, rows: 3, value: invite.invite })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-dialog-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { onPress: () => navigator.clipboard?.writeText(invite.invite).then(() => notify("\u9080\u8BF7\u5DF2\u590D\u5236")).catch(() => notify("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u62E9")), children: "\u590D\u5236\u9080\u8BF7" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { onPress: () => navigator.clipboard?.writeText(invite.deviceId).then(() => notify("Device ID \u5DF2\u590D\u5236")).catch(() => notify("\u590D\u5236\u5931\u8D25")), children: "\u590D\u5236\u6211\u7684 Device ID" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { variant: "primary", onPress: close, children: "\u5B8C\u6210" })
+      ] })
+    ] })
+  ] }) }) });
+}
+function ConflictDialog({ open, setOpen, space, conflicts, onResolved, notify }) {
+  const [selected, setSelected] = (0, import_react62.useState)(null);
+  const [detail, setDetail] = (0, import_react62.useState)(null);
+  const [merged, setMerged] = (0, import_react62.useState)("");
+  const [error, setError] = (0, import_react62.useState)("");
+  const [busy, setBusy] = (0, import_react62.useState)("");
+  (0, import_react62.useEffect)(() => {
+    if (!open) return;
+    setMerged("");
+    setSelected((prev) => conflicts.some((item) => item.conflictPath === prev) ? prev : conflicts[0]?.conflictPath || null);
+  }, [open, conflicts]);
+  (0, import_react62.useEffect)(() => {
+    if (!open || !space?.id || !selected) {
+      setDetail(null);
+      return;
+    }
+    setError("");
+    rpc("conflictDetail", { space: space.id, conflictPath: selected }).then(setDetail).catch((e) => setError(e.message));
+  }, [open, space, selected]);
+  const resolve = async (action) => {
+    if (!space?.id || !selected) return;
+    setBusy(action);
+    setError("");
+    try {
+      const result = await rpc("resolveConflict", { space: space.id, conflictPath: selected, action });
+      if (result.resolved) {
+        await onResolved();
+        notify("\u51B2\u7A81\u5DF2\u89E3\u51B3");
+      } else {
+        setMerged(result.text || "");
+        setError("\u81EA\u52A8\u5408\u5E76\u4ECD\u6709\u51B2\u7A81\uFF0C\u8BF7\u624B\u52A8\u5904\u7406\u4E0B\u9762\u7684\u6587\u672C\u3002");
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)($8b8d26808cb8cb53$export$2b77a92f1a5ad772, { isOpen: open, onOpenChange: setOpen, className: "sp-modal-overlay", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)($f2ff30fde7b014be$export$3ddf2d174ce01153, { className: "sp-dialog sp-dialog-wide", "aria-label": "\u5904\u7406\u540C\u6B65\u51B2\u7A81", children: ({ close }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)($2ec61d1d4f780267$export$a8a3e93435678ff9, { slot: "title", children: "\u5904\u7406\u540C\u6B65\u51B2\u7A81" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u540C\u4E00\u4E2A\u6587\u4EF6\u5728\u4E24\u53F0\u8BBE\u5907\u4E0A\u88AB\u4FEE\u6539\u3002\u4FDD\u7559\u4E00\u4FA7\uFF0C\u6216\u8BA9\u5DE5\u5177\u505A\u4E09\u65B9\u5408\u5E76\uFF1B\u5408\u5E76\u540E\u4E0D\u4F1A\u518D\u81EA\u52A8\u8986\u76D6\u3002" }),
+    !conflicts.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u6CA1\u6709\u5F85\u5904\u7406\u51B2\u7A81\u3002" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-conflict-layout", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "sp-conflict-list", children: conflicts.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", className: `sp-conflict-item ${selected === item.conflictPath ? "active" : ""}`, onClick: () => setSelected(item.conflictPath), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.path }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: item.conflictPath.split("/").pop() })
+      ] }, item.conflictPath)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-conflict-detail", children: [
+        error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-form-error", children: error }),
+        detail ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-conflict-cols", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "\u672C\u673A\u7248\u672C" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: detail.local || "\uFF08\u6587\u4EF6\u4E0D\u5B58\u5728\uFF09" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "\u5BF9\u7AEF\u7248\u672C" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: detail.remote })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "\u57FA\u7EBF" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: detail.base || "\uFF08\u6CA1\u6709\u57FA\u7EBF\uFF09" })
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-dialog-actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { isDisabled: Boolean(busy), onPress: () => resolve("keep-local"), children: "\u4FDD\u7559\u672C\u673A" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { isDisabled: Boolean(busy), onPress: () => resolve("keep-conflict"), children: "\u4FDD\u7559\u5BF9\u7AEF" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { variant: "primary", isDisabled: Boolean(busy), onPress: () => resolve("merge"), children: busy === "merge" ? "\u5408\u5E76\u4E2D\u2026" : "\u5C1D\u8BD5\u5408\u5E76" })
+          ] }),
+          merged && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: "sp-pre sp-merged", children: merged })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u52A0\u8F7D\u51B2\u7A81\u5185\u5BB9\u2026" })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "sp-dialog-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { onPress: close, children: "\u5173\u95ED" }) })
+  ] }) }) });
+}
+function SyncDialog({ open, setOpen, space, notify }) {
+  const [info, setInfo] = (0, import_react62.useState)(null);
+  const [error, setError] = (0, import_react62.useState)("");
+  const [busy, setBusy] = (0, import_react62.useState)(false);
+  const load = (0, import_react62.useCallback)(async () => {
+    if (!space?.id) return;
+    setError("");
+    try {
+      setInfo(await rpc("sync", { space: space.id }));
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [space]);
+  (0, import_react62.useEffect)(() => {
+    if (open) load();
+  }, [open, load]);
+  const rescan = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await rpc("rescan", { space: space.id });
+      await load();
+      notify("\u5DF2\u89E6\u53D1\u626B\u63CF");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)($8b8d26808cb8cb53$export$2b77a92f1a5ad772, { isOpen: open, onOpenChange: setOpen, className: "sp-modal-overlay", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)($f2ff30fde7b014be$export$3ddf2d174ce01153, { className: "sp-dialog", "aria-label": "\u540C\u6B65\u72B6\u6001", children: ({ close }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)($2ec61d1d4f780267$export$a8a3e93435678ff9, { slot: "title", children: "\u540C\u6B65\u72B6\u6001" }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-form-error", children: error }),
+    info ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-sync-summary", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `sp-badge ${info.state === "idle" ? "ok" : "warn"}`, children: statusText(info) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "sp-muted", children: [
+          "\u5F85\u540C\u6B65 ",
+          info.needFiles || 0,
+          " \u4E2A\u6587\u4EF6 \xB7 \u51B2\u7A81 ",
+          info.conflicts || 0
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-members", children: [
+        (info.peers || []).map((peer) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-member", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `sp-dot ${peer.connected ? "on" : ""}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "sp-member-name", children: [
+            peer.deviceId.slice(0, 7),
+            "\u2026"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "sp-muted", children: [
+            peer.connected ? "\u5DF2\u8FDE\u63A5" : "\u79BB\u7EBF",
+            peer.completion != null ? ` \xB7 ${peer.completion}%` : ""
+          ] })
+        ] }, peer.deviceId)),
+        !info.peers?.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u8FD8\u6CA1\u6709\u5176\u4ED6\u8BBE\u5907\u3002" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sp-dialog-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { isDisabled: busy, onPress: rescan, children: busy ? "\u626B\u63CF\u4E2D\u2026" : "\u91CD\u65B0\u626B\u63CF" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ButtonBase, { onPress: close, children: "\u5173\u95ED" })
+      ] })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "sp-muted", children: "\u8BFB\u53D6\u4E2D\u2026" })
+  ] }) }) });
 }
 function NewSpaceDialog({ open, setOpen, onCreate }) {
   const [name2, setName] = (0, import_react62.useState)("");
@@ -8835,6 +9268,50 @@ var STYLE = `
 .sp-table th{background:var(--dsw-alias-bg-layer-2);position:sticky;top:0}
 .sp-muted{color:var(--dsw-alias-label-secondary);font-size:12px}
 .sp-pre{white-space:pre-wrap;word-break:break-word;background:var(--dsw-alias-bg-layer-2);padding:14px;border-radius:9px}
+
+.sp-badge{background:transparent;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.sp-tree-empty{margin:12px 10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.7}
+.sp-tree-empty span{color:var(--dsw-alias-label-secondary);opacity:.8}
+.sp-conflict-banner{display:flex;align-items:center;gap:10px;padding:9px clamp(20px,3vw,36px);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 9%,var(--dsw-alias-bg-base));border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 30%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:12px}
+.sp-conflict-banner span{flex:1}
+.sp-content-inner{display:flex;flex-direction:column;min-height:100%;height:100%;gap:14px}
+.sp-content-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.sp-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:140px}
+.sp-content-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sp-dirty{font-size:11px;color:var(--dsw-alias-state-warn-primary)}
+.sp-seg{display:flex;padding:2px;background:var(--dsw-alias-bg-layer-2);border-radius:7px}
+.sp-seg button{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;padding:4px 9px;border-radius:5px;cursor:pointer}
+.sp-seg button.active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}
+.sp-editor{flex:1;min-height:360px;width:100%;box-sizing:border-box;resize:none;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);padding:16px 18px;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;tab-size:2}
+.sp-editor:focus{border-color:var(--dsw-alias-brand-primary)}
+.sp-table-edit td{padding:3px 4px}
+.sp-cell-input{width:100%;min-width:90px;box-sizing:border-box;border:1px solid transparent;background:transparent;color:inherit;font:inherit;padding:5px 6px;border-radius:4px;outline:none}
+.sp-cell-input:hover{border-color:var(--dsw-alias-border-l1)}
+.sp-cell-input:focus{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1)}
+.sp-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.sp-dialog-wide{width:min(880px,100%)}
+.sp-section-title{font-size:13px;margin:18px 0 8px;color:var(--dsw-alias-label-secondary);font-weight:600}
+.sp-members{display:flex;flex-direction:column;gap:6px}
+.sp-member{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);font-size:12px}
+.sp-member-name{font-weight:550;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-member-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dsw-alias-label-secondary);font-size:11px}
+.sp-member .sp-muted{margin-left:auto}
+.sp-dot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-idle-primary);flex:0 0 auto}
+.sp-dot.on{background:var(--dsw-alias-state-success-primary)}
+.sp-sync-summary{display:flex;align-items:center;gap:10px;margin:14px 0 10px;flex-wrap:wrap}
+.sp-conflict-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;margin-top:14px;min-height:320px}
+.sp-conflict-list{display:flex;flex-direction:column;gap:5px;max-height:440px;overflow:auto;border-right:1px solid var(--dsw-alias-border-l1);padding-right:10px}
+.sp-conflict-item{text-align:left;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);border-radius:7px;padding:7px 8px;font:inherit;font-size:12px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.sp-conflict-item small{color:var(--dsw-alias-label-secondary);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-conflict-item:hover{background:var(--dsw-alias-bg-layer-2)}
+.sp-conflict-item.active{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}
+.sp-conflict-detail{min-width:0}
+.sp-conflict-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sp-conflict-cols h4{margin:0 0 5px;font-size:11px;color:var(--dsw-alias-label-secondary);font-weight:600}
+.sp-conflict-cols pre{height:260px;overflow:auto;margin:0;padding:10px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:var(--dsw-alias-bg-layer-1);white-space:pre-wrap;word-break:break-word;font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.sp-merged{max-height:220px;overflow:auto;margin-top:12px}
+@media(max-width:900px){.sp-conflict-layout{grid-template-columns:1fr}.sp-conflict-list{max-height:140px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l1);padding:0 0 10px}.sp-conflict-cols{grid-template-columns:1fr}.sp-conflict-cols pre{height:160px}}
+
 .sp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);display:grid;place-items:center;padding:24px;z-index:80}
 .sp-dialog{width:min(520px,100%);max-height:min(86vh,720px);overflow:auto;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.28);outline:none}
 .sp-dialog h2{margin:0 0 6px;font-size:19px}

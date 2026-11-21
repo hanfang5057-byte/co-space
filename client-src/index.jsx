@@ -67,6 +67,15 @@ function App() {
   const [node, setNode] = useState(null)
   const [content, setContent] = useState(null)
   const [contentLoading, setContentLoading] = useState(false)
+  const [mode, setMode] = useState('preview')
+  const [draft, setDraft] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [sheetEdits, setSheetEdits] = useState({})
+  const [conflicts, setConflicts] = useState([])
+  const [conflictOpen, setConflictOpen] = useState(false)
+  const [membersOpen, setMembersOpen] = useState(false)
+  const [syncOpen, setSyncOpen] = useState(false)
   const [newContentOpen, setNewContentOpen] = useState(false)
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
   const [joinOpen, setJoinOpen] = useState(false)
@@ -92,10 +101,19 @@ function App() {
     setError('')
     setContent(null)
     setNode(null)
+    setMode('preview')
+    setDraft('')
+    setDirty(false)
+    setSheetEdits({})
     try {
-      const [detail, treeResult] = await Promise.all([rpc('get', { space: id }), rpc('tree', { space: id })])
+      const [detail, treeResult, conflictList] = await Promise.all([
+        rpc('get', { space: id }),
+        rpc('tree', { space: id }),
+        rpc('conflicts', { space: id }).catch(() => []),
+      ])
       setSpace(detail)
       setTree(treeResult.tree || [])
+      setConflicts(conflictList || [])
       setView({ kind: 'space', spaceId: id })
     } catch (e) { setError(e.message) }
   }, [])
@@ -112,14 +130,102 @@ function App() {
     setNode(entry)
     setContentLoading(true)
     setError('')
+    setMode('preview')
+    setDirty(false)
+    setSheetEdits({})
     try {
       const value = await rpc('read', { space: view.spaceId, path: entry.path })
       setContent(value)
+      setDraft(value.text || '')
     } catch (e) {
       setError(e.message)
       setContent(null)
     } finally { setContentLoading(false) }
   }, [view])
+
+  const reloadConflicts = useCallback(async () => {
+    if (!view.spaceId) return []
+    const list = await rpc('conflicts', { space: view.spaceId }).catch(() => [])
+    setConflicts(list)
+    return list
+  }, [view])
+
+  const reloadSpaceMeta = useCallback(async () => {
+    if (!view.spaceId) return
+    const [treeResult, detail] = await Promise.all([
+      rpc('tree', { space: view.spaceId }),
+      rpc('get', { space: view.spaceId }),
+    ])
+    setTree(treeResult.tree || [])
+    setSpace(detail)
+  }, [view])
+
+  const reloadNode = useCallback(async () => {
+    if (!view.spaceId || !node) return
+    const value = await rpc('read', { space: view.spaceId, path: node.path })
+    setContent(value)
+    setDraft(value.text || '')
+    setSheetEdits({})
+    setDirty(false)
+    return value
+  }, [view, node])
+
+  const changeMode = useCallback((next) => {
+    if (next === 'edit') {
+      setDraft(content?.text || '')
+      setSheetEdits({})
+      setDirty(false)
+    }
+    setMode(next)
+  }, [content])
+
+  const changeCell = useCallback((row, column, value) => {
+    setSheetEdits(previous => ({ ...previous, [`${row}:${column}`]: value }))
+    setDirty(true)
+  }, [])
+
+  const saveContent = useCallback(async () => {
+    if (!view.spaceId || !node || !content) return
+    setSaving(true)
+    setError('')
+    try {
+      if (content.kind === 'table') {
+        const edits = Object.entries(sheetEdits).map(([key, value]) => {
+          const [row, column] = key.split(':').map(Number)
+          return { row, column, value }
+        })
+        if (edits.length) {
+          await rpc('editSheetCells', { space: view.spaceId, path: node.path, expectedSha256: content.sha256, edits })
+        }
+      } else {
+        await rpc('write', { space: view.spaceId, path: node.path, content: draft, expectedSha256: content.sha256, overwrite: true })
+      }
+      await Promise.all([reloadNode(), reloadSpaceMeta(), reloadConflicts()])
+      setMode('preview')
+      notify('已保存')
+    } catch (e) {
+      setError(e.message)
+    } finally { setSaving(false) }
+  }, [view, node, content, sheetEdits, draft, reloadNode, reloadSpaceMeta, reloadConflicts, notify])
+
+  const discardContent = useCallback(() => {
+    setDraft(content?.text || '')
+    setSheetEdits({})
+    setDirty(false)
+    setMode('preview')
+  }, [content])
+
+  const addSheetRow = useCallback(async () => {
+    if (!view.spaceId || !node || !content) return
+    const columns = content.table?.columns || []
+    const row = columns.map(() => '')
+    try {
+      await rpc('updateSheet', { space: view.spaceId, path: node.path, rows: [row], mode: 'append' })
+      await Promise.all([reloadNode(), reloadSpaceMeta()])
+      setMode('edit')
+      notify('已添加空行')
+    } catch (e) { setError(e.message) }
+  }, [view, node, content, reloadNode, reloadSpaceMeta, notify])
 
   const createSpace = useCallback(async (name, description) => {
     const created = await rpc('createSpace', { name, description })
@@ -149,6 +255,7 @@ function App() {
     ])
     setTree(treeResult.tree || [])
     setSpace(detail)
+    setConflicts(await rpc('conflicts', { space: view.spaceId }).catch(() => []))
     notify('内容已创建')
   }, [view, notify])
 
@@ -158,6 +265,13 @@ function App() {
       setInviteOpen(true)
     } catch (e) { setError(e.message) }
   }, [view])
+
+  const afterConflictResolved = useCallback(async () => {
+    const list = await reloadConflicts()
+    await Promise.all([reloadSpaceMeta(), node ? reloadNode() : Promise.resolve()])
+    if (!list.length) setConflictOpen(false)
+    notify('冲突已处理')
+  }, [reloadConflicts, reloadSpaceMeta, reloadNode, node, notify])
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -196,14 +310,32 @@ function App() {
           content={content}
           contentLoading={contentLoading}
           counts={counts}
+          conflicts={conflicts}
+          mode={mode}
+          draft={draft}
+          dirty={dirty}
+          saving={saving}
+          sheetEdits={sheetEdits}
+          onModeChange={changeMode}
+          onDraftChange={(value) => { setDraft(value); setDirty(true) }}
+          onCellChange={changeCell}
+          onSave={saveContent}
+          onDiscard={discardContent}
+          onAddRow={addSheetRow}
           onBack={() => { setView({ kind: 'home' }); refreshSpaces() }}
           onNewContent={() => setNewContentOpen(true)}
           onInvite={showInvite}
+          onMembers={() => setMembersOpen(true)}
+          onReviewConflicts={() => setConflictOpen(true)}
+          onSync={() => setSyncOpen(true)}
         />
       )}
       <NewContentDialog open={newContentOpen} setOpen={setNewContentOpen} onCreate={createContent} />
       <JoinDialog open={joinOpen} setOpen={setJoinOpen} onJoin={joinSpace} />
       <InviteDialog open={inviteOpen} setOpen={setInviteOpen} invite={invite} notify={notify} />
+      <MembersDialog open={membersOpen} setOpen={setMembersOpen} space={space} notify={notify} />
+      <ConflictDialog open={conflictOpen} setOpen={setConflictOpen} space={space} conflicts={conflicts} onResolved={afterConflictResolved} notify={notify} />
+      <SyncDialog open={syncOpen} setOpen={setSyncOpen} space={space} notify={notify} />
     </div>
   )
 }
@@ -265,36 +397,125 @@ function Home({ spaces, loading, filter, setFilter, search, setSearch, onOpen, o
   )
 }
 
-function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, contentLoading, counts, onBack, onNewContent, onInvite }) {
+function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, contentLoading, counts, conflicts, mode, draft, dirty, saving, sheetEdits, onModeChange, onDraftChange, onCellChange, onSave, onDiscard, onAddRow, onBack, onNewContent, onInvite, onMembers, onReviewConflicts, onSync }) {
   return (
     <div className="sp-detail">
       <div className="sp-detail-head">
         <ButtonBase variant="ghost" onPress={onBack} aria-label="返回空间列表"><Icon name="back" /> 全部空间</ButtonBase>
         <div className="sp-detail-title">
           <h1>{space?.name || '空间'}</h1>
-          <span className={`sp-badge ${space?.sync?.state === 'idle' ? 'ok' : 'warn'}`}>{statusText(space?.sync)}</span>
+          <button type="button" className={`sp-badge ${space?.sync?.state === 'idle' ? 'ok' : 'warn'}`} onClick={onSync}>
+            <Icon name="sync" size={12} /> {statusText(space?.sync)}
+          </button>
         </div>
         <div className="sp-detail-actions">
           <ButtonBase onPress={onNewContent}><Icon name="plus" /> 新建</ButtonBase>
+          <ButtonBase onPress={onMembers}>成员</ButtonBase>
           <ButtonBase onPress={onInvite}>邀请</ButtonBase>
         </div>
       </div>
+      {conflicts.length > 0 && (
+        <div className="sp-conflict-banner" role="status">
+          <Icon name="alert" size={16} />
+          <span>{conflicts.length} 个文件有同步冲突，需要处理后才能继续编辑。</span>
+          <ButtonBase variant="ghost" onPress={onReviewConflicts}>处理冲突</ButtonBase>
+        </div>
+      )}
       <div className="sp-detail-body">
         <aside className="sp-tree" aria-label="空间内容">
           <div className="sp-tree-summary">
             <span>{counts.pages} 页面</span><span>{counts.sheets} 表格</span><span>{counts.slides} 幻灯片</span>
           </div>
+          {tree.length === 0 && <p className="sp-tree-empty">空间还是空的<br /><span>点击“新建”添加文档、表格或幻灯片。</span></p>}
           {tree.map(entry => <TreeNode key={entry.path} entry={entry} depth={0} expanded={expanded} onOpen={onOpen} activePath={activePath} />)}
         </aside>
         <main className="sp-content">
-          {contentLoading ? <div className="sp-skeleton" /> : content ? <Preview content={content} /> : (
+          {contentLoading ? <div className="sp-skeleton" /> : content ? (
+            <ContentPane
+              content={content}
+              path={activePath}
+              mode={mode}
+              draft={draft}
+              dirty={dirty}
+              saving={saving}
+              sheetEdits={sheetEdits}
+              onModeChange={onModeChange}
+              onDraftChange={onDraftChange}
+              onCellChange={onCellChange}
+              onSave={onSave}
+              onDiscard={onDiscard}
+              onAddRow={onAddRow}
+            />
+          ) : (
             <div className="sp-empty compact">
               <Icon name="page" size={36} />
-              <h2>选择一个页面</h2>
-              <p>从左侧选择 Page、表格或幻灯片；也可以新建内容。</p>
+              <h2>{tree.length ? '选择一个页面' : '这个空间还是空的'}</h2>
+              <p>{tree.length ? '从左侧选择 Page、表格或幻灯片。' : '新建一个 Markdown 文档、CSV 表格或 Marp 幻灯片开始。'}</p>
+              <ButtonBase variant="primary" onPress={onNewContent}><Icon name="plus" /> 新建内容</ButtonBase>
             </div>
           )}
         </main>
+      </div>
+    </div>
+  )
+}
+
+function ContentPane({ content, path, mode, draft, dirty, saving, sheetEdits, onModeChange, onDraftChange, onCellChange, onSave, onDiscard, onAddRow }) {
+  const preview = () => {
+    if (dirty && !window.confirm('放弃未保存的更改？')) return
+    onDiscard()
+  }
+  return (
+    <div className="sp-content-inner">
+      <div className="sp-content-head">
+        <span className="sp-path">{path}</span>
+        <div className="sp-content-actions">
+          {dirty && <span className="sp-dirty">未保存</span>}
+          <div className="sp-seg" role="group" aria-label="查看模式">
+            <button type="button" className={mode === 'preview' ? 'active' : ''} onClick={preview}>预览</button>
+            <button type="button" className={mode === 'edit' ? 'active' : ''} onClick={() => onModeChange('edit')}>编辑</button>
+          </div>
+          {mode === 'edit' && (
+            <>
+              <ButtonBase variant="ghost" onPress={onDiscard}>取消</ButtonBase>
+              <ButtonBase variant="primary" isDisabled={saving || !dirty} onPress={onSave}>{saving ? '保存中…' : '保存'}</ButtonBase>
+            </>
+          )}
+        </div>
+      </div>
+      {mode === 'edit' ? (
+        content.kind === 'table' ? (
+          <SheetEditor content={content} sheetEdits={sheetEdits} onCellChange={onCellChange} onAddRow={onAddRow} />
+        ) : (
+          <textarea className="sp-editor" value={draft} onChange={event => onDraftChange(event.target.value)} spellCheck={false} aria-label="编辑内容" />
+        )
+      ) : (
+        <Preview content={content} />
+      )}
+    </div>
+  )
+}
+
+function SheetEditor({ content, sheetEdits, onCellChange, onAddRow }) {
+  const columns = content.table?.columns || []
+  return (
+    <div className="sp-table-wrap">
+      <table className="sp-table sp-table-edit">
+        <thead><tr>{columns.map(column => <th key={column.key}>{column.title}</th>)}</tr></thead>
+        <tbody>
+          {content.table.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {columns.map((column, columnIndex) => {
+                const key = `${rowIndex}:${columnIndex}`
+                return <td key={column.key}><input className="sp-cell-input" value={sheetEdits[key] ?? row[columnIndex] ?? ''} onChange={event => onCellChange(rowIndex, columnIndex, event.target.value)} aria-label={`${column.title} 第 ${rowIndex + 1} 行`} /></td>
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="sp-table-foot">
+        <p className="sp-muted">{content.table.rows.length} / {content.table.total} 行</p>
+        <ButtonBase onPress={onAddRow}><Icon name="plus" size={14} /> 添加空行</ButtonBase>
       </div>
     </div>
   )
@@ -343,6 +564,204 @@ function Preview({ content }) {
     )
   }
   return <pre className="sp-pre">{content.text}</pre>
+}
+
+function MembersDialog({ open, setOpen, space, notify }) {
+  const [data, setData] = useState(null)
+  const [invite, setInvite] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState('')
+  const load = useCallback(async () => {
+    if (!space?.id) return
+    setError('')
+    try {
+      const [members, invitation] = await Promise.all([rpc('members', { space: space.id }), rpc('invite', { space: space.id })])
+      setData(members)
+      setInvite(invitation)
+    } catch (e) { setError(e.message) }
+  }, [space])
+  useEffect(() => { if (open) load() }, [open, load])
+  const approve = async (deviceId) => {
+    setBusy(deviceId); setError('')
+    try { await rpc('approve', { space: space.id, deviceId }); await load(); notify('设备已批准') } catch (e) { setError(e.message) } finally { setBusy('') }
+  }
+  return (
+    <Modal isOpen={open} onOpenChange={setOpen} className="sp-modal-overlay">
+      <Dialog className="sp-dialog sp-dialog-wide" aria-label="成员">
+        {({ close }) => (
+          <div>
+            <Heading slot="title">成员与设备</Heading>
+            <p className="sp-muted">加入空间即拥有全部文件的读写权限；设备需要在这里批准后才会同步。</p>
+            {error && <p className="sp-form-error">{error}</p>}
+            <h3 className="sp-section-title">已加入</h3>
+            <div className="sp-members">
+              {(data?.members || []).map(member => (
+                <div className="sp-member" key={member.deviceId}>
+                  <span className={`sp-dot ${member.connected ? 'on' : ''}`} />
+                  <span className="sp-member-name">{member.name}{member.self ? '（本机）' : ''}</span>
+                  <span className="sp-member-id">{member.deviceId.slice(0, 7)}…</span>
+                  <span className="sp-muted">{member.self ? '本机' : member.connected ? '已连接' : '离线'}</span>
+                </div>
+              ))}
+              {!data?.members?.length && <p className="sp-muted">还没有成员。</p>}
+            </div>
+            <h3 className="sp-section-title">待批准设备</h3>
+            <div className="sp-members">
+              {(data?.pending || []).map(device => (
+                <div className="sp-member" key={device.deviceId}>
+                  <span className="sp-dot" />
+                  <span className="sp-member-name">{device.name}</span>
+                  <span className="sp-member-id">{device.deviceId.slice(0, 7)}…</span>
+                  <ButtonBase variant="primary" isDisabled={busy === device.deviceId} onPress={() => approve(device.deviceId)}>{busy === device.deviceId ? '批准中…' : '批准'}</ButtonBase>
+                </div>
+              ))}
+              {!data?.pending?.length && <p className="sp-muted">没有待批准设备。</p>}
+            </div>
+            <h3 className="sp-section-title">邀请新设备</h3>
+            {invite && (
+              <>
+                <label className="sp-field"><span>邀请 token</span><textarea readOnly rows={3} value={invite.invite} /></label>
+                <div className="sp-dialog-actions">
+                  <ButtonBase onPress={() => navigator.clipboard?.writeText(invite.invite).then(() => notify('邀请已复制')).catch(() => notify('复制失败，请手动选择'))}>复制邀请</ButtonBase>
+                  <ButtonBase onPress={() => navigator.clipboard?.writeText(invite.deviceId).then(() => notify('Device ID 已复制')).catch(() => notify('复制失败'))}>复制我的 Device ID</ButtonBase>
+                  <ButtonBase variant="primary" onPress={close}>完成</ButtonBase>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Dialog>
+    </Modal>
+  )
+}
+
+function ConflictDialog({ open, setOpen, space, conflicts, onResolved, notify }) {
+  const [selected, setSelected] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [merged, setMerged] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setMerged('')
+    setSelected(prev => conflicts.some(item => item.conflictPath === prev) ? prev : conflicts[0]?.conflictPath || null)
+  }, [open, conflicts])
+
+  useEffect(() => {
+    if (!open || !space?.id || !selected) { setDetail(null); return }
+    setError('')
+    rpc('conflictDetail', { space: space.id, conflictPath: selected }).then(setDetail).catch(e => setError(e.message))
+  }, [open, space, selected])
+
+  const resolve = async (action) => {
+    if (!space?.id || !selected) return
+    setBusy(action); setError('')
+    try {
+      const result = await rpc('resolveConflict', { space: space.id, conflictPath: selected, action })
+      if (result.resolved) {
+        await onResolved()
+        notify('冲突已解决')
+      } else {
+        setMerged(result.text || '')
+        setError('自动合并仍有冲突，请手动处理下面的文本。')
+      }
+    } catch (e) { setError(e.message) } finally { setBusy('') }
+  }
+
+  return (
+    <Modal isOpen={open} onOpenChange={setOpen} className="sp-modal-overlay">
+      <Dialog className="sp-dialog sp-dialog-wide" aria-label="处理同步冲突">
+        {({ close }) => (
+          <div>
+            <Heading slot="title">处理同步冲突</Heading>
+            <p className="sp-muted">同一个文件在两台设备上被修改。保留一侧，或让工具做三方合并；合并后不会再自动覆盖。</p>
+            {!conflicts.length ? <p className="sp-muted">没有待处理冲突。</p> : (
+              <div className="sp-conflict-layout">
+                <div className="sp-conflict-list">
+                  {conflicts.map(item => (
+                    <button key={item.conflictPath} type="button" className={`sp-conflict-item ${selected === item.conflictPath ? 'active' : ''}`} onClick={() => setSelected(item.conflictPath)}>
+                      <span>{item.path}</span>
+                      <small>{item.conflictPath.split('/').pop()}</small>
+                    </button>
+                  ))}
+                </div>
+                <div className="sp-conflict-detail">
+                  {error && <p className="sp-form-error">{error}</p>}
+                  {detail ? (
+                    <>
+                      <div className="sp-conflict-cols">
+                        <div><h4>本机版本</h4><pre>{detail.local || '（文件不存在）'}</pre></div>
+                        <div><h4>对端版本</h4><pre>{detail.remote}</pre></div>
+                        <div><h4>基线</h4><pre>{detail.base || '（没有基线）'}</pre></div>
+                      </div>
+                      <div className="sp-dialog-actions">
+                        <ButtonBase isDisabled={Boolean(busy)} onPress={() => resolve('keep-local')}>保留本机</ButtonBase>
+                        <ButtonBase isDisabled={Boolean(busy)} onPress={() => resolve('keep-conflict')}>保留对端</ButtonBase>
+                        <ButtonBase variant="primary" isDisabled={Boolean(busy)} onPress={() => resolve('merge')}>{busy === 'merge' ? '合并中…' : '尝试合并'}</ButtonBase>
+                      </div>
+                      {merged && <pre className="sp-pre sp-merged">{merged}</pre>}
+                    </>
+                  ) : <p className="sp-muted">加载冲突内容…</p>}
+                </div>
+              </div>
+            )}
+            <div className="sp-dialog-actions"><ButtonBase onPress={close}>关闭</ButtonBase></div>
+          </div>
+        )}
+      </Dialog>
+    </Modal>
+  )
+}
+
+function SyncDialog({ open, setOpen, space, notify }) {
+  const [info, setInfo] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(async () => {
+    if (!space?.id) return
+    setError('')
+    try { setInfo(await rpc('sync', { space: space.id })) } catch (e) { setError(e.message) }
+  }, [space])
+  useEffect(() => { if (open) load() }, [open, load])
+  const rescan = async () => {
+    setBusy(true); setError('')
+    try { await rpc('rescan', { space: space.id }); await load(); notify('已触发扫描') } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+  return (
+    <Modal isOpen={open} onOpenChange={setOpen} className="sp-modal-overlay">
+      <Dialog className="sp-dialog" aria-label="同步状态">
+        {({ close }) => (
+          <div>
+            <Heading slot="title">同步状态</Heading>
+            {error && <p className="sp-form-error">{error}</p>}
+            {info ? (
+              <>
+                <div className="sp-sync-summary">
+                  <span className={`sp-badge ${info.state === 'idle' ? 'ok' : 'warn'}`}>{statusText(info)}</span>
+                  <span className="sp-muted">待同步 {info.needFiles || 0} 个文件 · 冲突 {info.conflicts || 0}</span>
+                </div>
+                <div className="sp-members">
+                  {(info.peers || []).map(peer => (
+                    <div className="sp-member" key={peer.deviceId}>
+                      <span className={`sp-dot ${peer.connected ? 'on' : ''}`} />
+                      <span className="sp-member-name">{peer.deviceId.slice(0, 7)}…</span>
+                      <span className="sp-muted">{peer.connected ? '已连接' : '离线'}{peer.completion != null ? ` · ${peer.completion}%` : ''}</span>
+                    </div>
+                  ))}
+                  {!info.peers?.length && <p className="sp-muted">还没有其他设备。</p>}
+                </div>
+                <div className="sp-dialog-actions">
+                  <ButtonBase isDisabled={busy} onPress={rescan}>{busy ? '扫描中…' : '重新扫描'}</ButtonBase>
+                  <ButtonBase onPress={close}>关闭</ButtonBase>
+                </div>
+              </>
+            ) : <p className="sp-muted">读取中…</p>}
+          </div>
+        )}
+      </Dialog>
+    </Modal>
+  )
 }
 
 function NewSpaceDialog({ open, setOpen, onCreate }) {
@@ -544,6 +963,50 @@ const STYLE = `
 .sp-table th{background:var(--dsw-alias-bg-layer-2);position:sticky;top:0}
 .sp-muted{color:var(--dsw-alias-label-secondary);font-size:12px}
 .sp-pre{white-space:pre-wrap;word-break:break-word;background:var(--dsw-alias-bg-layer-2);padding:14px;border-radius:9px}
+
+.sp-badge{background:transparent;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.sp-tree-empty{margin:12px 10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.7}
+.sp-tree-empty span{color:var(--dsw-alias-label-secondary);opacity:.8}
+.sp-conflict-banner{display:flex;align-items:center;gap:10px;padding:9px clamp(20px,3vw,36px);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 9%,var(--dsw-alias-bg-base));border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 30%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:12px}
+.sp-conflict-banner span{flex:1}
+.sp-content-inner{display:flex;flex-direction:column;min-height:100%;height:100%;gap:14px}
+.sp-content-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.sp-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:140px}
+.sp-content-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sp-dirty{font-size:11px;color:var(--dsw-alias-state-warn-primary)}
+.sp-seg{display:flex;padding:2px;background:var(--dsw-alias-bg-layer-2);border-radius:7px}
+.sp-seg button{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;padding:4px 9px;border-radius:5px;cursor:pointer}
+.sp-seg button.active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}
+.sp-editor{flex:1;min-height:360px;width:100%;box-sizing:border-box;resize:none;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);padding:16px 18px;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;tab-size:2}
+.sp-editor:focus{border-color:var(--dsw-alias-brand-primary)}
+.sp-table-edit td{padding:3px 4px}
+.sp-cell-input{width:100%;min-width:90px;box-sizing:border-box;border:1px solid transparent;background:transparent;color:inherit;font:inherit;padding:5px 6px;border-radius:4px;outline:none}
+.sp-cell-input:hover{border-color:var(--dsw-alias-border-l1)}
+.sp-cell-input:focus{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1)}
+.sp-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.sp-dialog-wide{width:min(880px,100%)}
+.sp-section-title{font-size:13px;margin:18px 0 8px;color:var(--dsw-alias-label-secondary);font-weight:600}
+.sp-members{display:flex;flex-direction:column;gap:6px}
+.sp-member{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);font-size:12px}
+.sp-member-name{font-weight:550;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-member-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dsw-alias-label-secondary);font-size:11px}
+.sp-member .sp-muted{margin-left:auto}
+.sp-dot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-idle-primary);flex:0 0 auto}
+.sp-dot.on{background:var(--dsw-alias-state-success-primary)}
+.sp-sync-summary{display:flex;align-items:center;gap:10px;margin:14px 0 10px;flex-wrap:wrap}
+.sp-conflict-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px;margin-top:14px;min-height:320px}
+.sp-conflict-list{display:flex;flex-direction:column;gap:5px;max-height:440px;overflow:auto;border-right:1px solid var(--dsw-alias-border-l1);padding-right:10px}
+.sp-conflict-item{text-align:left;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);border-radius:7px;padding:7px 8px;font:inherit;font-size:12px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.sp-conflict-item small{color:var(--dsw-alias-label-secondary);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-conflict-item:hover{background:var(--dsw-alias-bg-layer-2)}
+.sp-conflict-item.active{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}
+.sp-conflict-detail{min-width:0}
+.sp-conflict-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sp-conflict-cols h4{margin:0 0 5px;font-size:11px;color:var(--dsw-alias-label-secondary);font-weight:600}
+.sp-conflict-cols pre{height:260px;overflow:auto;margin:0;padding:10px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:var(--dsw-alias-bg-layer-1);white-space:pre-wrap;word-break:break-word;font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.sp-merged{max-height:220px;overflow:auto;margin-top:12px}
+@media(max-width:900px){.sp-conflict-layout{grid-template-columns:1fr}.sp-conflict-list{max-height:140px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l1);padding:0 0 10px}.sp-conflict-cols{grid-template-columns:1fr}.sp-conflict-cols pre{height:160px}}
+
 .sp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);display:grid;place-items:center;padding:24px;z-index:80}
 .sp-dialog{width:min(520px,100%);max-height:min(86vh,720px);overflow:auto;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.28);outline:none}
 .sp-dialog h2{margin:0 0 6px;font-size:19px}
