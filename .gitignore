@@ -1,0 +1,5 @@
+node_modules/
+.client-build.cjs
+*.log
+.DS_Store
+coverage/

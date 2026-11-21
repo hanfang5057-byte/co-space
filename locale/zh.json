@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "共享空间",
+    "description": "用 Syncthing 在可信设备间同步开放文本页面、表格与 Marp 幻灯片的共享空间。",
+    "detail": "docs/DETAIL.md"
+  }
+}
