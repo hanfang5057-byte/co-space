@@ -65,12 +65,12 @@ export async function openSpacePicker(ctx, sessionId, t) {
   const title=document.createElement('h2');title.id='space-picker-title';title.textContent=t('picker.title');modal.append(title);
   const description=document.createElement('p');description.textContent=t('picker.description');modal.append(description);
   const list=document.createElement('fieldset');const legend=document.createElement('legend');legend.textContent=t('picker.documents');list.append(legend);
-  for(const doc of documents) {const label=document.createElement('label');label.style.display='block';const check=document.createElement('input');check.type='checkbox';check.value=doc.id;label.append(check,document.createTextNode(' '+doc.title));list.append(label);}
-  if(!documents.length){const empty=document.createElement('p');empty.textContent=t('picker.empty');list.append(empty);}
+  for(const doc of documents) {const label=document.createElement('label');label.className='space-picker-option';const check=document.createElement('input');check.type='checkbox';check.value=doc.id;label.append(check,document.createTextNode(doc.title));list.append(label);}
+  if(!documents.length){const empty=document.createElement('p');empty.className='space-picker-empty';empty.textContent=t('picker.empty');list.append(empty);}
   modal.append(list);
   const note=document.createElement('p');note.setAttribute('role','status');modal.append(note);
-  const add=document.createElement('button');add.type='button';add.textContent=t('picker.add');add.disabled=!documents.length;
-  const cancel=document.createElement('button');cancel.type='button';cancel.textContent=t('picker.cancel');cancel.addEventListener('click',()=>modal.close());
+  const add=document.createElement('button');add.type='button';add.className='is-primary';add.textContent=t('picker.add');add.disabled=!documents.length;
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='is-secondary';cancel.textContent=t('picker.cancel');cancel.addEventListener('click',()=>modal.close());
   add.addEventListener('click',()=>{
     const chosen=[...list.querySelectorAll('input:checked')];if(!chosen.length){note.textContent=t('picker.choose');return;}
     if(ctx.sessions.binding(sessionId)!==binding){note.textContent=t('picker.closed');return;}
@@ -79,7 +79,7 @@ export async function openSpacePicker(ctx, sessionId, t) {
     if(!input.canInsertReferences() || !input.addReferences(references)){note.textContent=t('picker.failed');return;}
     modal.close();input.focus();
   });
-  modal.append(cancel,add);modal.addEventListener('close',()=>modal.remove(),{once:true});document.body.append(modal);modal.showModal();
+  const actions=document.createElement('div');actions.className='space-picker-actions';actions.append(cancel,add);modal.append(actions);modal.addEventListener('close',()=>modal.remove(),{once:true});document.body.append(modal);modal.showModal();
 }
 
 export function apply(ctx) {

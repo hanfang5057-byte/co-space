@@ -298,11 +298,20 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-dialog button { min-block-size: 42px; padding: 8px 14px; border: 1px solid var(--space-border, #d5d7dc); border-radius: 10px; background: var(--space-card, #fff); color: inherit; font: inherit; cursor: pointer; }
 .space-dialog button:focus-visible, .space-dialog textarea:focus-visible, .space-dialog input:focus-visible { outline: 2px solid var(--space-accent, #315acb); outline-offset: 2px; }
 .space-app .space-send-dialog .is-primary { border-color: transparent; background: var(--space-text); color: var(--space-paper); font-weight: 600; }
-.space-picker-dialog { font: 14px/1.55 system-ui, sans-serif; }
-.space-picker-dialog fieldset { margin: 16px 0; padding: 12px; border: 1px solid var(--space-border, #d5d7dc); border-radius: 10px; }
-.space-picker-dialog label { margin-block: 6px; }
-.space-picker-dialog > button { margin-inline-start: 8px; }
-.space-picker-dialog > button:last-of-type { border-color: transparent; background: var(--space-accent, #315acb); color: white; font-weight: 600; }
+.space-picker-dialog { --space-border: var(--dsw-alias-border, #d5d7dc); --space-text: var(--dsw-alias-text, #25262b); --space-muted: var(--dsw-alias-text-secondary, #656b77); --space-accent: var(--dsw-alias-primary, #315acb); --space-paper: var(--dsw-alias-surface, #fff); --space-card: var(--dsw-alias-background, #f4f5f8); inline-size: min(440px, calc(100vw - 32px)); padding: 24px; border-radius: 16px; font: 14px/1.55 system-ui, sans-serif; }
+.space-picker-dialog h2 { margin-block-end: 8px; }
+.space-picker-dialog fieldset { min-inline-size: 0; margin: 18px 0 12px; padding: 10px; border: 1px solid var(--space-border); border-radius: 12px; }
+.space-picker-dialog legend { padding-inline: 6px; color: var(--space-muted); font-size: 12px; font-weight: 600; }
+.space-picker-option { display: flex; align-items: center; gap: 10px; min-block-size: 40px; padding: 7px 9px; border-radius: 8px; cursor: pointer; overflow-wrap: anywhere; }
+.space-picker-option:hover { background: color-mix(in srgb, var(--space-accent) 7%, transparent); }
+.space-picker-option input { flex: none; inline-size: 16px; block-size: 16px; margin: 0; accent-color: var(--space-accent); }
+.space-picker-empty { margin: 0; padding: 14px 9px; color: var(--space-muted); }
+.space-picker-dialog > p[role="status"] { min-block-size: 0; margin-block: 0; color: var(--space-muted); font-size: 12px; }
+.space-picker-actions { display: flex; justify-content: flex-end; gap: 8px; margin-block-start: 14px; }
+.space-picker-actions button { min-block-size: 38px; padding: 6px 13px; border-radius: 9px; }
+.space-picker-actions .is-primary { border-color: transparent; background: var(--space-accent); color: white; font-weight: 600; }
+.space-picker-actions .is-primary:hover:not(:disabled) { filter: brightness(1.06); }
+.space-picker-actions .is-primary:disabled { cursor: not-allowed; opacity: .5; }
 .space-delete-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-block-start: 24px; }
 .space-app .space-delete-actions button { min-block-size: 42px; padding-inline: 14px; border-radius: 10px; }
 .space-app .space-delete-actions .is-danger { border-color: transparent; background: var(--space-danger); color: white; font-weight: 600; }
