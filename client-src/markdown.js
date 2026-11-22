@@ -253,9 +253,14 @@ markdown.renderer.rules.inline = (tokens, index, options, env) => {
   return before + rendered + (token.meta?.spaceAfterHtml || '');
 };
 
-for (const type of ['list_item_close', 'tr_close']) {
+for (const type of ['heading_open', 'paragraph_open', 'list_item_close', 'tr_close']) {
   markdown.renderer.rules[type] = (tokens, index, options) =>
     markdown.renderer.renderToken(tokens, index, options) + (tokens[index].meta?.spaceAfterHtml || '');
+}
+
+for (const type of ['heading_close', 'paragraph_close']) {
+  markdown.renderer.rules[type] = (tokens, index, options) =>
+    (tokens[index].meta?.spaceAfterHtml || '') + markdown.renderer.renderToken(tokens, index, options);
 }
 
 function renderTextRun(run, suggestions) {
@@ -508,18 +513,34 @@ function placeUnmappedSuggestions(tokens, source, suggestions) {
     const codeIndex = tokens.findIndex(token => ['fence', 'code_block'].includes(token.type) && tokenContains(token, item));
     const hasVisibleDeletion = item.from < item.to && ranges.some(range => item.from < range.to && item.to > range.from);
     const markup = fallbackMarkup(item, source, hasVisibleDeletion);
-    const targetIndex = blockClose ?? (codeIndex >= 0 ? codeIndex : nearestInline);
+    let targetIndex = blockClose ?? (codeIndex >= 0 ? codeIndex : nearestInline);
     if (targetIndex < 0) continue;
-    const target = tokens[targetIndex];
-    const code = ['fence', 'code_block'].includes(target.type);
-    const codeMarkup = code
-      ? `<span class="space-suggestion-insert" data-suggestion-id="${suggestionId(item)}">${sourceTextForDisplay(item.replacement)}</span>`
-      : markup;
+    let target = tokens[targetIndex];
     const inlineRanges = target.type === 'inline'
       ? (target.children || []).flatMap(child => child.meta?.spaceRuns || (child.meta?.spaceSrc ? [child.meta.spaceSrc] : []))
       : [];
     const before = inlineRanges.length && item.from <= Math.min(...inlineRanges.map(range => range.from));
-    const property = code ? 'spaceAfterCodeHtml' : before ? 'spaceBeforeHtml' : 'spaceAfterHtml';
+    // Markdown-it renders inline tokens through renderInline directly, so a
+    // custom `inline` renderer rule cannot emit fallback insertions. Attach
+    // those insertions to the surrounding block token instead.
+    if (target.type === 'inline') {
+      const openIndex = targetIndex - 1;
+      const closeIndex = targetIndex + 1;
+      if (before && ['heading_open', 'paragraph_open'].includes(tokens[openIndex]?.type)) {
+        targetIndex = openIndex;
+        target = tokens[targetIndex];
+      } else if (!before && ['heading_close', 'paragraph_close'].includes(tokens[closeIndex]?.type)) {
+        targetIndex = closeIndex;
+        target = tokens[targetIndex];
+      }
+    }
+    const code = ['fence', 'code_block'].includes(target.type);
+    const codeMarkup = code
+      ? `<span class="space-suggestion-insert" data-suggestion-id="${suggestionId(item)}">${sourceTextForDisplay(item.replacement)}</span>`
+      : markup;
+    const property = code ? 'spaceAfterCodeHtml'
+      : target.type === 'inline' ? before ? 'spaceBeforeHtml' : 'spaceAfterHtml'
+        : 'spaceAfterHtml';
     target.meta = { ...(target.meta || {}), [property]: `${target.meta?.[property] || ''}${codeMarkup}` };
   }
 }
