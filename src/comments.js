@@ -6,10 +6,8 @@ const nonempty=x=>typeof x==='string' && x.trim().length>0 && x.length<=4000;
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const parse=JSON.parse;
 const CONTEXT=32;
-export function acceptedText(markdown) { return {text:markdown,chars:Array.from({length:markdown.length},(_,i)=>({ch:markdown[i],start:i,end:i+1}))}; }
-
-function locateQuote(textInfo,quote,contextBefore,contextAfter) {
-  const {text}=textInfo, found=[];
+function locateQuote(text,quote,contextBefore,contextAfter) {
+  const found=[];
   for(let at=text.indexOf(quote);at!==-1;at=text.indexOf(quote,at+1)) {
     const before=text.slice(Math.max(0,at-contextBefore.length),at);
     const after=text.slice(at+quote.length,at+quote.length+contextAfter.length);
@@ -35,8 +33,7 @@ function occurrences(text,needle) {
 // When the quote itself was edited, the surrounding context usually survives.
 // Map the anchor to the text between the stored before/after context instead of
 // declaring the comment stale just because the quote no longer matches.
-function locateContext(textInfo,contextBefore,contextAfter,oldFrom) {
-  const {text}=textInfo;
+function locateContext(text,contextBefore,contextAfter,oldFrom) {
   if(!contextBefore && !contextAfter) return null;
   const lengths=value=>[...new Set([value.length,24,16,8].filter(length=>length>=4&&length<=value.length))];
   const before=[];
@@ -54,6 +51,7 @@ function locateContext(textInfo,contextBefore,contextAfter,oldFrom) {
   }
   if(!candidates.length) return null;
   candidates.sort((a,b)=>b.score-a.score||a.distance-b.distance);
+  if(candidates.length>1 && candidates[0].score===candidates[1].score && candidates[0].distance===candidates[1].distance) return null;
   return {from:candidates[0].from,to:candidates[0].to};
 }
 
@@ -64,7 +62,7 @@ function contextFor(doc,from,to) {
   };
 }
 
-function resolveAnchor(doc,textInfo,row,currentVersion) {
+function resolveAnchor(doc,row,currentVersion) {
   if(row.doc_version===undefined || row.doc_version===null) return null;
   // Stored coordinates are only authoritative for the version they were made
   // against. After any version change, re-locate the quote so an insertion that
@@ -74,22 +72,33 @@ function resolveAnchor(doc,textInfo,row,currentVersion) {
       const exact=row.from_pos>=0 && row.to_pos<=doc.length && doc.slice(row.from_pos,row.to_pos)===row.quote;
     if(exact) return {from:row.from_pos,to:row.to_pos};
   }
-  const byQuote=locateQuote(textInfo,row.quote,row.context_before||'',row.context_after||'');
+  const byQuote=locateQuote(doc,row.quote,row.context_before||'',row.context_after||'');
   if(byQuote) return byQuote;
-  return locateContext(textInfo,row.context_before||'',row.context_after||'',row.from_pos);
+  return locateContext(doc,row.context_before||'',row.context_after||'',row.from_pos);
 }
 
 export class CommentStore {
-  constructor(path) {
-    this.db=new DatabaseSync(path,{timeout:5000});
-    this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
-      CREATE TABLE IF NOT EXISTS space_comments(id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, quote TEXT NOT NULL, body TEXT NOT NULL, from_pos INTEGER NOT NULL, to_pos INTEGER NOT NULL, doc_version INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', request_id TEXT, context_before TEXT NOT NULL DEFAULT '', context_after TEXT NOT NULL DEFAULT '');
-      CREATE TABLE IF NOT EXISTS space_comment_sends(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, session_id TEXT NOT NULL, doc_id TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error TEXT);`);
-    const columns=new Set(this.db.prepare('PRAGMA table_info(space_comments)').all().map(column=>column.name));
-    if(!columns.has('context_before')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_before TEXT NOT NULL DEFAULT ''");
-    if(!columns.has('context_after')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_after TEXT NOT NULL DEFAULT ''");
+  constructor(database) {
+    this.ownsDatabase = typeof database === 'string';
+    this.db = this.ownsDatabase ? new DatabaseSync(database,{timeout:5000}) : database;
+    if (!this.db?.prepare || !this.db?.exec) throw new TypeError('CommentStore requires a database path or SQLite connection');
+    if (this.ownsDatabase) this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS space_comments(id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, quote TEXT NOT NULL, body TEXT NOT NULL, from_pos INTEGER NOT NULL, to_pos INTEGER NOT NULL, doc_version INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', request_id TEXT, context_before TEXT NOT NULL DEFAULT '', context_after TEXT NOT NULL DEFAULT '');
+        CREATE TABLE IF NOT EXISTS space_comment_sends(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, session_id TEXT NOT NULL, doc_id TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error TEXT);`);
+      const columns=new Set(this.db.prepare('PRAGMA table_info(space_comments)').all().map(column=>column.name));
+      if(!columns.has('context_before')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_before TEXT NOT NULL DEFAULT ''");
+      if(!columns.has('context_after')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_after TEXT NOT NULL DEFAULT ''");
+      this.db.exec('COMMIT');
+    } catch(error) {
+      try { this.db.exec('ROLLBACK'); } catch {}
+      if(this.ownsDatabase) this.db.close();
+      throw error;
+    }
   }
-  close(){this.db.close()}
+  close(){if(this.ownsDatabase)this.db.close()}
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const result=fn();this.db.exec('COMMIT');return result}catch(e){try{this.db.exec('ROLLBACK')}catch{}throw e}}
   create({docId,quote,body,anchor}) {
     if(!nonempty(docId)||!nonempty(quote)||!nonempty(body)||!anchor||!Number.isInteger(anchor.from)||!Number.isInteger(anchor.to)||!Number.isInteger(anchor.version)||anchor.from>=anchor.to) fail('INVALID_INPUT','Comment requires document, body and non-empty selection');
@@ -129,7 +138,7 @@ export class CommentStore {
   }
   list(docId) {
     const document=this.db.prepare('SELECT version,content FROM review_documents WHERE id=?').get(docId);if(!document) fail('DOCUMENT_NOT_FOUND','Document not found');
-    const doc=document.content;let textInfo;
+    const doc=document.content;
     const backfill=this.db.prepare('UPDATE space_comments SET context_before=?,context_after=? WHERE id=?');
     return this.db.prepare('SELECT * FROM space_comments WHERE doc_id=? ORDER BY rowid').all(docId).map(r=>{
       let contextBefore=r.context_before||'', contextAfter=r.context_after||'';
@@ -145,7 +154,7 @@ export class CommentStore {
         } catch {}
       }
       const row={...r,context_before:contextBefore,context_after:contextAfter};
-      const resolved=resolveAnchor(doc,textInfo ??= acceptedText(doc),row,document.version);
+      const resolved=resolveAnchor(doc,row,document.version);
       return {id:r.id,docId:r.doc_id,quote:r.quote,body:r.body,anchor:{from:r.from_pos,to:r.to_pos,version:r.doc_version},resolved,status:r.status,stale:resolved===null,requestId:r.request_id};
     });
   }

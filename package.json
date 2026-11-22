@@ -1,16 +1,23 @@
 {
-  "name": "@local/dsh-space",
+  "name": "dsh-plugin-space",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
   "description": "Review agent-proposed edits to personal documents: create documents, accept or reject each suggestion, and send comments to the current conversation.",
+  "type": "module",
+  "license": "MIT",
+  "author": "hanfang",
+  "homepage": "https://gitee.com/hanfang5057/dsh-space",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/hanfang5057/dsh-space.git"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
     "documents",
     "review",
-    "suggestions"
+    "suggestions",
+    "comments"
   ],
   "engines": {
     "node": ">=24",

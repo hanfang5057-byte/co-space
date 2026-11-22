@@ -1,6 +1,7 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { errorText, translate, zh } from './locale.js';
-import { capturePreviewSelection, rangeRects, readSourceSpans, renderMarkdown, scrollSourceRange, sourceRangeToDom } from './markdown.js';
+import { renderMarkdown } from './markdown.js';
+import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
 import { useCurrentUser } from './current-user.js';
 import './space.css';

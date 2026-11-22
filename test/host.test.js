@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {createServer} from 'node:http';
+import { DatabaseSync } from 'node:sqlite';
 import {createHostApi,createHttpHandler} from '../server/host.js';
-import {documentFromMarkdown} from '../src/space-service.js';
+import {documentFromMarkdown, SpaceService} from '../src/space-service.js';
 
 test('host comment bridge requires explicit action and treats unconfirmed receipt as unknown',async()=>{
  const home=mkdtempSync(path.join(tmpdir(),'space-host-'));let sent=[];
@@ -25,13 +25,19 @@ test('host comment bridge requires explicit action and treats unconfirmed receip
 
 test('HTTP route uses actual service and blocks unknown methods',async()=>{
  const home=mkdtempSync(path.join(tmpdir(),'space-http-'));const host=createHostApi({home,prompt:async()=>({accepted:true})});
- const server=createServer(createHttpHandler(host));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  try {
-   const endpoint=`http://127.0.0.1:${server.address().port}/dsh-space-api`;
-   const call=async method=>fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method})});
-   assert.deepEqual((await (await call('listDocuments')).json()).result,[]);
-   const error=await call('writeDocument');assert.equal(error.status,400);assert.equal((await error.json()).error.code,'METHOD_NOT_FOUND');
- } finally {await new Promise(resolve=>server.close(resolve));host.close();rmSync(home,{recursive:true,force:true});}
+   const handler=createHttpHandler(host);
+   const invoke=async(method,body)=>{
+     let output='',status;
+     const req={method,async *[Symbol.asyncIterator](){yield Buffer.from(JSON.stringify(body));}};
+     const res={writeHead(code){status=code;},end(value){output=value;}};
+     await handler(req,res);
+     return {status,body:JSON.parse(output)};
+   };
+   assert.deepEqual((await invoke('POST',{method:'listDocuments'})).body.result,[]);
+   const error=await invoke('POST',{method:'writeDocument'});assert.equal(error.status,400);assert.equal(error.body.error.code,'METHOD_NOT_FOUND');
+   assert.equal((await invoke('GET',{})).status,405);
+ } finally {host.close();rmSync(home,{recursive:true,force:true});}
 });
 
 test('UI creates an untitled document with an empty body and replays its operation',async()=>{
@@ -64,8 +70,8 @@ test('client bundle registers Space panel, picker action, and reference serializ
  assert.ok(registrations.some(x=>x.options.name==='main'&&x.options.key==='spaces'));
  assert.ok(registrations.some(x=>x.options.name==='sidebar.panellist'&&x.options.id==='spaces'));
  assert.ok(registrations.some(x=>x.options.name==='conversation.user.text.node'&&x.options.key==='space-document'));
- assert.ok(registrations.some(x=>x.options.name==='sidebar.right.pane.tab'&&x.options.key==='@local/dsh-space'));
- assert.ok(registrations.some(x=>x.options.name==='sidebar.right.pane.tab.title'&&x.options.key==='@local/dsh-space'));
+ assert.ok(registrations.some(x=>x.options.name==='sidebar.right.pane.tab'&&x.options.key==='dsh-plugin-space'));
+ assert.ok(registrations.some(x=>x.options.name==='sidebar.right.pane.tab.title'&&x.options.key==='dsh-plugin-space'));
  assert.equal(tabTypes[0].kind,'space-document');
  assert.equal(tabTypes[0].patterns[0],'dsh-resource://space/**');
  const card=registrations.find(x=>x.options.name==='conversation.user.text.node'&&x.options.key==='space-document');
@@ -75,7 +81,7 @@ test('client bundle registers Space panel, picker action, and reference serializ
  const node=rule.match('space:doc-1 请改写',0);assert.equal(node.id,'space-document');assert.equal(node.start,0);assert.equal(node.end,11);assert.equal(node.data.docId,'doc-1');
  assert.equal(rule.match('前面 space:doc-1。后面',0).data.docId,'doc-1');
  assert.equal(rule.match('xspace:doc-1',0),undefined);
- assert.equal(commands[0].name,'space');assert.equal(await sources[0].codec.serialize('space:one%20two'),'space:one%20two');
+ assert.equal(commands[0].name,'space');assert.equal(typeof commands[0].icon,'function');assert.equal(await sources[0].codec.serialize('space:one%20two'),'space:one%20two');
  assert.equal(sources[0].openReference({}, {ref:'space:doc-2'}), true);assert.equal(opened.at(-1),'dsh-resource://space/doc-2');
 });
 
@@ -129,4 +135,47 @@ test('sending without a conversation resolves a target once and reuses it on ret
     assert.equal(sent.length, 1);
     assert.equal(resolved, 1);
   } finally { host.close(); rmSync(home, { recursive: true, force: true }); }
+});
+
+test('document deletion removes comments in one transaction and preserves data when sending', async () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'space-delete-'));
+  const host = createHostApi({ home, prompt: async () => ({ accepted: true }) });
+  try {
+    const created = await host.dispatch('createDocument', { title: 'Delete me', operationId: 'delete-create' });
+    const doc = await host.dispatch('readDocument', { docId: created.id });
+    const quote = 'Delete me';
+    const note = await host.dispatch('createComment', { docId: created.id, quote, body: 'retain?', anchor: { from: 2, to: 2 + quote.length, version: doc.version } });
+    const db = new DatabaseSync(path.join(home, 'review.sqlite'));
+    try {
+      db.exec("CREATE TRIGGER reject_document_delete BEFORE DELETE ON review_documents BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END;");
+      await assert.rejects(host.dispatch('deleteDocument', { docId: created.id }));
+      assert.equal(db.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id)?.id, created.id);
+      assert.equal(db.prepare('SELECT id FROM space_comments WHERE id=?').get(note.id)?.id, note.id);
+      db.exec('DROP TRIGGER reject_document_delete');
+      db.prepare("UPDATE space_comments SET status='sending' WHERE id=?").run(note.id);
+      await assert.rejects(host.dispatch('deleteDocument', { docId: created.id }), error => error.code === 'COMMENT_BUSY');
+      assert.equal(db.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id)?.id, created.id);
+      assert.equal(db.prepare('SELECT id FROM space_comments WHERE id=?').get(note.id)?.id, note.id);
+      db.prepare("UPDATE space_comments SET status='pending' WHERE id=?").run(note.id);
+    } finally { db.close(); }
+    assert.deepEqual(await host.dispatch('deleteDocument', { docId: created.id }), { id: created.id, deleted: true });
+    const verify = new DatabaseSync(path.join(home, 'review.sqlite'));
+    try {
+      assert.equal(verify.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id), undefined);
+      assert.equal(verify.prepare('SELECT id FROM space_comments WHERE id=?').get(note.id), undefined);
+    } finally { verify.close(); }
+  } finally { host.close(); rmSync(home, { recursive: true, force: true }); }
+});
+
+test('unsupported unmarked databases fail closed without dropping legacy tables', async () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'space-schema-'));
+  const db = new DatabaseSync(path.join(home, 'review.sqlite'));
+  db.exec("CREATE TABLE review_documents(id TEXT PRIMARY KEY, version INTEGER NOT NULL, content TEXT NOT NULL); INSERT INTO review_documents VALUES('legacy',0,'keep me');");
+  db.close();
+  try {
+    assert.throws(() => new SpaceService(home), error => error.code === 'UNSUPPORTED_SCHEMA');
+    const verify = new DatabaseSync(path.join(home, 'review.sqlite'));
+    try { assert.equal(verify.prepare('SELECT content FROM review_documents WHERE id=?').get('legacy')?.content, 'keep me'); }
+    finally { verify.close(); }
+  } finally { rmSync(home, { recursive: true, force: true }); }
 });

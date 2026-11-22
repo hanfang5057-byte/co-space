@@ -1,13 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { CommentStore } from '../src/comments.js';
 import { SpaceService, documentWithTitle } from '../src/space-service.js';
-import path from 'node:path';
 
 /** Host-facing façade. All mutations share the document store used by MCP. */
 export function createHostApi({ home, prompt, getUser, resolveTarget }) {
   const space = new SpaceService(home);
-  const comments = new CommentStore(path.join(home, 'review.sqlite'));
-  comments.markInterruptedUnknown();
+  space.markInterruptedUnknown();
   const dispatch = async (method, args = {}) => {
     switch (method) {
       case 'listSpaces': return space.listSpaces();
@@ -22,14 +19,12 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
       }
       case 'readDocument': return space.readDocument(args.docId);
       case 'deleteDocument': {
-        space.readDocument(args.docId);
-        comments.deleteDocument(args.docId);
         return space.deleteDocument(args.docId);
       }
       case 'decide': return space.decide(args);
-      case 'listComments': return comments.list(args.docId);
-      case 'createComment': return comments.create(args);
-      case 'deleteComment': return comments.delete(args);
+      case 'listComments': return space.listComments(args.docId);
+      case 'createComment': return space.createComment(args);
+      case 'deleteComment': return space.deleteComment(args);
       case 'getUser': {
         // Account reads are optional: an installation without the account
         // plugin simply has no signed-in identity to show on comment cards.
@@ -43,7 +38,7 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
         const operationId = args.operationId || randomUUID();
         // A retry of the same operation must reuse the conversation recorded by
         // the first attempt, not resolve a different recent conversation.
-        const prior = comments.findSend(operationId);
+        const prior = space.findSend(operationId);
         const requestedSessionId = typeof args.sessionId === 'string' && args.sessionId !== '' ? args.sessionId : prior?.sessionId;
         let target;
         if (requestedSessionId) {
@@ -53,7 +48,7 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
           target = await resolveTarget({ operationId });
           if (!target?.sessionId) throw Object.assign(new Error('无法确定发送对话'), {code:'SESSION_UNAVAILABLE'});
         }
-        const prepared = comments.prepareSend({ ...args, sessionId: target.sessionId, operationId });
+        const prepared = space.prepareSend({ ...args, sessionId: target.sessionId, operationId });
         if (prepared.replay) return {requestId:operationId,status:prepared.status,sessionId:target.sessionId,createdSession:false};
         // Lead with the protocol reference so the conversation renders the
         // document card and the Agent can resolve the same id. The document id
@@ -67,14 +62,14 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
           const receipt = await prompt({ requestId: operationId, sessionId: target.sessionId, mode:'queue', content:[{type:'text',text}] });
           if (receipt?.accepted !== true) throw new Error('宿主未确认接收');
           return {
-            ...comments.finishSend({operationId,status:'sent'}),
+            ...space.finishSend({operationId,status:'sent'}),
             sessionId:target.sessionId,
             createdSession:target.created === true,
             ...(target.workspace ? {workspace:target.workspace} : {}),
           };
         } catch (error) {
           return {
-            ...comments.finishSend({operationId,status:'unknown',error:error?.message || '发送结果未知'}),
+            ...space.finishSend({operationId,status:'unknown',error:error?.message || '发送结果未知'}),
             sessionId:target.sessionId,
             createdSession:target.created === true,
             ...(target.workspace ? {workspace:target.workspace} : {}),
@@ -84,7 +79,7 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
       default: throw Object.assign(new Error('未知操作'),{code:'METHOD_NOT_FOUND'});
     }
   };
-  return { dispatch, close() {comments.close();space.close();} };
+  return { dispatch, close() {space.close();} };
 }
 
 /** HTTP transport for the browser UI. */

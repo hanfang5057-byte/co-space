@@ -13,7 +13,7 @@ export const inject = ['slots','uiSession','locale','uiConversation','sidebarRig
 export const api = request;
 
 /** The right-Sidebar tab type this plugin owns; the id keys its body and title seats. */
-const SIDEBAR_ID = '@local/dsh-space';
+const SIDEBAR_ID = 'dsh-plugin-space';
 const SIDEBAR_KIND = 'space-document';
 const SIDEBAR_PATTERN = 'dsh-resource://space/**';
 
@@ -131,6 +131,6 @@ export function apply(ctx) {
     }),'dsh-space: reference codec');
   });
   ctx.inject(['commandUi','sessions','conversation','inputTriggers'],scope=>{
-    scope.effect(()=>scope.commandUi.register({name:'space',label:()=>t('command.label'),description:()=>t('command.description'),available:session=>!!scope.sessions.binding(session.sessionId),ui:{kind:'action',run:session=>{openSpacePicker(scope,session.sessionId,t).catch(error=>{const binding=scope.sessions.binding(session.sessionId);if(binding) scope.conversation.input.for(binding.ctx).notify('error',errorText(error,t));});}}}),'dsh-space: composer action');
+    scope.effect(()=>scope.commandUi.register({name:'space',label:()=>t('command.label'),description:()=>t('command.description'),icon:SpaceIcon,available:session=>!!scope.sessions.binding(session.sessionId),ui:{kind:'action',run:session=>{openSpacePicker(scope,session.sessionId,t).catch(error=>{const binding=scope.sessions.binding(session.sessionId);if(binding) scope.conversation.input.for(binding.ctx).notify('error',errorText(error,t));});}}}),'dsh-space: composer action');
   });
 }

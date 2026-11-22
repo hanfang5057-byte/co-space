@@ -9,6 +9,8 @@ test('client bundle uses the host React runtime and ships no React copy', async 
     assert.equal(manifest[section]?.['react-dom'], undefined, `${section}.react-dom must stay host-provided`);
   }
   const bundle = await readFile(new URL('../client.js', import.meta.url), 'utf8');
+  // The module-loader id is the package name the Host resolves; keep them equal.
+  assert.match(bundle, new RegExp(`load\\(\\{id:'${manifest.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   // The module-loader `require` is the host module table; both entries must stay external.
   assert.match(bundle, /require\(["']react["']\)/);
   assert.match(bundle, /require\(["']react\/jsx-runtime["']\)/);

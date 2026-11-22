@@ -12,5 +12,5 @@ const [code,css]=await Promise.all([readFile(temp,'utf8'),readFile(cssPath,'utf8
 // The wrapper's require is the host module table; React must stay external there.
 if(!/require\(["']react["']\)/.test(code)||!/require\(["']react\/jsx-runtime["']\)/.test(code)) throw new Error('Client bundle must require the host React runtime');
 if(/react-dom/.test(code)) throw new Error('Client bundle must not contain react-dom');
-const wrapped=`window.__ModuleLoader__.load({id:'@local/dsh-space',factory(require){const module={exports:{}}; (function(module,exports,require){\n${code}\n})(module,module.exports,require);const style=document.createElement('style');style.textContent=${JSON.stringify(css)};document.head.append(style);return module.exports;}});\n`;
+const wrapped=`window.__ModuleLoader__.load({id:'dsh-plugin-space',factory(require){const module={exports:{}}; (function(module,exports,require){\n${code}\n})(module,module.exports,require);const style=document.createElement('style');style.textContent=${JSON.stringify(css)};document.head.append(style);return module.exports;}});\n`;
 await writeFile(path.join(root,'client.js'),wrapped);await Promise.all([rm(temp),rm(cssPath)]);

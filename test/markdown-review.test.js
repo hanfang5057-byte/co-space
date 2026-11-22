@@ -76,7 +76,31 @@ test('Markdown comments use source offsets and rebase after accepted replacement
  }finally{comments?.close();service?.close();rmSync(dir,{recursive:true,force:true})}
 });
 
-test('legacy review database is discarded and initialized as Markdown schema',async()=>{
- const dir=mkdtempSync(path.join(tmpdir(),'md-reset-'));let s;
- try{s=new ReviewStore(path.join(dir,'db'));s.close();s=null;const {DatabaseSync}=await import('node:sqlite');const db=new DatabaseSync(path.join(dir,'db'));db.exec('DROP TABLE space_meta; DROP TABLE review_suggestions; DROP TABLE review_changes; CREATE TABLE suggestions(id INTEGER PRIMARY KEY); ALTER TABLE review_documents ADD COLUMN next_id INTEGER NOT NULL DEFAULT 1');db.close();s=new ReviewStore(path.join(dir,'db'));assert.deepEqual(s.db.prepare('SELECT id FROM review_documents').all(),[]);assert.equal(s.db.prepare("SELECT value FROM space_meta WHERE key='schema'").get().value,'markdown-text-v2');assert.equal(s.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='suggestions'").get(),undefined);}finally{s?.close();rmSync(dir,{recursive:true,force:true})}
+test('unmarked review databases are rejected without deleting user data',async()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'md-unsupported-'));let s;
+ try{
+  s=new ReviewStore(path.join(dir,'db'));
+  s.createDocument({id:'keep',content:'# Preserve me',operationId:'create-keep'});
+  s.close();s=null;
+  const {DatabaseSync}=await import('node:sqlite');
+  const db=new DatabaseSync(path.join(dir,'db'));
+  db.exec('DROP TABLE space_meta;');db.close();
+  assert.throws(()=>new ReviewStore(path.join(dir,'db')),error=>error.code==='UNSUPPORTED_SCHEMA');
+  const verify=new DatabaseSync(path.join(dir,'db'));
+  try{assert.equal(verify.prepare('SELECT content FROM review_documents WHERE id=?').get('keep')?.content,'# Preserve me');}
+  finally{verify.close();}
+ }finally{s?.close();rmSync(dir,{recursive:true,force:true})}
+});
+
+test('version one databases migrate transactionally to version two',()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'md-v1-migration-'));let store;
+ try{
+  store=new ReviewStore(path.join(dir,'db'));
+  store.createDocument({id:'kept',content:'# Kept',operationId:'create-kept'});
+  store.db.prepare("UPDATE space_meta SET value='markdown-text-v1' WHERE key='schema'").run();
+  store.close();store=null;
+  store=new ReviewStore(path.join(dir,'db'));
+  assert.equal(store.db.prepare("SELECT value FROM space_meta WHERE key='schema'").get().value,'markdown-text-v2');
+  assert.equal(store.readDocument('kept').content,'# Kept');
+ }finally{store?.close();rmSync(dir,{recursive:true,force:true})}
 });
