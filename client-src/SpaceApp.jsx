@@ -2,6 +2,7 @@ import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect
 import { errorText, translate, zh } from './locale.js';
 import { capturePreviewSelection, rangeRects, readSourceSpans, renderMarkdown, scrollSourceRange, sourceRangeToDom } from './markdown.js';
 import { rememberDocumentTitle } from './document-titles.js';
+import { useCurrentUser } from './current-user.js';
 import './space.css';
 
 const h = createElement;
@@ -17,6 +18,10 @@ function documentView(html) { return <div className="space-markdown" dangerously
 
 function TrashIcon({size=14}) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+}
+
+export function RefreshIcon({size=15}) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6M20 4v7h-7" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 
 function CommentIcon({size=15}) {
@@ -74,9 +79,10 @@ function locateMarkdownRange(surface,from,to) {
  * @param {string | null} docId - document to review, or null for no selection.
  * @param {string | null} sessionId - conversation that receives sent comments.
  * @param {(key: string, vars?: object) => string} t - bound translator.
+ * @param {{canCreate?: boolean, openSession?: (sessionId: string) => void} | null} sendTarget - optional conversation creation/navigation face.
  * @returns {object} review state and the actions that change it.
  */
-export function useSpaceReview(api, docId, sessionId, t = defaultT) {
+export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget = null) {
   const [doc,setDoc]=useState(null);
   const [comments,setComments]=useState([]);
   const [active,setActive]=useState(null);
@@ -120,10 +126,18 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT) {
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
   });
   const send=()=>perform(async()=>{
-    if(!sessionId) throw Error(t('send.noSession'));
     const ids=comments.filter(item=>item.status==='pending'||item.status==='failed').map(item=>item.id);
     if(!ids.length) throw Error(t('send.none'));
-    try { await call('sendComments',{docId,commentIds:ids,sessionId,operationId:requestId()}); } finally { await reload(docId);setActiveComment(null); }
+    // The current conversation wins. Without one, the Host resolves the most
+    // recent workspace (creating a default one when necessary), creates or
+    // reuses a Session, and returns the exact identity it used. The client only
+    // opens that identity, so creation and retry cannot disagree.
+    const targetSessionId=sessionId || undefined;
+    try {
+      const result=await call('sendComments',{docId,commentIds:ids,...targetSessionId?{sessionId:targetSessionId}:{},operationId:requestId()});
+      if(!targetSessionId && result?.createdSession && result.sessionId && typeof sendTarget?.openSession==='function') sendTarget.openSession(result.sessionId);
+      return result;
+    } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
   return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send};
@@ -141,25 +155,36 @@ function commentRange(comment) {
     : null);
 }
 
-function AnnotationIdentity({ author, createdAt, fallback, fallbackTime = '' }) {
-  const name=author || fallback;
+function AnnotationAvatar({ name, avatarUrl }) {
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>{setFailed(false)},[avatarUrl]);
   const initial=Array.from(name.trim())[0]?.toLocaleUpperCase() || '?';
+  return <span className={`space-annotation-avatar${avatarUrl && !failed?' is-image':''}`} aria-hidden="true">
+    {avatarUrl && !failed
+      ? <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)}/>
+      : initial}
+  </span>;
+}
+
+function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avatarUrl = null }) {
+  const displayName=name || fallback;
   const time=Number.isFinite(Date.parse(createdAt))
     ? new Intl.DateTimeFormat(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(createdAt))
     : '';
   return <div className="space-annotation-identity">
-    <span className="space-annotation-avatar" aria-hidden="true">{initial}</span>
-    <span className="space-annotation-byline"><strong>{name}</strong>{(time || fallbackTime) && <time dateTime={time?createdAt:undefined}>{time || fallbackTime}</time>}</span>
+    <AnnotationAvatar name={displayName} avatarUrl={avatarUrl}/>
+    <span className="space-annotation-byline"><strong>{displayName}</strong>{(time || fallbackTime) && <time dateTime={time?createdAt:undefined}>{time || fallbackTime}</time>}</span>
   </div>;
 }
 
-function CommentBalloon({ comment, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style }) {
+function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style }) {
   const locked=busy || comment.status==='sending';
   const status=comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
+  const authorName=author?.name || (author?.signedIn?t('comment.deepseekUser'):null);
   return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onClick={()=>onActivate(comment.id)}>
-    <AnnotationIdentity author={t('comment.author')} createdAt={comment.createdAt} fallback={t('comment.author')}/>
+    <AnnotationIdentity name={authorName} avatarUrl={author?.avatarUrl} createdAt={comment.createdAt} fallback={t('comment.author')}/>
     {status && <div className="space-annotation-head"><span className={`space-comment-status is-${comment.status}`}>{status}</span></div>}
     <p className="space-comment-body">{comment.body}</p>
     <button type="button" className="space-comment-delete-icon" disabled={locked} aria-label={t('comment.delete')} title={t('comment.delete')} onClick={event=>{event.stopPropagation();onAskDelete(comment.id)}}><TrashIcon/></button>
@@ -175,7 +200,7 @@ function CommentBalloon({ comment, active, busy, t, statusText, confirming, onAs
 function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style }) {
   const conflicted=item.status==='conflicted';
   return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onClick={onActivate}>
-    <div className="space-suggestion-head"><AnnotationIdentity author={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg></button><button type="button" className="is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}</div>
+    <div className="space-suggestion-head"><AnnotationIdentity name={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg></button><button type="button" className="is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}</div>
     <div className="space-suggestion-change">
       {item.expected && <p className="is-deleted"><strong>{t('suggestion.deletedLabel')}：</strong>{item.expected}</p>}
       {item.replacement && <p className="is-inserted"><strong>{t('suggestion.insertedLabel')}：</strong>{item.replacement}</p>}
@@ -186,13 +211,41 @@ function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef
 }
 
 /**
+ * The one explicit send action. It stays usable without a selected
+ * conversation: the click asks before the host creates/reuses one, so comments
+ * never disappear into a disabled button with no explanation.
+ * @param {object} props - review controller, current conversation, optional creator, and translator.
+ * @returns {React.ReactElement} the send button and its confirmation dialog.
+ */
+export function ReviewSendButton({ review, sessionId, sendTarget = null, t = defaultT, compact = false }) {
+  const titleId=useId();
+  const [confirming,setConfirming]=useState(false);
+  const sendable=review.comments.filter(item=>item.status==='pending'||item.status==='failed');
+  const canCreate=!sessionId && sendTarget?.canCreate === true;
+  const disabled=review.busy || !sendable.length || (!sessionId && !canCreate);
+  const hint=!sessionId ? (canCreate?t('send.newSessionHint'):t('send.hint')) : undefined;
+  const start=()=>{ if(canCreate) setConfirming(true); else void review.send(); };
+  return <>
+    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={start}>{t('send.all',{count:sendable.length})}</button>
+    <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} className="space-send-dialog">
+      <h2 id={titleId}>{t('send.newSessionTitle')}</h2>
+      <p>{t('send.newSessionDescription',{count:sendable.length})}</p>
+      <div className="space-comment-actions">
+        <button type="button" onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button>
+        <button type="button" className="is-primary" autoFocus onClick={()=>{setConfirming(false);void review.send();}}>{t('send.newSessionConfirm')}</button>
+      </div>
+    </SpaceDialog>
+  </>;
+}
+
+/**
  * The paper and one Word-style annotation rail. Suggestions and comments share
  * the same margin cards, ordered by source position, and the document keeps
  * a minimum width instead of switching to a narrow stacked layout.
- * @param {object} props - review controller and translator.
+ * @param {object} props - review controller, signed-in author, and translator.
  * @returns {React.ReactElement} the scrollable document body and its annotation rail.
  */
-export function SpaceReviewSurface({ review, t = defaultT }) {
+export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const [composerOpen,setComposerOpen]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(null);
   const [resizeTick,setResizeTick]=useState(0);
@@ -358,11 +411,11 @@ export function SpaceReviewSurface({ review, t = defaultT }) {
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
         <div className="space-comment-balloons is-positioned">
           {suggestionItems.map(annotation=><SuggestionBalloon key={annotation.key} item={annotation.item} index={annotation.index} active={active===annotation.item.id} busy={busy} t={t} onActivate={()=>activateSuggestion(annotation.item.id)} onDecide={decision=>decide(annotation.item.id,decision)} setRef={(id,el)=>{if(el)cardRefs.current.set(id,el);else cardRefs.current.delete(id)}} style={{top:layout.positions[annotation.key],visibility:layout.positions[annotation.key]===undefined?'hidden':undefined}}/>)}
-          {liveComments.map(comment=><CommentBalloon key={comment.id} comment={comment} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={activateFromBalloon} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}} style={{top:layout.positions[`comment:${comment.id}`],visibility:layout.positions[`comment:${comment.id}`]===undefined?'hidden':undefined}}/>)}
+          {liveComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={activateFromBalloon} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}} style={{top:layout.positions[`comment:${comment.id}`],visibility:layout.positions[`comment:${comment.id}`]===undefined?'hidden':undefined}}/>)}
         </div>
         {staleComments.length>0 && <section className="space-comment-stale" aria-label={t('comment.staleGroup')}>
           <h3>{t('comment.staleGroup')}</h3><p className="space-muted">{t('comment.staleHint')}</p>
-          {staleComments.map(comment=><CommentBalloon key={comment.id} comment={comment} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={()=>{}} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}}/>)}
+          {staleComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={()=>{}} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}}/>)}
         </section>}
       </aside>
       {layout.lines.length>0 && <svg className="space-comment-lines" aria-hidden="true">{layout.lines.map(line=><g key={line.key} className={line.active?'is-active':undefined}>
@@ -388,11 +441,12 @@ export function SpaceReviewSurface({ review, t = defaultT }) {
   </section>;
 }
 
-export function SpaceApp({ api, sessionId = null, t = defaultT }) {
+export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = null }) {
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
   const [deleteTarget,setDeleteTarget]=useState(null);
   const deleteTitleId=useId();
-  const review=useSpaceReview(api,docId,sessionId,t);
+  const user=useCurrentUser(api);
+  const review=useSpaceReview(api,docId,sessionId,t,sendTarget);
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
   const reloadDocs=useCallback(async()=>{const list=await call('listDocuments');setDocuments(list);return list;},[call]);
@@ -416,15 +470,21 @@ export function SpaceApp({ api, sessionId = null, t = defaultT }) {
     } catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
+  const refreshAll=async()=>{
+    setBusy(true);setMessage('');
+    try { await reloadDocs(); await review.reload(docId); }
+    catch (e) { setMessage(errorText(e,translateNow.current)); }
+    finally { setBusy(false); }
+  };
   const visibleComments=review.comments.filter(comment=>comment.status!=='sent');
-  const sendableComments=visibleComments.filter(comment=>comment.status==='pending'||comment.status==='failed');
   return <div className="space-app">
     {review.doc && <header className="space-top"><div className="space-header-tools">
           <div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>
-          {visibleComments.length>0 && <button type="button" className="space-send space-send-header" disabled={review.busy || !sendableComments.length || !sessionId} title={!sessionId?t('send.hint'):undefined} onClick={()=>review.send()}>{t('send.all',{count:sendableComments.length})}</button>}
+          <button type="button" className="space-refresh" disabled={!docId || busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>
+          {visibleComments.length>0 && <ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}
       </div></header>}
     <div className="space-shell"><nav className="space-nav" aria-label={t('nav.aria')}><div className="space-nav-head"><h2>{t('nav.documents')}</h2><button type="button" className="space-new-document" disabled={busy} onClick={newDocument}>{t('nav.newDocument')}</button></div>{documents.length ? <div className="space-document-list">{documents.map(item=><div className={`space-document-row${item.id===docId?' is-current':''}`} key={item.id}><button type="button" aria-current={item.id===docId?'page':undefined} className="space-doc-button" onClick={()=>setDocId(item.id)} title={item.title || item.id}>{item.title || item.id}</button><button type="button" className="space-document-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title || item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><span aria-hidden="true">×</span></button></div>)}</div> : <p className="space-nav-empty">{t('nav.empty')}</p>}</nav>
-    {!review.doc ? <main className="space-empty" aria-live="polite">{docId ? (review.message || t('empty.loading')) : t('empty.pick')}</main> : <main className="space-main"><SpaceReviewSurface review={review} sessionId={sessionId} t={t}/></main>}</div>
+    {!review.doc ? <main className="space-empty" aria-live="polite">{docId ? (review.message || t('empty.loading')) : t('empty.pick')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}</div>
     <div className="space-message" role="status" aria-live="polite">{message || (review.doc ? review.message : '')}</div>
     <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} className="space-delete-dialog">
       <h2 id={deleteTitleId}>{t('document.deleteTitle')}</h2>

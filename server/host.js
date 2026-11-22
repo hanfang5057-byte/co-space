@@ -4,7 +4,7 @@ import { SpaceService, documentWithTitle } from '../src/space-service.js';
 import path from 'node:path';
 
 /** Host-facing façade. All mutations share the document store used by MCP. */
-export function createHostApi({ home, prompt }) {
+export function createHostApi({ home, prompt, getUser, resolveTarget }) {
   const space = new SpaceService(home);
   const comments = new CommentStore(path.join(home, 'review.sqlite'));
   comments.markInterruptedUnknown();
@@ -30,23 +30,55 @@ export function createHostApi({ home, prompt }) {
       case 'listComments': return comments.list(args.docId);
       case 'createComment': return comments.create(args);
       case 'deleteComment': return comments.delete(args);
+      case 'getUser': {
+        // Account reads are optional: an installation without the account
+        // plugin simply has no signed-in identity to show on comment cards.
+        if (typeof getUser !== 'function') return null;
+        try { return await getUser(); } catch { return null; }
+      }
       case 'sendComments': {
         // Only an explicit UI action enters this method. Request IDs survive retries;
         // an uncertain outcome is never silently resent.
         if (typeof prompt !== 'function') throw Object.assign(new Error('当前对话发送能力不可用'), {code:'SESSION_UNAVAILABLE'});
         const operationId = args.operationId || randomUUID();
-        const prepared = comments.prepareSend({ ...args, operationId });
-        if (prepared.replay) return {requestId:operationId,status:prepared.status};
+        // A retry of the same operation must reuse the conversation recorded by
+        // the first attempt, not resolve a different recent conversation.
+        const prior = comments.findSend(operationId);
+        const requestedSessionId = typeof args.sessionId === 'string' && args.sessionId !== '' ? args.sessionId : prior?.sessionId;
+        let target;
+        if (requestedSessionId) {
+          target = { sessionId: requestedSessionId, created: false };
+        } else {
+          if (typeof resolveTarget !== 'function') throw Object.assign(new Error('当前对话发送能力不可用'), {code:'SESSION_UNAVAILABLE'});
+          target = await resolveTarget({ operationId });
+          if (!target?.sessionId) throw Object.assign(new Error('无法确定发送对话'), {code:'SESSION_UNAVAILABLE'});
+        }
+        const prepared = comments.prepareSend({ ...args, sessionId: target.sessionId, operationId });
+        if (prepared.replay) return {requestId:operationId,status:prepared.status,sessionId:target.sessionId,createdSession:false};
         // Lead with the protocol reference so the conversation renders the
-        // document card and the Agent can resolve the same id.
+        // document card and the Agent can resolve the same id. The document id
+        // appears once, in that reference; comment ids stay internal because no
+        // Agent tool consumes them.
         const reference = `space:${encodeURIComponent(args.docId)}`;
-        const text = `${reference}\n请结合以下 Space 文档评论提出具体修订建议；不要直接修改已有正文。\n` + prepared.comments.map((c, i) => `\n${i + 1}. 文档 ID: ${c.docId}\n评论 ID: ${c.id}\n引用${c.stale ? '（位置已失效）' : ''}: ${c.quote}\n意见: ${c.body}`).join('\n');
+        const instruction = '请先使用 space_document_read 读取该文档的最新正文和版本，再针对以下评论逐条提出具体修订建议；每条评论形成一个独立建议，不要直接修改已有正文。';
+        const commentLines = prepared.comments.map((c, i) => `\n评论 ${i + 1}\n引用${c.stale ? '（位置已失效，请按最新正文重新定位）' : ''}：${c.quote}\n意见：${c.body}`).join('\n');
+        const text = `${reference}\n${instruction}\n${commentLines}`;
         try {
-          const receipt = await prompt({ requestId: operationId, sessionId: prepared.sessionId, mode:'queue', content:[{type:'text',text}] });
+          const receipt = await prompt({ requestId: operationId, sessionId: target.sessionId, mode:'queue', content:[{type:'text',text}] });
           if (receipt?.accepted !== true) throw new Error('宿主未确认接收');
-          return comments.finishSend({operationId,status:'sent'});
+          return {
+            ...comments.finishSend({operationId,status:'sent'}),
+            sessionId:target.sessionId,
+            createdSession:target.created === true,
+            ...(target.workspace ? {workspace:target.workspace} : {}),
+          };
         } catch (error) {
-          return comments.finishSend({operationId,status:'unknown',error:error?.message || '发送结果未知'});
+          return {
+            ...comments.finishSend({operationId,status:'unknown',error:error?.message || '发送结果未知'}),
+            sessionId:target.sessionId,
+            createdSession:target.created === true,
+            ...(target.workspace ? {workspace:target.workspace} : {}),
+          };
         }
       }
       default: throw Object.assign(new Error('未知操作'),{code:'METHOD_NOT_FOUND'});

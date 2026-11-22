@@ -149,6 +149,11 @@ export class CommentStore {
       return {id:r.id,docId:r.doc_id,quote:r.quote,body:r.body,anchor:{from:r.from_pos,to:r.to_pos,version:r.doc_version},resolved,status:r.status,stale:resolved===null,requestId:r.request_id};
     });
   }
+  findSend(operationId) {
+    if(!nonempty(operationId)) return undefined;
+    const row=this.db.prepare('SELECT session_id,status FROM space_comment_sends WHERE id=?').get(operationId);
+    return row ? {sessionId:row.session_id,status:row.status} : undefined;
+  }
   prepareSend({docId,commentIds,sessionId,operationId}) {
     if(!nonempty(docId)||!nonempty(sessionId)||!nonempty(operationId)||!Array.isArray(commentIds)||!commentIds.length||commentIds.some(x=>!nonempty(x))||new Set(commentIds).size!==commentIds.length) fail('INVALID_INPUT','Choose comments and a current session');
     const fp=digest({docId,commentIds,sessionId});

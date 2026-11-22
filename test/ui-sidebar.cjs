@@ -1,0 +1,18 @@
+const {JSDOM}=require('jsdom');const dom=new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',{url:'http://localhost'});
+Object.assign(globalThis,{window:dom.window,document:dom.window.document,Node:dom.window.Node,IS_REACT_ACT_ENVIRONMENT:true});
+Object.defineProperty(globalThis,'crypto',{value:require('node:crypto').webcrypto,configurable:true});
+const React=require('react');const {act}=React;const {createRoot}=require('react-dom/client');const {SpaceSidebarDocument}=require('./sidebar.cjs');
+const calls=[];
+const comment={id:'c',docId:'d',quote:'hello',body:'quick note',anchor:{from:8,to:13,version:0},resolved:{from:8,to:13},status:'pending',stale:false};
+const api=async(method,args)=>{calls.push([method,args]);switch(method){case'getUser':return{signedIn:true,name:'Ada',avatarUrl:null};case'readDocument':return{id:'d',title:'Sidebar doc',version:0,content:'# Sidebar doc\n\nhello',suggestions:[]};case'listComments':return[comment];case'sendComments':return{status:'sent',sessionId:args.sessionId};default:throw Error(method)}};
+(async()=>{const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(SpaceSidebarDocument,{useTabInfo:()=>({tab:{contentId:'dsh-resource://space/d'}}),sessionId:'s',t:key=>key,api,sendTarget:{canCreate:true,openSession:()=>{}}})));
+await act(async()=>{await new Promise(resolve=>setTimeout(resolve,150))});
+if(!document.querySelector('.space-sidebar-toolbar'))throw Error('sidebar review toolbar missing');
+if(!document.querySelector('.space-sidebar-toolbar .space-send-compact'))throw Error('sidebar send action missing: '+document.body.textContent);
+if(!document.querySelector('.space-sidebar-toolbar .space-refresh'))throw Error('sidebar refresh control missing');
+if(!document.querySelector('.space-comment-balloon .space-annotation-byline strong')?.textContent.includes('Ada'))throw Error('sidebar comment attribution missing');
+const send=[...document.querySelectorAll('.space-sidebar-toolbar button')].find(button=>button.textContent==='send.all');if(!send)throw Error('sidebar send control has no label');
+await act(async()=>send.dispatchEvent(new window.MouseEvent('click',{bubbles:true})));
+await act(async()=>{await new Promise(resolve=>setTimeout(resolve,40))});
+if(!calls.some(call=>call[0]==='sendComments'&&call[1].sessionId==='s'))throw Error('sidebar send did not target the conversation');
+console.log('Sidebar review toolbar, account attribution, and send action rendered');await act(async()=>root.unmount());})().catch(error=>{console.error(error);process.exit(1)});

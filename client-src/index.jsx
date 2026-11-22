@@ -20,6 +20,23 @@ const SIDEBAR_PATTERN = 'dsh-resource://space/**';
 function SpaceIcon({size=16}) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M9 9v11"/></svg>; }
 
 /**
+ * Send navigation: the Host resolves or creates the conversation; the client
+ * only opens the exact Session the Host reports. Keeping creation on the Host
+ * means a retry and a first send cannot disagree about the target.
+ * @param {object} ctx - client plugin context.
+ * @returns {{canCreate: boolean, openSession: (id: string) => void}} send bridge.
+ */
+function createSendBridge(ctx) {
+  const service = name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined) ?? ctx[name];
+  return {
+    canCreate: true,
+    openSession(sessionId) {
+      try { service('uiWorkspace')?.openSession(sessionId); } catch { /* navigation is best effort */ }
+    },
+  };
+}
+
+/**
  * Open one document in the right Sidebar, with the Space panel as a fallback
  * when the conversation is not on screen and the Sidebar cannot navigate.
  * @param {object} ctx - client root context.
@@ -67,11 +84,12 @@ export async function openSpacePicker(ctx, sessionId, t) {
 
 export function apply(ctx) {
   const t=ctx.locale.bind(NS);
+  const sendBridge=createSendBridge(ctx);
   ctx.effect(()=>ctx.locale.register(NS,{zh,en}),'dsh-space: dictionaries');
   ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:'spaces',locale:NS},function SpaceMain({t:translate}){
     const current=ctx.uiSession?.adapter?.current;
     const state=useSyncExternalStore(current?.subscribe || (()=>()=>{}),current?.getSnapshot || (()=>null),()=>null);
-    return <SpaceApp api={api} sessionId={state?.key || null} t={translate}/>;
+    return <SpaceApp api={api} sessionId={state?.key || null} t={translate} sendTarget={sendBridge}/>;
   }));
   ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'spaces',order:20,label:()=> 'Space'},SpaceIcon));
 
@@ -95,6 +113,7 @@ export function apply(ctx) {
   }),'dsh-space: sidebar document type');
   ctx.slots.inject('sidebar.right.pane.tab',()=>ctx.slots.register({
     name:'sidebar.right.pane.tab', key:SIDEBAR_ID, locale:NS,
+    inject:()=>({sendTarget:sendBridge}),
   },SpaceSidebarDocument));
   ctx.slots.inject('sidebar.right.pane.tab.title',()=>ctx.slots.register({
     name:'sidebar.right.pane.tab.title', key:SIDEBAR_ID, locale:NS,
