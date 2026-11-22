@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Space",
-    "description": "Shared Markdown document spaces synced peer-to-peer with Syncthing, with one-at-a-time editing and agent collaboration.",
+    "description": "Create and review personal documents: start a new document (untitled, with an empty body) or let the agent create one with content, then review the agent's concrete suggestions and accept or reject each one. Browse documents from the Space entry in the sidebar, add them from the composer + menu as clickable document cards that open the review panel in the right sidebar, and send comments yourself. Documents stay in the local DSH data directory; sending comments adds a model request to the current conversation. Accepted titles and bodies still change only through agent suggestions.",
     "detail": "docs/DETAIL.md"
   }
 }

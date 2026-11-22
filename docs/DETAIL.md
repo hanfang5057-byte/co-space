@@ -1,13 +1,1 @@
-# DSH Space
-
-把本地文件夹变成可邀请他人、跨设备 P2P 同步的 **Markdown 文档空间**：
-
-- 文档是普通 `.md` 文件，随时可以用任何编辑器打开
-- 同步由本机 Syncthing sidecar 完成，没有中心服务器
-- **同一时刻只有一位编辑者**（及其 Agent）可写，其余人只读、实时跟读；编辑权以租约形式在设备间传递
-- 撤销/版本：每次保存都会留下内容寻址的版本，可回看、可恢复
-- Agent 与人是同等的编辑者：可以读块、按块改、提交提议（Proposal）等人接受
-
-在 DSH 侧边栏打开 **Spaces**，或让 Agent 调用 `mcp__space__*` 工具。
-
-> 早期版本支持的 CSV 表格与 Marp 幻灯片已退役；存量文件可以用 `space_cleanup_legacy` 列出并移入本机回收站（不会直接删除）。
+![Document text with highlighted suggestions beside three review cards that accept or reject them](preview.svg)
