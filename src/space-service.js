@@ -45,6 +45,36 @@ export class SpaceService {
     const doc = this.store.readDocument(id);
     return { ...doc, title: titleFor(doc.content, id) };
   }
+  /**
+   * Read the complete suggestion history, including decisions the UI already
+   * applied. `readDocument` intentionally returns pending/conflicted records
+   * only; an Agent needs the decided rows to know whether a proposal was
+   * accepted or rejected.
+   */
+  listSuggestions(id, status = 'all') {
+    const doc = this.store.readDocument(id);
+    const allowed = new Set(['all', 'pending', 'accepted', 'rejected', 'conflicted']);
+    if (!allowed.has(status)) throw Object.assign(new Error('Invalid suggestion status'), { code: 'INVALID_INPUT' });
+    const rows = this.store.db.prepare('SELECT id,status,base_version,from_pos,to_pos,expected,replacement,author,created_at,created_order FROM review_suggestions WHERE doc_id=? ORDER BY created_order').all(id);
+    return {
+      id,
+      version: doc.version,
+      suggestions: rows
+        .filter(row => status === 'all' || row.status === status)
+        .map(row => ({
+          id: row.id,
+          status: row.status,
+          baseVersion: row.base_version,
+          from: row.from_pos,
+          to: row.to_pos,
+          expected: row.expected,
+          replacement: row.replacement,
+          author: row.author,
+          createdAt: row.created_at || null,
+          order: row.created_order,
+        })),
+    };
+  }
   deleteDocument(id) {
     if (typeof id !== 'string' || !id) throw Object.assign(new Error('Document ID is required'), { code: 'INVALID_INPUT' });
     const db = this.store.db;
