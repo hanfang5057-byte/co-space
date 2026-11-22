@@ -222,6 +222,33 @@ export function ReviewSendButton({ review, sessionId, sendTarget = null, t = def
 }
 
 /**
+ * Coalesce overlapping comment rectangles so translucent anchor fills are
+ * painted once. Keep an active range as a transparent outline over that fill.
+ * @param {Array<object>} highlights - comment rectangles and zero-width carets.
+ * @returns {Array<object>} non-overlapping fills plus active outlines.
+ */
+export function mergeCommentHighlights(highlights) {
+  const carets=highlights.filter(item=>item.caret);
+  const rectangles=highlights.filter(item=>!item.caret).sort((a,b)=>a.top-b.top||a.height-b.height||a.left-b.left);
+  const merged=[];
+  for(const item of rectangles){
+    const previous=merged.at(-1);
+    if(previous&&Math.abs(previous.top-item.top)<=1&&Math.abs(previous.height-item.height)<=1&&item.left<=previous.left+previous.width){
+      const right=Math.max(previous.left+previous.width,item.left+item.width);
+      previous.width=right-previous.left;
+      previous.active=previous.active||item.active;
+      previous.keys.push(item.key);
+      if(item.active) previous.activeRects.push(item);
+    }else{
+      merged.push({...item,active:false,keys:[item.key],activeRects:item.active?[item]:[]});
+    }
+  }
+  const fills=merged.map(item=>({key:`comment-fill:${item.keys.join('|')}`,kind:'comment',active:false,left:item.left,top:item.top,width:item.width,height:item.height,caret:false}));
+  const outlines=merged.flatMap(item=>item.activeRects.map(rect=>({...rect,key:`${rect.key}:active-outline`,active:true,outline:true})));
+  return [...fills,...carets,...outlines];
+}
+
+/**
  * The paper and one Word-style annotation rail. Suggestions and comments share
  * the same margin cards, ordered by source position, and the document keeps
  * a minimum width instead of switching to a narrow stacked layout.
@@ -329,7 +356,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
         rects.forEach((rect,index)=>{if(rect.width>0&&rect.height>0)highlights.push({key:`${annotation.key}:${index}`,kind:annotation.kind,active:isActive,left:rect.left,top:rect.top,width:rect.width,height:rect.height,caret:false});});
       }
     }
-    highlights.sort((left,right)=>Number(left.active)-Number(right.active));
+    const mergedHighlights=mergeCommentHighlights(highlights);
     const ordered=[...items].sort((left,right)=>{
       const a=anchorRects.get(left.key)?.top ?? left.item.from ?? 0;
       const b=anchorRects.get(right.key)?.top ?? right.item.from ?? 0;
@@ -365,8 +392,8 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     }
     const minHeight=Math.max(paper.offsetHeight,cursor);
     setLayout(previous=>{
-      if(JSON.stringify(previous.positions)===JSON.stringify(positions) && JSON.stringify(previous.lines)===JSON.stringify(lines) && JSON.stringify(previous.highlights||[])===JSON.stringify(highlights) && previous.height===cursor && previous.minHeight===minHeight) return previous;
-      return {positions,lines,highlights,height:cursor,minHeight};
+      if(JSON.stringify(previous.positions)===JSON.stringify(positions) && JSON.stringify(previous.lines)===JSON.stringify(lines) && JSON.stringify(previous.highlights||[])===JSON.stringify(mergedHighlights) && previous.height===cursor && previous.minHeight===minHeight) return previous;
+      return {positions,lines,highlights:mergedHighlights,height:cursor,minHeight};
     });
   },[hasAnnotations,items,suggestions,liveComments,doc?.content,resizeTick,active,activeComment,confirmDelete,cardRefs,commentRefs,t]);
   useEffect(()=>{ if(!selection) setComposerOpen(false); },[selection]);
@@ -388,7 +415,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   return <section className="space-paper-wrap" aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef}>
       <div ref={surface} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
-      <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
+      <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         {!hasAnnotations && <div className="space-comment-empty"><CommentIcon size={22}/><strong>{t('annotations.emptyTitle')}</strong><p>{t('annotations.emptyHint')}</p></div>}
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
