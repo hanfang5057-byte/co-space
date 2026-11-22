@@ -141,12 +141,25 @@ function commentRange(comment) {
     : null);
 }
 
+function AnnotationIdentity({ author, createdAt, fallback, fallbackTime = '' }) {
+  const name=author || fallback;
+  const initial=Array.from(name.trim())[0]?.toLocaleUpperCase() || '?';
+  const time=Number.isFinite(Date.parse(createdAt))
+    ? new Intl.DateTimeFormat(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(createdAt))
+    : '';
+  return <div className="space-annotation-identity">
+    <span className="space-annotation-avatar" aria-hidden="true">{initial}</span>
+    <span className="space-annotation-byline"><strong>{name}</strong>{(time || fallbackTime) && <time dateTime={time?createdAt:undefined}>{time || fallbackTime}</time>}</span>
+  </div>;
+}
+
 function CommentBalloon({ comment, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style }) {
   const locked=busy || comment.status==='sending';
   const status=comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
   return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onClick={()=>onActivate(comment.id)}>
+    <AnnotationIdentity author={t('comment.author')} createdAt={comment.createdAt} fallback={t('comment.author')}/>
     {status && <div className="space-annotation-head"><span className={`space-comment-status is-${comment.status}`}>{status}</span></div>}
     <p className="space-comment-body">{comment.body}</p>
     <button type="button" className="space-comment-delete-icon" disabled={locked} aria-label={t('comment.delete')} title={t('comment.delete')} onClick={event=>{event.stopPropagation();onAskDelete(comment.id)}}><TrashIcon/></button>
@@ -159,13 +172,16 @@ function CommentBalloon({ comment, active, busy, t, statusText, confirming, onAs
 }
 
 /** Render a compact decision card linked to an inline preview difference. */
-function SuggestionBalloon({ item, index, active, busy, t, onActivate, onDecide, setRef, style }) {
+function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style }) {
   const conflicted=item.status==='conflicted';
-  const kind=item.expected ? (item.replacement ? 'replace' : 'delete') : (item.replacement ? 'insert' : 'unknown');
-  const createdAt=Number.isFinite(Date.parse(item.createdAt)) ? new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(item.createdAt)) : '';
   return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onClick={onActivate}>
-    <div className="space-suggestion-meta"><strong>{item.author || t('suggestion.defaultAuthor')}</strong><time dateTime={createdAt?item.createdAt:undefined}>{createdAt || t('suggestion.unknownTime')}</time><span className="space-suggestion-kind">{t(`suggestion.kind.${kind}`)} · {index+1}</span>{conflicted && <span className="space-suggestion-conflict">{t('suggestion.conflicted')}</span>}</div>
-    {!conflicted && <div className="space-actions"><button type="button" disabled={busy} onClick={event=>{event.stopPropagation();onDecide('accept')}}>{t('action.accept')}</button><button type="button" disabled={busy} onClick={event=>{event.stopPropagation();onDecide('reject')}}>{t('action.reject')}</button></div>}
+    <div className="space-suggestion-head"><AnnotationIdentity author={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg></button><button type="button" className="is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}</div>
+    <div className="space-suggestion-change">
+      {item.expected && <p className="is-deleted"><strong>{t('suggestion.deletedLabel')}：</strong>{item.expected}</p>}
+      {item.replacement && <p className="is-inserted"><strong>{t('suggestion.insertedLabel')}：</strong>{item.replacement}</p>}
+      {!item.expected && !item.replacement && <p className="is-unavailable">{t('suggestion.unavailable')}</p>}
+    </div>
+    {conflicted && <div className="space-suggestion-meta"><span className="space-suggestion-conflict">{t('suggestion.conflicted')}</span></div>}
   </article>;
 }
 
@@ -300,14 +316,13 @@ export function SpaceReviewSurface({ review, t = defaultT }) {
         const paperRight=paperRect.right-stageRect.left;
         const lane=Math.max(x1+24,paperRight-8);
         if(lane<x2-10){
-          // Start at the quote, dip into the leading under that line, then run
-          // through the right margin and curve into the card with soft corners.
-          const under=anchor.bottom+3, dir=y2>=under?1:-1;
-          const radius=Math.max(2,Math.min(8,Math.abs(y2-under)/2));
-          const d=`M ${x1} ${y1} C ${x1+2} ${y1}, ${x1+4} ${under}, ${x1+10} ${under} H ${lane-8} Q ${lane} ${under} ${lane} ${under+dir*radius} V ${y2-dir*radius} Q ${lane} ${y2} ${lane+radius} ${y2} H ${x2}`;
+          // Slip below the quoted line, then use one continuous curve through
+          // the gutter so the connector reads as a link rather than a route.
+          const under=anchor.bottom+4;
+          const d=`M ${x1} ${y1} C ${x1+3} ${y1}, ${x1+6} ${under}, ${x1+14} ${under} C ${lane-18} ${under}, ${lane-8} ${y2}, ${lane} ${y2} H ${x2}`;
           lines.push({key:annotation.key,kind:annotation.kind,active:annotation.key===activeKey,x1,y1,x2,y2,d});
         } else {
-          const reach=Math.max(10,(x2-x1)*0.5);
+          const reach=Math.max(12,Math.min(48,(x2-x1)*0.42));
           lines.push({key:annotation.key,kind:annotation.kind,active:annotation.key===activeKey,x1,y1,x2,y2,d:`M ${x1} ${y1} C ${x1+reach} ${y1}, ${x2-reach} ${y2}, ${x2} ${y2}`});
         }
       }
@@ -352,8 +367,8 @@ export function SpaceReviewSurface({ review, t = defaultT }) {
       </aside>
       {layout.lines.length>0 && <svg className="space-comment-lines" aria-hidden="true">{layout.lines.map(line=><g key={line.key} className={line.active?'is-active':undefined}>
         <path pathLength="1" className={`space-connector-line ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} d={line.d}/>
-        <circle className={`space-connector-dot ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x1} cy={line.y1} r="2.8"/>
-        <circle className={`space-connector-dot ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x2} cy={line.y2} r="2.8"/>
+        <circle className={`space-connector-dot is-origin ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x1} cy={line.y1} r="3"/>
+        <circle className={`space-connector-dot is-target ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x2} cy={line.y2} r="2.5"/>
       </g>)}</svg>}
     </div>
     <div className="space-comment-layer">

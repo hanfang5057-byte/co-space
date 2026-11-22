@@ -506,3 +506,55 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-anchor-rect.is-caret.is-suggestion { background: var(--space-suggestion); }
 .space-anchor-rect.is-caret.is-active { opacity: 1; box-shadow: 0 0 0 2px var(--space-comment-soft); }
 .space-anchor-rect.is-caret.is-suggestion.is-active { box-shadow: 0 0 0 2px var(--space-suggestion-soft); }
+
+/* Annotation cards: quiet by default, with the color rail revealed on focus. */
+.space-app .space-annotation-balloon {
+  border-inline-start: 3px solid transparent;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--space-card);
+  box-shadow: 0 2px 6px rgba(40, 34, 24, .06), 0 8px 20px rgba(40, 34, 24, .06);
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.space-app .space-comment-balloon:hover,
+.space-app .space-comment-balloon:focus-within { border-inline-start-color: var(--space-comment); }
+.space-app .space-suggestion-balloon:hover,
+.space-app .space-suggestion-balloon:focus-within { border-inline-start-color: var(--space-suggestion); }
+.space-app .space-annotation-balloon.is-active { border-color: var(--space-border); border-inline-start-color: var(--space-comment); box-shadow: 0 0 0 2px var(--space-comment-soft), 0 10px 24px rgba(40, 34, 24, .10); }
+.space-app .space-suggestion-balloon.is-active { border-color: var(--space-border); border-inline-start-color: var(--space-suggestion); box-shadow: 0 0 0 2px var(--space-suggestion-soft), 0 10px 24px rgba(40, 34, 24, .10); }
+.space-app .space-annotation-identity { display: flex; align-items: center; gap: 10px; min-inline-size: 0; }
+.space-app .space-annotation-avatar { display: inline-grid; place-items: center; flex: none; inline-size: 34px; block-size: 34px; border-radius: 50%; background: #a66be8; color: white; font-size: 15px; font-weight: 600; }
+.space-app .space-annotation-byline { display: flex; flex-direction: column; min-inline-size: 0; line-height: 1.3; }
+.space-app .space-annotation-byline strong { overflow: hidden; color: var(--space-text); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.space-app .space-annotation-byline time { color: var(--space-muted); font-size: 11px; }
+.space-app .space-comment-balloon { padding-block-end: 13px; }
+.space-app .space-comment-balloon.is-confirming { padding-block-end: 48px; }
+.space-app .space-comment-body { margin-block-start: 10px; padding-inline-end: 22px; font-size: 13px; line-height: 1.55; }
+.space-app .space-comment-status { margin-block-start: 8px; }
+.space-app .space-suggestion-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.space-app .space-suggestion-meta { margin-block-start: 9px; min-height: 0; }
+.space-app .space-suggestion-kind { padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--space-suggestion) 9%, var(--space-card)); color: var(--space-muted); font-size: 10px; }
+.space-app .space-suggestion-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.space-app .space-suggestion-actions button { display: inline-grid; place-items: center; inline-size: 30px; block-size: 30px; min-block-size: 30px; padding: 5px; border: 0; border-radius: 7px; background: transparent; color: var(--space-text); }
+.space-app .space-suggestion-actions button:hover { background: color-mix(in srgb, var(--space-text) 7%, transparent); }
+.space-app .space-suggestion-actions button.is-accept:hover { color: var(--space-success); }
+.space-app .space-suggestion-actions button.is-reject:hover { color: var(--space-danger); }
+.space-app .space-suggestion-actions svg { inline-size: 20px; block-size: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.space-app .space-comment-delete-icon { inset-block-start: 15px; inset-inline-end: 13px; }
+.space-app .space-suggestion-change { display: grid; gap: 5px; margin-block-start: 12px; padding-inline-end: 8px; overflow-wrap: anywhere; }
+.space-app .space-suggestion-change p { margin: 0; color: var(--space-text); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.space-app .space-suggestion-change strong { font-weight: 650; }
+.space-app .space-suggestion-change .is-inserted strong { color: var(--space-success); }
+.space-app .space-suggestion-change .is-deleted strong { color: var(--space-danger); }
+.space-app .space-suggestion-change .is-unavailable { color: var(--space-muted); }
+.space-comment-lines path { stroke-width: 1.2; stroke-opacity: .24; stroke-dasharray: none; animation: space-connector-in .24s ease-out both; transition: stroke-opacity .18s ease, stroke-width .18s ease, filter .18s ease; }
+@keyframes space-connector-in { from { opacity: 0; } to { opacity: 1; } }
+.space-comment-lines g.is-active .space-connector-line { stroke-opacity: .82; stroke-width: 1.7; filter: drop-shadow(0 1px 1px rgba(35, 30, 22, .12)); }
+.space-connector-dot { stroke: var(--space-card); stroke-width: 1.5; opacity: .62; }
+.space-connector-dot.is-origin { fill: var(--space-card); stroke-width: 1.8; }
+.space-connector-dot.is-target { stroke: none; opacity: .42; }
+.space-comment-lines g.is-active .space-connector-dot { opacity: 1; }
+@media (pointer: coarse) {
+  .space-app .space-comment-delete-icon { inline-size: 40px; block-size: 40px; min-block-size: 40px; inset-block-start: 8px; inset-inline-end: 8px; opacity: 1; pointer-events: auto; }
+  .space-app .space-suggestion-actions button { inline-size: 40px; block-size: 40px; min-block-size: 40px; }
+}
