@@ -1,10 +1,14 @@
 import MarkdownIt from 'markdown-it';
 
 const markdown = new MarkdownIt({ html: false, linkify: false, breaks: false });
+const deletedMarkdown = new MarkdownIt({ html: false, linkify: false, breaks: false });
+deletedMarkdown.renderer.rules.link_open = () => '';
+deletedMarkdown.renderer.rules.link_close = () => '';
+deletedMarkdown.renderer.rules.image = (tokens, index) => escapeHtml(tokens[index].content);
 
 const escapeHtml = value => String(value).replace(/[&<>"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[character]);
 const inlineMarkdown = value => markdown.renderInline(String(value)).replace(/\n/g, '<br>');
-const insertedText = (item, mode = 'markdown') => `<ins class="space-suggestion-insert" data-suggestion-id="${item.id}">${mode === 'code' ? escapeHtml(item.replacement) : inlineMarkdown(item.replacement)}</ins>`;
+const insertedText = (item, mode = 'markdown') => `<ins class="space-suggestion-insert" data-suggestion-id="${escapeHtml(item.id)}">${mode === 'code' ? escapeHtml(item.replacement) : inlineMarkdown(item.replacement)}</ins>`;
 
 /**
  * Match one rendered text token back onto the Markdown source.
@@ -67,24 +71,58 @@ function matchText(source, start, rendered) {
   return { runs, end: cursor };
 }
 
-function literalTextMatch(source, start, rendered) {
-  if (!rendered) return { runs: [], end: start };
-  const at = source.indexOf(rendered, start);
-  if (at < 0) return null;
-  return { runs: [{ text: rendered, from: at, to: at + rendered.length }], end: at + rendered.length };
-}
-
-/** Skip closing/open inline markup between two text tokens, then match. */
+/** Skip inline syntax only when the rendered text maps exactly to source. */
 function findTextMatch(source, start, rendered) {
   const direct = matchText(source, start, rendered);
   if (direct) return direct;
-  const limit = Math.min(source.length, start + 2048);
-  for (let position = start + 1; position < limit; position += 1) {
+  for (let position = start + 1; position < source.length; position += 1) {
     if (source[position] !== rendered[0] && source[position] !== '&' && source[position] !== '\\') continue;
     const matched = matchText(source, position, rendered);
     if (matched) return matched;
   }
-  return literalTextMatch(source, start, rendered);
+  return null;
+}
+
+function findMatchingMarkdownBracket(source, openIndex) {
+  let depth = 0;
+  let codeTicks = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === '\\') { index += 1; continue; }
+    if (source[index] === '`') {
+      let end = index;
+      while (source[end + 1] === '`') end += 1;
+      const run = end - index + 1;
+      if (!codeTicks) codeTicks = run;
+      else if (codeTicks === run) codeTicks = 0;
+      index = end;
+      continue;
+    }
+    if (codeTicks) continue;
+    if (source[index] === '[') depth += 1;
+    if (source[index] === ']' && --depth === 0) return index;
+  }
+  return -1;
+}
+
+function findMatchingMarkdownParen(source, openIndex) {
+  let depth = 0;
+  let codeTicks = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === '\\') { index += 1; continue; }
+    if (source[index] === '`') {
+      let end = index;
+      while (source[end + 1] === '`') end += 1;
+      const run = end - index + 1;
+      if (!codeTicks) codeTicks = run;
+      else if (codeTicks === run) codeTicks = 0;
+      index = end;
+      continue;
+    }
+    if (codeTicks) continue;
+    if (source[index] === '(') depth += 1;
+    if (source[index] === ')' && --depth === 0) return index;
+  }
+  return -1;
 }
 
 function lineStartOffsets(source) {
@@ -135,6 +173,7 @@ function codeBlockLines(token, source, starts) {
 function annotateInline(token, source, cursor) {
   let position = cursor;
   const children = token.children || [];
+  const links = [];
   for (const child of children) {
     switch (child.type) {
       case 'text': {
@@ -167,26 +206,37 @@ function annotateInline(token, source, cursor) {
       case 'image': {
         const open = source.indexOf('![', position);
         if (open < 0) break;
-        const close = source.indexOf(')', open + 2);
+        const labelClose = findMatchingMarkdownBracket(source, open + 1);
+        const destinationOpen = labelClose >= 0 && source[labelClose + 1] === '(' ? labelClose + 1 : -1;
+        const referenceOpen = labelClose >= 0 && source[labelClose + 1] === '[' ? labelClose + 1 : -1;
+        const referenceClose = referenceOpen >= 0 ? findMatchingMarkdownBracket(source, referenceOpen) : -1;
+        const close = destinationOpen >= 0 ? findMatchingMarkdownParen(source, destinationOpen)
+          : referenceClose >= 0 ? referenceClose : labelClose;
         if (close >= 0) position = close + 1;
         break;
       }
-      case 'link_open':
-        child.meta = { ...(child.meta || {}), spaceAutolink: child.markup === 'autolink' };
+      case 'link_open': {
+        const autolink = child.markup === 'autolink';
+        const open = source.indexOf(autolink ? '<' : '[', position);
+        child.meta = { ...(child.meta || {}), spaceAutolink: autolink, spaceLinkOpen: open };
+        links.push(child);
         break;
+      }
       case 'link_close': {
-        const autolink = children.slice(0, children.indexOf(child)).reverse().find(item => item.type === 'link_open')?.meta?.spaceAutolink;
+        const opening = links.pop();
+        const autolink = opening?.meta?.spaceAutolink;
         if (autolink) {
           if (source[position] === '>') position += 1;
           break;
         }
-        const close = source.indexOf(']', position);
+        const open = opening?.meta?.spaceLinkOpen ?? -1;
+        const close = open >= 0 ? findMatchingMarkdownBracket(source, open) : -1;
         if (close < 0) break;
         if (source[close + 1] === '(') {
-          const end = source.indexOf(')', close + 2);
+          const end = findMatchingMarkdownParen(source, close + 1);
           position = end >= 0 ? end + 1 : close + 1;
         } else if (source[close + 1] === '[') {
-          const end = source.indexOf(']', close + 2);
+          const end = findMatchingMarkdownBracket(source, close + 1);
           position = end >= 0 ? end + 1 : close + 1;
         } else {
           position = close + 1;
@@ -220,6 +270,7 @@ function annotateTokens(tokens, source) {
       } };
     }
     if (token.type === 'inline') {
+      if (token.map && Number.isInteger(starts[token.map[0]])) cursor = Math.max(cursor, starts[token.map[0]]);
       cursor = annotateInline(token, source, cursor);
     } else if (token.type === 'fence') {
       const range = fenceSource(token, source, starts);
@@ -241,24 +292,26 @@ function annotateTokens(tokens, source) {
 
 markdown.renderer.rules.text = (tokens, index, options, env) => {
   const token = tokens[index];
+  if (env.projection) {
+    return (token.meta?.spaceBeforeHtml || '')
+      + renderProjectedTextRun(token.meta?.spaceRuns || [], token.content, env)
+      + (token.meta?.spaceAfterHtml || '');
+  }
   const runs = token.meta?.spaceRuns;
-  if (!runs?.length) return escapeHtml(token.content);
-  return runs.map(run => renderTextRun(run, env.suggestions)).join('');
-};
-
-markdown.renderer.rules.inline = (tokens, index, options, env) => {
-  const token = tokens[index];
   const before = token.meta?.spaceBeforeHtml || '';
-  const rendered = markdown.renderer.renderInline(token.children, options, env);
+  const rendered = runs?.length ? runs.map(run => renderTextRun(run, env.suggestions)).join('') : escapeHtml(token.content);
   return before + rendered + (token.meta?.spaceAfterHtml || '');
 };
 
-for (const type of ['heading_open', 'paragraph_open', 'list_item_close', 'tr_close']) {
+const blockOpenTypes = ['blockquote_open', 'bullet_list_open', 'ordered_list_open', 'list_item_open', 'heading_open', 'paragraph_open', 'table_open', 'thead_open', 'tbody_open', 'tr_open', 'th_open', 'td_open'];
+const blockCloseTypes = ['blockquote_close', 'bullet_list_close', 'ordered_list_close', 'list_item_close', 'heading_close', 'paragraph_close', 'table_close', 'thead_close', 'tbody_close', 'tr_close', 'th_close', 'td_close'];
+
+for (const type of blockOpenTypes) {
   markdown.renderer.rules[type] = (tokens, index, options) =>
     markdown.renderer.renderToken(tokens, index, options) + (tokens[index].meta?.spaceAfterHtml || '');
 }
 
-for (const type of ['heading_close', 'paragraph_close']) {
+for (const type of blockCloseTypes) {
   markdown.renderer.rules[type] = (tokens, index, options) =>
     (tokens[index].meta?.spaceAfterHtml || '') + markdown.renderer.renderToken(tokens, index, options);
 }
@@ -269,6 +322,138 @@ function renderTextRun(run, suggestions) {
     mode: 'markdown',
     showDeletedWhitespace: true,
   });
+}
+
+/** Apply pending replacements to a preview copy and retain a source map. */
+function createReviewProjection(source, suggestions) {
+  const edits = suggestions
+    .filter(item => item.status === 'pending'
+      && Number.isInteger(item.from) && Number.isInteger(item.to)
+      && item.from >= 0 && item.from <= item.to && item.to <= source.length
+      && source.slice(item.from, item.to) === item.expected)
+    .toSorted((left, right) => left.from - right.from || left.to - right.to || (left.order || 0) - (right.order || 0));
+  const chunks = [];
+  const projectedEdits = [];
+  let sourceCursor = 0;
+  let projectedCursor = 0;
+  let projectedSource = '';
+  for (const item of edits) {
+    if (item.from < sourceCursor) continue;
+    if (item.from > sourceCursor) {
+      const text = source.slice(sourceCursor, item.from);
+      chunks.push({ kind: 'source', projectedFrom: projectedCursor, projectedTo: projectedCursor + text.length, sourceFrom: sourceCursor });
+      projectedSource += text;
+      projectedCursor += text.length;
+    }
+    const previewFrom = projectedCursor;
+    projectedSource += item.replacement;
+    projectedCursor += item.replacement.length;
+    projectedEdits.push({ ...item, previewFrom, previewTo: projectedCursor });
+    sourceCursor = item.to;
+  }
+  if (sourceCursor < source.length) {
+    const text = source.slice(sourceCursor);
+    chunks.push({ kind: 'source', projectedFrom: projectedCursor, projectedTo: projectedCursor + text.length, sourceFrom: sourceCursor });
+    projectedSource += text;
+  }
+  return {
+    source: projectedSource,
+    edits: projectedEdits,
+    sourceRange(from, to) {
+      const chunk = chunks.find(item => from >= item.projectedFrom && to <= item.projectedTo);
+      return chunk ? { from: chunk.sourceFrom + from - chunk.projectedFrom, to: chunk.sourceFrom + to - chunk.projectedFrom } : null;
+    },
+  };
+}
+
+function projectedDeletion(edit, mode) {
+  const content = mode === 'code' ? escapeHtml(edit.expected) : deletedMarkdown.renderInline(edit.expected);
+  return `<del class="space-src space-suggestion-delete" data-src-from="${edit.from}" data-src-to="${edit.to}" data-suggestion-id="${suggestionId(edit)}">${content}</del>`;
+}
+
+function renderProjectedTextRun(runs, fallbackText, env) {
+  if (!runs.length) return escapeHtml(fallbackText);
+  return runs.map(run => renderProjectedSourceSegments(run.text, run.from, env, 'markdown', run.to)).join('');
+}
+
+function placeProjectionFallbacks(tokens, projection) {
+  const ranges = tokenSourceRanges(tokens);
+  for (const edit of projection.edits) {
+    if (!edit.replacement || ranges.some(range => edit.previewFrom < range.to && edit.previewTo > range.from)) continue;
+    const deleted = edit.expected
+      ? `<del class="space-src space-suggestion-delete" data-src-from="${edit.from}" data-src-to="${edit.to}" data-suggestion-id="${suggestionId(edit)}">${sourceTextForDisplay(edit.expected)}</del>`
+      : '';
+    const inserted = `<ins class="space-suggestion-insert space-suggestion-source-insert" data-suggestion-id="${suggestionId(edit)}">${sourceTextForDisplay(edit.replacement)}</ins>`;
+    const markup = deleted + inserted;
+    const inlineIndex = tokens.findIndex(token => token.type === 'inline' && tokenContains(token, { from: edit.previewFrom, to: edit.previewTo }));
+    const targetIndex = inlineIndex >= 0 ? inlineIndex : tokens.findIndex(token => token.type === 'inline');
+    if (targetIndex < 0) continue;
+    const target = tokens[targetIndex];
+    const mappedChildren = (target.children || []).flatMap((child, index) => {
+      const childRanges = child.meta?.spaceRuns || (child.meta?.spaceSrc ? [child.meta.spaceSrc] : []);
+      return child.type === 'text' && childRanges.length ? [{ child, index, ranges: childRanges }] : [];
+    });
+    const next = mappedChildren.find(entry => entry.ranges.some(range => range.from >= edit.previewFrom));
+    const previous = mappedChildren.filter(entry => entry.ranges.some(range => range.to <= edit.previewFrom)).at(-1);
+    const anchor = next?.child || previous?.child;
+    if (anchor) {
+      const edge = next ? 'spaceBeforeHtml' : 'spaceAfterHtml';
+      anchor.meta = { ...(anchor.meta || {}), [edge]: `${anchor.meta?.[edge] || ''}${markup}` };
+      continue;
+    }
+    const block = tokens[targetIndex + 1]?.type?.endsWith('_close') ? tokens[targetIndex + 1]
+      : tokens[targetIndex - 1]?.type?.endsWith('_open') ? tokens[targetIndex - 1] : null;
+    if (block) block.meta = { ...(block.meta || {}), spaceAfterHtml: `${block.meta?.spaceAfterHtml || ''}${markup}` };
+  }
+}
+
+/** Render one parsed text run against the post-acceptance preview source. */
+function renderProjectedSourceSegments(text, from, env, mode = 'code', sourceEnd = from + text.length) {
+  const projection = env.projection;
+  const sourceAt = offset => from + Math.round(offset / (text.length || 1) * (sourceEnd - from));
+  const textAt = offset => Math.round((offset - from) / ((sourceEnd - from) || 1) * text.length);
+  const relevant = projection.edits.filter(edit => edit.previewFrom === edit.previewTo
+    ? edit.previewFrom >= from && edit.previewFrom <= sourceEnd
+    : edit.previewFrom < sourceEnd && edit.previewTo > from);
+  const points = new Set([0, text.length]);
+  for (const edit of relevant) {
+    points.add(clamp(textAt(Math.max(from, Math.min(sourceEnd, edit.previewFrom))), 0, text.length));
+    points.add(clamp(textAt(Math.max(from, Math.min(sourceEnd, edit.previewTo))), 0, text.length));
+  }
+  const cuts = [...points].sort((left, right) => left - right);
+  let html = '';
+  for (let index = 0; index < cuts.length - 1; index += 1) {
+    const start = cuts[index], end = cuts[index + 1];
+    const previewFrom = sourceAt(start), previewTo = sourceAt(end);
+    for (const edit of relevant) {
+      if (!env.deletedEdits.has(edit.id) && edit.expected && edit.previewFrom < previewTo && edit.previewTo > previewFrom) {
+        html += projectedDeletion(edit, mode);
+        env.deletedEdits.add(edit.id);
+      }
+      if (edit.previewFrom === edit.previewTo && edit.expected && edit.previewFrom === previewFrom && !env.deletedEdits.has(edit.id)) {
+        html += projectedDeletion(edit, mode);
+        env.deletedEdits.add(edit.id);
+      }
+    }
+    const raw = text.slice(start, end);
+    const edit = relevant.find(item => item.previewFrom < item.previewTo && item.previewFrom < previewTo && item.previewTo > previewFrom);
+    if (edit) {
+      html += `<ins class="space-suggestion-insert" data-suggestion-id="${suggestionId(edit)}">${escapeHtml(raw)}</ins>`;
+      env.insertedEdits.add(edit.id);
+    } else {
+      const mapped = projection.sourceRange(previewFrom, previewTo);
+      html += mapped
+        ? `<span class="space-src" data-src-from="${mapped.from}" data-src-to="${mapped.to}">${escapeHtml(raw)}</span>`
+        : escapeHtml(raw);
+    }
+  }
+  for (const edit of relevant) {
+    if (edit.previewFrom === edit.previewTo && edit.expected && edit.previewFrom === sourceEnd && !env.deletedEdits.has(edit.id)) {
+      html += projectedDeletion(edit, mode);
+      env.deletedEdits.add(edit.id);
+    }
+  }
+  return html;
 }
 
 /** Render source-backed text with the same interval logic in prose and code. */
@@ -294,7 +479,7 @@ function renderSourceSegments(text, from, suggestions, { sourceEnd = from + text
     const raw = text.slice(start, end);
     const content = suggestion && showDeletedWhitespace && !raw.trim() ? sourceTextForDisplay(raw) : escapeHtml(raw);
     html += suggestion
-      ? `<del class="space-src space-suggestion-delete" data-src-from="${sourceFrom}" data-src-to="${sourceTo}" data-suggestion-id="${suggestion.id}">${content}</del>`
+      ? `<del class="space-src space-suggestion-delete" data-src-from="${sourceFrom}" data-src-to="${sourceTo}" data-suggestion-id="${suggestionId(suggestion)}">${content}</del>`
       : `<span class="space-src" data-src-from="${sourceFrom}" data-src-to="${sourceTo}">${content}</span>`;
     for (const item of relevant.filter(entry => entry.from < entry.to && entry.replacement && entry.to > sourceFrom && entry.to <= sourceTo)) html += insertedText(item, mode);
   }
@@ -305,6 +490,7 @@ function renderSourceSegments(text, from, suggestions, { sourceEnd = from + text
 markdown.renderer.rules.code_inline = (tokens, index, options, env) => {
   const token = tokens[index];
   const range = token.meta?.spaceSrc;
+  if (env.projection && range) return `<code class="space-inline-code">${renderProjectedSourceSegments(token.content, range.from, env, 'code', range.to)}</code>`;
   if (!range || !hasSuggestionInRange(range.from,range.to,env.suggestions)) {
     const data=range?` data-src-from="${range.from}" data-src-to="${range.to}"`:'';
     return `<code class="space-src space-inline-code"${data}>${escapeHtml(token.content)}</code>`;
@@ -318,6 +504,12 @@ markdown.renderer.rules.fence = (tokens, index, options, env) => {
   const language = info.split(/\s+/g)[0];
   const range = token.meta?.spaceSrc;
   const languageClass = language ? ` class="language-${escapeHtml(language)} space-src"` : ' class="space-src"';
+  if (env.projection && range) {
+    return `<pre class="space-code-block"><code${languageClass}>${renderProjectedSourceSegments(token.content, range.from, env, 'code', range.to)}</code></pre>\n`;
+  }
+  if (env.projection && range) {
+    return `<pre class="space-code-block"><code${languageClass}>${renderProjectedSourceSegments(token.content, range.from, env, 'code')}</code></pre>\n`;
+  }
   if (!range || !hasSuggestionInRange(range.from,range.to,env.suggestions)) {
     const data=range?` data-src-from="${range.from}" data-src-to="${range.to}"`:'';
     return `<pre class="space-code-block"><code${languageClass}${data}>${escapeHtml(token.content)}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
@@ -328,6 +520,10 @@ markdown.renderer.rules.fence = (tokens, index, options, env) => {
 markdown.renderer.rules.code_block = (tokens, index, options, env) => {
   const token = tokens[index];
   const lines = token.meta?.spaceLines;
+  if (env.projection && lines?.length) {
+    const body = lines.map(line => renderProjectedSourceSegments(line.text, line.from, env, 'code', line.to)).join('');
+    return `<pre class="space-code-block"><code class="space-src">${body}</code></pre>\n`;
+  }
   if (lines?.length) {
     if (!lines.some(line=>hasSuggestionInRange(line.from,line.to,env.suggestions))) {
       const body=lines.map(line=>`<span class="space-src" data-src-from="${line.from}" data-src-to="${line.to}">${escapeHtml(line.text)}</span>`).join('');
@@ -347,8 +543,10 @@ function hasSuggestionInRange(from,to,suggestions) {
   return suggestions.some(item=>item.from===item.to?item.from>=from&&item.from<=to:item.from<to&&item.to>from);
 }
 
-markdown.renderer.rules.table_open = () => '<div class="space-table-wrap"><table>\n';
-markdown.renderer.rules.table_close = () => '</table></div>\n';
+markdown.renderer.rules.table_open = (tokens, index) =>
+  `<div class="space-table-wrap"><table>\n${tokens[index].meta?.spaceAfterHtml || ''}`;
+markdown.renderer.rules.table_close = (tokens, index) =>
+  (tokens[index].meta?.spaceAfterHtml || '') + '</table></div>\n';
 
 /**
  * Render Markdown and annotate text/code nodes with their source ranges.
@@ -357,12 +555,25 @@ markdown.renderer.rules.table_close = () => '</table></div>\n';
  * @returns {string} escaped HTML with `data-src-from` / `data-src-to` markers.
  */
 export function renderMarkdown(source, suggestions = []) {
-  const tokens = markdown.parse(source, {});
-  annotateTokens(tokens, source);
   const active = suggestions.filter(item => item.status === 'pending' || item.status === 'conflicted');
-  placeUnmappedSuggestions(tokens, source, active);
-  const html = markdown.renderer.render(tokens, markdown.options, { suggestions: active });
-  return html;
+  if (active.some(item => item.status === 'conflicted')) {
+    const tokens = markdown.parse(source, {});
+    annotateTokens(tokens, source);
+    placeUnmappedSuggestions(tokens, source, active);
+    return markdown.renderer.render(tokens, markdown.options, { suggestions: active });
+  }
+  const projection = createReviewProjection(source, active);
+  if (projection.edits.length !== active.length) {
+    const tokens = markdown.parse(source, {});
+    annotateTokens(tokens, source);
+    placeUnmappedSuggestions(tokens, source, active);
+    return markdown.renderer.render(tokens, markdown.options, { suggestions: active });
+  }
+  const tokens = markdown.parse(projection.source, {});
+  annotateTokens(tokens, projection.source);
+  placeProjectionFallbacks(tokens, projection);
+  const env = { projection, deletedEdits: new Set(), insertedEdits: new Set() };
+  return markdown.renderer.render(tokens, markdown.options, env);
 }
 
 const suggestionId = item => escapeHtml(item.id);
@@ -493,7 +704,7 @@ function fallbackMarkup(item, source, hasVisibleDeletion) {
     const point = `data-src-from="${item.from}" data-src-to="${item.to}" data-suggestion-id="${id}"`;
     return `<ins class="space-suggestion-insert" ${point}>${inlineMarkdown(item.replacement)}</ins>`;
   }
-  const inserted = `<ins class="space-suggestion-insert" data-suggestion-id="${id}">${sourceTextForDisplay(item.replacement)}</ins>`;
+  const inserted = `<ins class="space-suggestion-insert" data-suggestion-id="${id}">${inlineMarkdown(item.replacement)}</ins>`;
   if (hasVisibleDeletion) return inserted;
   return `<span class="space-suggestion-source-diff" data-suggestion-id="${id}"><del class="space-src space-suggestion-delete" data-src-from="${item.from}" data-src-to="${item.to}" data-suggestion-id="${id}">${sourceTextForDisplay(source.slice(item.from, item.to))}</del>${inserted}</span>`;
 }
@@ -516,31 +727,38 @@ function placeUnmappedSuggestions(tokens, source, suggestions) {
     let targetIndex = blockClose ?? (codeIndex >= 0 ? codeIndex : nearestInline);
     if (targetIndex < 0) continue;
     let target = tokens[targetIndex];
-    const inlineRanges = target.type === 'inline'
-      ? (target.children || []).flatMap(child => child.meta?.spaceRuns || (child.meta?.spaceSrc ? [child.meta.spaceSrc] : []))
-      : [];
-    const before = inlineRanges.length && item.from <= Math.min(...inlineRanges.map(range => range.from));
-    // Markdown-it renders inline tokens through renderInline directly, so a
-    // custom `inline` renderer rule cannot emit fallback insertions. Attach
-    // those insertions to the surrounding block token instead.
     if (target.type === 'inline') {
-      const openIndex = targetIndex - 1;
-      const closeIndex = targetIndex + 1;
-      if (before && ['heading_open', 'paragraph_open'].includes(tokens[openIndex]?.type)) {
-        targetIndex = openIndex;
-        target = tokens[targetIndex];
-      } else if (!before && ['heading_close', 'paragraph_close'].includes(tokens[closeIndex]?.type)) {
-        targetIndex = closeIndex;
-        target = tokens[targetIndex];
+      const children = target.children || [];
+      const mappedChildren = children.flatMap((child, index) => {
+        const childRanges = child.meta?.spaceRuns || (child.meta?.spaceSrc ? [child.meta.spaceSrc] : []);
+        return child.type === 'text' && childRanges.length ? [{ child, index, ranges: childRanges }] : [];
+      });
+      let anchor;
+      let edge;
+      if (hasVisibleDeletion) {
+        const overlap = mappedChildren.filter(entry => entry.ranges.some(range => item.from < range.to && item.to > range.from)).at(-1);
+        if (overlap) { anchor = overlap.child; edge = 'spaceAfterHtml'; }
+      } else if (mappedChildren.length) {
+        const previous = mappedChildren.filter(entry => entry.ranges.some(range => range.to <= item.from)).at(-1);
+        if (previous) { anchor = previous.child; edge = 'spaceAfterHtml'; }
+        else { anchor = mappedChildren[0].child; edge = 'spaceBeforeHtml'; }
+      }
+      if (anchor) {
+        anchor.meta = { ...(anchor.meta || {}), [edge]: `${anchor.meta?.[edge] || ''}${markup}` };
+        continue;
+      }
+      const blockIndex = hasVisibleDeletion ? targetIndex + 1 : targetIndex - 1;
+      const block = tokens[blockIndex];
+      if (block && block.type.endsWith(hasVisibleDeletion ? '_close' : '_open')) {
+        targetIndex = blockIndex;
+        target = block;
       }
     }
     const code = ['fence', 'code_block'].includes(target.type);
     const codeMarkup = code
       ? `<span class="space-suggestion-insert" data-suggestion-id="${suggestionId(item)}">${sourceTextForDisplay(item.replacement)}</span>`
       : markup;
-    const property = code ? 'spaceAfterCodeHtml'
-      : target.type === 'inline' ? before ? 'spaceBeforeHtml' : 'spaceAfterHtml'
-        : 'spaceAfterHtml';
+    const property = code ? 'spaceAfterCodeHtml' : 'spaceAfterHtml';
     target.meta = { ...(target.meta || {}), [property]: `${target.meta?.[property] || ''}${codeMarkup}` };
   }
 }

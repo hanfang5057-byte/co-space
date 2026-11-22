@@ -6,6 +6,7 @@ import path from 'node:path';
 import {ReviewStore} from '../src/review-core.js';
 import {SpaceService,documentFromMarkdown} from '../src/space-service.js';
 import {CommentStore} from '../src/comments.js';
+import {renderMarkdown} from '../client-src/markdown.js';
 const err=code=>e=>e.code===code;
 
 test('Markdown source is persisted; independent suggestions map and apply in any order',()=>{
@@ -44,6 +45,26 @@ test('overlap, stale content, surrogate split, idempotency and restart are guard
  s.close();s=new ReviewStore(path.join(dir,'db'));assert.equal(s.readDocument('d').suggestions[0].id,p.id);
  const result=s.decide({docId:'d',suggestionId:p.id,decision:'accept',operationId:'yes'});assert.deepEqual(s.decide({docId:'d',suggestionId:p.id,decision:'accept',operationId:'yes'}),result);assert.equal(s.readDocument('d').content,'A😀 C');
  }finally{s?.close();rmSync(dir,{recursive:true,force:true})}
+});
+
+test('accepted Markdown replacement renders the same inline style as its pending preview',()=>{
+ const store=new ReviewStore(':memory:');
+ try {
+  const content='# 行内样式\n\n普通、**粗体**、删除线。';
+  store.createDocument({id:'d',content,operationId:'create-style'});
+  const expected='**粗体**',from=content.indexOf(expected);
+  const suggestion=store.propose({docId:'d',baseVersion:0,from,to:from+expected.length,expected,replacement:'**加粗文本**',operationId:'replace-style'});
+  const before=store.readDocument('d');
+  const preview=renderMarkdown(before.content,before.suggestions);
+  assert.match(preview,/<strong><del[^>]*><strong>粗体<\/strong><\/del><ins[^>]*>加粗文本<\/ins><\/strong>/);
+  assert.ok(preview.indexOf('加粗文本')<preview.indexOf('、删除线。'));
+
+  const accepted=store.decide({docId:'d',suggestionId:suggestion.id,decision:'accept',operationId:'accept-style'});
+  assert.equal(accepted.content,'# 行内样式\n\n普通、**加粗文本**、删除线。');
+  const finalHtml=renderMarkdown(accepted.content);
+  assert.match(finalHtml,/<strong><span[^>]*>加粗文本<\/span><\/strong>/);
+  assert.doesNotMatch(finalHtml,/<(?:del|ins)\b/);
+ } finally {store.close()}
 });
 
 test('Markdown comments use source offsets and rebase after accepted replacements',()=>{
