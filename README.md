@@ -10,7 +10,8 @@ DSH Space 让用户在个人文档中审阅 Agent 提出的具体修改：用户
 
 ## 安装与启用
 
-- 在 DSH 的 **插件** > **添加插件** 选择本目录，或把本目录安装为本地 `link:` bundle。
+- 在 DSH 的 **插件** > **添加插件** 选择本目录，或安装 npm 包 `dsh-plugin-space`（发布后也可在配置了本仓库 `market/index.json` 的插件市场 Discover 中安装）。
+- 可以把本目录安装为本地 `link:` bundle，便于修改后立即验证。
 - 插件声明 `engines.dsh = ^0.2.2-rc.5`；升级 DSH 大版本后需要重新核对兼容性。
 - 仓库内的 `client.js` 是已构建产物；修改 `client-src/` 后运行 `npm run build:client`，不要手工编辑 `client.js`。
 - React 由宿主提供：构建保持 `react`、`react-dom`、`react/jsx-runtime` 外置，`npm run build:client` 会在发现 React 被打包进 `client.js` 时直接失败；插件不声明自己的 React 依赖。
@@ -74,3 +75,7 @@ npm run check
 ```
 
 测试包含真实 MCP stdio、SQLite 存储、建议决策、评论发送模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。可用 `sh scripts/test-ui.sh` 运行模拟 DOM 的界面测试，该脚本在临时目录安装测试依赖。
+
+## 许可证
+
+MIT，见 [LICENSE](LICENSE)。

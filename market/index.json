@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Hanfang's DSH plugins",
+    "zh": "Hanfang 的 DSH 插件"
+  },
+  "description": {
+    "en": "Client plugins for the DeepSeek Harness Web GUI.",
+    "zh": "DeepSeek Harness Web 界面的客户端插件。"
+  },
+  "metadata": {
+    "categories": {
+      "documents": {
+        "title": {
+          "en": "Documents",
+          "zh": "文档"
+        }
+      }
+    },
+    "labels": {
+      "review": {
+        "title": {
+          "en": "Review",
+          "zh": "审阅"
+        }
+      },
+      "comments": {
+        "title": {
+          "en": "Comments",
+          "zh": "评论"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-plugin-space",
+      "title": {
+        "en": "Space",
+        "zh": "Space"
+      },
+      "description": {
+        "en": "Create, review, and comment on personal documents in DSH: accept or reject each agent suggestion, then send comments to the conversation.",
+        "zh": "在 DSH 中创建、审阅和评论个人文档：逐条接受或拒绝 Agent 建议，并把评论发送到当前对话。"
+      },
+      "icon": "icons/space.svg",
+      "author": "hanfang",
+      "homepage": "https://gitee.com/hanfang5057/dsh-space",
+      "repository": {
+        "url": "https://gitee.com/hanfang5057/dsh-space"
+      },
+      "metadata": {
+        "category": "documents",
+        "labels": [
+          "review",
+          "comments"
+        ],
+        "keywords": [
+          "documents",
+          "review",
+          "suggestions",
+          "comments",
+          "markdown"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1795361248,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": "^0.2.2-rc.5"
+          }
+        }
+      ]
+    }
+  ]
+}
