@@ -30,7 +30,7 @@ const INSTRUCTIONS = [
 export function createMcpServer(service) {
   const server = new McpServer({ name: 'space', version: '0.1.0' }, { instructions: INSTRUCTIONS });
   server.registerTool('space_list', { description: 'List personal document spaces.', inputSchema: {} }, wrap(() => ({ spaces: service.listSpaces() })));
-  server.registerTool('space_documents', { description: 'List personal Space documents with id, title, current version, and pending suggestion count.', inputSchema: {} }, wrap(() => ({ documents: service.listDocuments() })));
+  server.registerTool('space_documents', { description: 'List personal Space documents with id, title, current version, pending suggestion count, creation and update times; documents are ordered by most recently updated.', inputSchema: {} }, wrap(() => ({ documents: service.listDocuments() })));
   server.registerTool('space_document_create', {
     description: 'Create a new document with complete initial content interpreted as CommonMark Markdown. Omit id to derive a stable id from operationId. This cannot overwrite an existing document. Returns the id and its space:<id> reference.',
     inputSchema: { id: id.optional().describe('Optional document id; omit to derive one from operationId.'), text: z.string(), operationId: opId },

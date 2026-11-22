@@ -9,6 +9,12 @@ const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
 const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown'};
 const safeUrl = value => typeof value === 'string' && /^(https?:|mailto:)/i.test(value) ? value : null;
+const documentCardTime = (item,t) => {
+  const timestamp=item.updatedAt || item.createdAt;
+  if(!timestamp || !Number.isFinite(Date.parse(timestamp))) return t('home.timeUnknown');
+  const time=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(timestamp));
+  return t(item.updatedAt?'home.updated':'home.created',{time});
+};
 
 /** Fallback translator keeps the panel renderable outside a locale seat, as in the DOM smoke test. */
 const defaultT = (key, vars) => translate(zh, key, vars);
@@ -43,29 +49,6 @@ function SpaceDialog({ open, onClose, labelledBy, className = '', children }) {
     }
   },[open]);
   return <dialog ref={dialogRef} className={`space-dialog ${className}`} aria-labelledby={labelledBy} onClose={onClose}>{children}</dialog>;
-}
-
-function captureMarkdownSelection(textarea,version) {
-  if(!textarea || textarea.selectionStart===textarea.selectionEnd) return null;
-  const from=textarea.selectionStart,to=textarea.selectionEnd,quote=textarea.value.slice(from,to);
-  if(!quote.trim()) return null;
-  const wrap=textarea.closest('.space-paper-wrap');if(!wrap)return null;
-  const rect=textarea.getBoundingClientRect(),parent=wrap.getBoundingClientRect();
-  const anchor={x:rect.left-parent.left+wrap.scrollLeft+24,left:rect.left-parent.left+wrap.scrollLeft,right:rect.left-parent.left+wrap.scrollLeft+48,top:rect.top-parent.top+wrap.scrollTop,bottom:rect.top-parent.top+wrap.scrollTop+24,width:48,height:24,wrapWidth:wrap.clientWidth};
-  return {from,to,version,quote,anchor,rects:[]};
-}
-
-function locateMarkdownRange(surface,from,to) {
-  const source=surface?.querySelector('.space-markdown-source');
-  const textarea=source?.querySelector('textarea');
-  if(!source||!textarea||!Number.isInteger(from)||!Number.isInteger(to)) return false;
-  source.open=true;
-  requestAnimationFrame(()=>{
-    textarea.focus({preventScroll:true});
-    textarea.setSelectionRange(from,to);
-    textarea.scrollIntoView({block:'center',behavior:'auto'});
-  });
-  return true;
 }
 
 /**
@@ -116,7 +99,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
   // Suggestion ids follow submission order; review cards follow document order.
   const suggestions=useMemo(()=>[...(doc?.suggestions || [])].sort((left,right)=>(left.from ?? 0)-(right.from ?? 0)),[doc]);
   const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
-  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!(scrollSourceRange(surface.current,item.from,item.to)||locateMarkdownRange(surface.current,item.from,item.to)))setMessage(t('suggestion.unavailable'));};
+  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollSourceRange(surface.current,item.from,item.to))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
   const decide=(suggestionId,decision)=>perform(async()=>{await call('decide',{docId,suggestionId,decision,operationId:requestId()});await reload(docId)});
@@ -281,7 +264,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   },[]);
 
   // Direct selection on the rendered paper is the primary comment entry point.
-  // The Markdown source view stays available, but comments never require it.
+  // Comments are anchored to rendered Markdown text; source editing is not exposed.
   useEffect(()=>{
     const element=surface.current;
     if(!element||!doc) return;
@@ -395,7 +378,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const saveComment=async()=>{const created=await addComment();if(created){setComposerOpen(false);setMessage('');setSelection(null)}};
   const askDelete=id=>setConfirmDelete(id);
   const doDelete=async id=>{await deleteComment(id);setConfirmDelete(null)};
-  const scrollToAnchor=id=>{const comment=liveComments.find(item=>item.id===id);if(comment){const range=commentRange(comment);if(!scrollSourceRange(surface.current,range.from,range.to))locateMarkdownRange(surface.current,range.from,range.to);}};
+  const scrollToAnchor=id=>{const comment=liveComments.find(item=>item.id===id);if(comment){const range=commentRange(comment);scrollSourceRange(surface.current,range.from,range.to);}};
   const activateFromAnchor=id=>{setActive(null);setActiveComment(id);commentRefs.current.get(id)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})};
   const activateFromBalloon=id=>{setActive(null);setActiveComment(id);scrollToAnchor(id)};
   const activateSuggestion=id=>{setActiveComment(null);setActive(id);chooseCard(id)};
@@ -404,7 +387,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className="space-paper-wrap" aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef}>
-      <div ref={surface} className="space-paper" tabIndex={-1}>{documentView(markdownHtml)}<details className="space-markdown-source"><summary>{t('markdown.sourceTitle')}</summary><textarea aria-label={t('markdown.sourceLabel')} readOnly value={doc.content} onSelect={event=>setSelection(captureMarkdownSelection(event.currentTarget,doc.version))}/></details></div>
+      <div ref={surface} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         {!hasAnnotations && <div className="space-comment-empty"><CommentIcon size={22}/><strong>{t('annotations.emptyTitle')}</strong><p>{t('annotations.emptyHint')}</p></div>}
@@ -464,9 +447,9 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     setBusy(true);setMessage('');
     try {
       await call('deleteDocument',{docId:deleteTarget.id});
-      const remaining=await reloadDocs();
+      await reloadDocs();
       setDeleteTarget(null);
-      if(docId===deleteTarget.id) setDocId(remaining[0]?.id || null);
+      if(docId===deleteTarget.id) setDocId(null);
     } catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
@@ -477,15 +460,29 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     finally { setBusy(false); }
   };
   const visibleComments=review.comments.filter(comment=>comment.status!=='sent');
+  const selectedDocument=documents.find(item=>item.id===docId);
+  const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
+  const home=!docId;
   return <div className="space-app">
-    {review.doc && <header className="space-top"><div className="space-header-tools">
-          <div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>
-          <button type="button" className="space-refresh" disabled={!docId || busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>
-          {visibleComments.length>0 && <ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}
-      </div></header>}
-    <div className="space-shell"><nav className="space-nav" aria-label={t('nav.aria')}><div className="space-nav-head"><h2>{t('nav.documents')}</h2><button type="button" className="space-new-document" disabled={busy} onClick={newDocument}>{t('nav.newDocument')}</button></div>{documents.length ? <div className="space-document-list">{documents.map(item=><div className={`space-document-row${item.id===docId?' is-current':''}`} key={item.id}><button type="button" aria-current={item.id===docId?'page':undefined} className="space-doc-button" onClick={()=>setDocId(item.id)} title={item.title || item.id}>{item.title || item.id}</button><button type="button" className="space-document-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title || item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><span aria-hidden="true">×</span></button></div>)}</div> : <p className="space-nav-empty">{t('nav.empty')}</p>}</nav>
-    {!review.doc ? <main className="space-empty" aria-live="polite">{docId ? (review.message || t('empty.loading')) : t('empty.pick')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}</div>
-    <div className="space-message" role="status" aria-live="polite">{message || (review.doc ? review.message : '')}</div>
+    {home ? <main className="space-home" aria-labelledby="space-home-title">
+      <header className="space-home-header"><div className="space-brand"><span className="space-brand-mark" aria-hidden="true">S</span><span>SPACE</span></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></header>
+      <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
+      <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
+        {documents.length ? <div className="space-home-grid">{documents.map((item,index)=><article className="space-home-card" key={item.id}>
+          <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>setDocId(item.id)}>
+            <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">SPACE</span></span>
+            <span className="space-home-card-copy"><strong title={item.title||item.id}>{item.title||item.id}</strong><span className="space-home-card-meta">{documentCardTime(item,t)}</span></span>
+            <span className="space-home-card-footer">{item.pending>0?<span className="space-home-pending"><i aria-hidden="true"/>{t('annotations.suggestions',{count:item.pending})}</span>:<span className="space-home-clear">{t('home.noPending')}</span>}<span className="space-home-open-icon" aria-hidden="true">↗</span></span>
+          </button><button type="button" className="space-home-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title||item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><TrashIcon size={15}/></button>
+        </article>)}</div> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></div>}
+      </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
+    </main> : <>
+      <header className="space-top space-preview-top"><button type="button" className="space-back" aria-label={t('home.back')} title={t('home.back')} onClick={()=>setDocId(null)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12"/></svg></button><div className="space-preview-heading"><span>{t('home.eyebrow')}</span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
+        <div className="space-header-tools">{review.doc&&<div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>}<button type="button" className="space-refresh" disabled={!docId||busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>{review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
+      </header>
+      {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
+    </>}
+    {!home&&<div className="space-message" role="status" aria-live="polite">{message || (review.doc ? review.message : '')}</div>}
     <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} className="space-delete-dialog">
       <h2 id={deleteTitleId}>{t('document.deleteTitle')}</h2>
       <p>{t('document.deleteDescription',{title:deleteTarget?.title || deleteTarget?.id || ''})}</p>

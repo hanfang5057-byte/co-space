@@ -32,9 +32,9 @@ export class SpaceService {
   close() { this.store.close(); }
   listSpaces() { return [{ id: SPACE_ID, name: 'Space' }]; }
   listDocuments() {
-    return this.store.db.prepare('SELECT id FROM review_documents ORDER BY rowid').all().map(({ id }) => {
+    return this.store.db.prepare("SELECT id FROM review_documents ORDER BY COALESCE(NULLIF(updated_at,''), NULLIF(created_at,'')) DESC, rowid DESC").all().map(({ id }) => {
       const doc = this.store.readDocument(id);
-      return { id, title: titleFor(doc.content, id), version: doc.version, pending: doc.suggestions.length };
+      return { id, title: titleFor(doc.content, id), version: doc.version, pending: doc.suggestions.length, createdAt: doc.createdAt, updatedAt: doc.updatedAt };
     });
   }
   createDocument({ id, content, operationId }) {
