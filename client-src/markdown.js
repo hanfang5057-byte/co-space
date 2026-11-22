@@ -299,7 +299,7 @@ markdown.renderer.rules.text = (tokens, index, options, env) => {
   }
   const runs = token.meta?.spaceRuns;
   const before = token.meta?.spaceBeforeHtml || '';
-  const rendered = runs?.length ? runs.map(run => renderTextRun(run, env.suggestions)).join('') : escapeHtml(token.content);
+  const rendered = runs?.length ? runs.map(run => renderTextRun(run, env.suggestions, env.sourceOffset || 0)).join('') : escapeHtml(token.content);
   return before + rendered + (token.meta?.spaceAfterHtml || '');
 };
 
@@ -316,11 +316,12 @@ for (const type of blockCloseTypes) {
     (tokens[index].meta?.spaceAfterHtml || '') + markdown.renderer.renderToken(tokens, index, options);
 }
 
-function renderTextRun(run, suggestions) {
+function renderTextRun(run, suggestions, sourceOffset = 0) {
   return renderSourceSegments(run.text, run.from, suggestions, {
     sourceEnd: run.to,
     mode: 'markdown',
     showDeletedWhitespace: true,
+    sourceOffset,
   });
 }
 
@@ -407,6 +408,38 @@ function placeProjectionFallbacks(tokens, projection) {
   }
 }
 
+function renderDeletedMarkdownBlock(edit) {
+  const tokens = markdown.parse(edit.expected, {});
+  annotateTokens(tokens, edit.expected);
+  const deletion = { ...edit, from: 0, to: edit.expected.length, replacement: '' };
+  return markdown.renderer.render(tokens, markdown.options, {
+    suggestions: [deletion],
+    sourceOffset: edit.from,
+  });
+}
+
+function isBlockMarkdown(source) {
+  const tokens = markdown.parse(source, {});
+  return tokens.some(token => token.level === 0 && token.nesting === 1
+    && ['heading_open', 'blockquote_open', 'bullet_list_open', 'ordered_list_open', 'table_open'].includes(token.type))
+    || tokens.some(token => token.level === 0 && ['fence', 'code_block', 'hr'].includes(token.type));
+}
+
+function attachDeletedBlocks(tokens, edits) {
+  for (const edit of edits) {
+    if (!edit.expected || edit.replacement || !isBlockMarkdown(edit.expected)) continue;
+    const nextBlock = tokens.findIndex(token => token.level === 0 && token.nesting === 1
+      && Number.isInteger(token.meta?.spaceBlockRange?.from)
+      && token.meta.spaceBlockRange.from >= edit.previewFrom);
+    const insertionIndex = nextBlock >= 0 ? nextBlock : tokens.length;
+    tokens.splice(insertionIndex, 0, {
+      type: 'html_block', tag: '', attrs: null, map: null, nesting: 0,
+      level: 0, children: null, content: `${renderDeletedMarkdownBlock(edit)}\n`,
+      markup: '', info: '', meta: null, block: true, hidden: false,
+    });
+  }
+}
+
 /** Render one parsed text run against the post-acceptance preview source. */
 function renderProjectedSourceSegments(text, from, env, mode = 'code', sourceEnd = from + text.length) {
   const projection = env.projection;
@@ -457,7 +490,7 @@ function renderProjectedSourceSegments(text, from, env, mode = 'code', sourceEnd
 }
 
 /** Render source-backed text with the same interval logic in prose and code. */
-function renderSourceSegments(text, from, suggestions, { sourceEnd = from + text.length, mode = 'code', showDeletedWhitespace = false } = {}) {
+function renderSourceSegments(text, from, suggestions, { sourceEnd = from + text.length, mode = 'code', showDeletedWhitespace = false, sourceOffset = 0 } = {}) {
   const sourceLength = sourceEnd - from;
   const sourceAt = offset => from + Math.round(offset / (text.length || 1) * sourceLength);
   const textAt = offset => sourceLength === text.length ? offset - from : Math.round((offset - from) / (sourceLength || 1) * text.length);
@@ -479,8 +512,8 @@ function renderSourceSegments(text, from, suggestions, { sourceEnd = from + text
     const raw = text.slice(start, end);
     const content = suggestion && showDeletedWhitespace && !raw.trim() ? sourceTextForDisplay(raw) : escapeHtml(raw);
     html += suggestion
-      ? `<del class="space-src space-suggestion-delete" data-src-from="${sourceFrom}" data-src-to="${sourceTo}" data-suggestion-id="${suggestionId(suggestion)}">${content}</del>`
-      : `<span class="space-src" data-src-from="${sourceFrom}" data-src-to="${sourceTo}">${content}</span>`;
+      ? `<del class="space-src space-suggestion-delete" data-src-from="${sourceOffset + sourceFrom}" data-src-to="${sourceOffset + sourceTo}" data-suggestion-id="${suggestionId(suggestion)}">${content}</del>`
+      : `<span class="space-src" data-src-from="${sourceOffset + sourceFrom}" data-src-to="${sourceOffset + sourceTo}">${content}</span>`;
     for (const item of relevant.filter(entry => entry.from < entry.to && entry.replacement && entry.to > sourceFrom && entry.to <= sourceTo)) html += insertedText(item, mode);
   }
   for (const item of relevant.filter(entry => entry.from === entry.to && textAt(entry.from) === text.length)) html += insertedText(item, mode);
@@ -495,7 +528,7 @@ markdown.renderer.rules.code_inline = (tokens, index, options, env) => {
     const data=range?` data-src-from="${range.from}" data-src-to="${range.to}"`:'';
     return `<code class="space-src space-inline-code"${data}>${escapeHtml(token.content)}</code>`;
   }
-  return `<code class="space-inline-code">${renderSourceText(token.content,range.from,env.suggestions)}</code>`;
+  return `<code class="space-inline-code">${renderSourceText(token.content,range.from,env.suggestions,'code',env.sourceOffset||0)}</code>`;
 };
 
 markdown.renderer.rules.fence = (tokens, index, options, env) => {
@@ -514,7 +547,7 @@ markdown.renderer.rules.fence = (tokens, index, options, env) => {
     const data=range?` data-src-from="${range.from}" data-src-to="${range.to}"`:'';
     return `<pre class="space-code-block"><code${languageClass}${data}>${escapeHtml(token.content)}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
   }
-  return `<pre class="space-code-block"><code${languageClass}>${renderSourceText(token.content,range.from,env.suggestions)}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
+  return `<pre class="space-code-block"><code${languageClass}>${renderSourceText(token.content,range.from,env.suggestions,'code',env.sourceOffset||0)}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
 };
 
 markdown.renderer.rules.code_block = (tokens, index, options, env) => {
@@ -529,14 +562,14 @@ markdown.renderer.rules.code_block = (tokens, index, options, env) => {
       const body=lines.map(line=>`<span class="space-src" data-src-from="${line.from}" data-src-to="${line.to}">${escapeHtml(line.text)}</span>`).join('');
       return `<pre class="space-code-block"><code class="space-src">${body}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
     }
-    const body = lines.map(line => renderSourceText(line.text,line.from,env.suggestions)).join('');
+    const body = lines.map(line => renderSourceText(line.text,line.from,env.suggestions,'code',env.sourceOffset||0)).join('');
     return `<pre class="space-code-block"><code class="space-src">${body}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
   }
   return `<pre class="space-code-block"><code class="space-src">${escapeHtml(token.content)}${token.meta?.spaceAfterCodeHtml || ''}</code></pre>\n`;
 };
 
-function renderSourceText(text, from, suggestions, mode = 'code') {
-  return renderSourceSegments(text, from, suggestions, { mode });
+function renderSourceText(text, from, suggestions, mode = 'code', sourceOffset = 0) {
+  return renderSourceSegments(text, from, suggestions, { mode, sourceOffset });
 }
 
 function hasSuggestionInRange(from,to,suggestions) {
@@ -573,6 +606,11 @@ export function renderMarkdown(source, suggestions = []) {
   annotateTokens(tokens, projection.source);
   placeProjectionFallbacks(tokens, projection);
   const env = { projection, deletedEdits: new Set(), insertedEdits: new Set() };
+  const html = markdown.renderer.render(tokens, markdown.options, env);
+  const missingBlockDeletes = projection.edits.filter(item => item.expected && !item.replacement
+    && !env.deletedEdits.has(item.id) && isBlockMarkdown(item.expected));
+  if (!missingBlockDeletes.length) return html;
+  attachDeletedBlocks(tokens, missingBlockDeletes);
   return markdown.renderer.render(tokens, markdown.options, env);
 }
 

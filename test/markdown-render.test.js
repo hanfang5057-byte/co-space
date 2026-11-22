@@ -10,6 +10,7 @@ function withoutReviewAnnotations(html) {
     .replace(/<\/ins>/g, '')
     .replace(/<span class="space-src"[^>]*>/g, '')
     .replace(/<\/span>/g, '')
+    .replace(/<(h[1-6]|p|li)>\s*<\/\1>\s*/g, '')
     .replace(/ data-src-(?:from|to)="\d+"/g, '')
     .replace(/ data-suggestion-id="[^"]*"/g, '');
 }
@@ -57,6 +58,24 @@ test('suggestions whose ranges include Markdown structure attach to block tokens
   }]);
   assert.match(tableHtml, /<td><del[^>]*>\| x \| y \|\n<\/del><ins[^>]*>p<\/ins><\/td>/);
   assert.match(tableHtml, /<td><ins[^>]*>q<\/ins><\/td>/);
+});
+
+test('pure block deletions remain visible as struck-through Markdown blocks', () => {
+  const source = '# Intro\n\n## Why heading\n\n## Next\n';
+  const expected = '## Why heading\n\n';
+  const from = source.indexOf(expected);
+  const html = renderMarkdown(source, [{
+    id: 'delete-heading', status: 'pending', from, to: from + expected.length,
+    expected, replacement: '',
+  }]);
+
+  assert.match(html, /<h2><del class="space-src space-suggestion-delete" data-src-from="\d+" data-src-to="\d+" data-suggestion-id="delete-heading">Why heading<\/del><\/h2>/);
+  assert.ok(html.indexOf('Why heading') < html.indexOf('<h2><span class="space-src"'));
+  const deletedText = html.match(/<del[^>]*data-src-from="(\d+)" data-src-to="(\d+)"[^>]*>Why heading<\/del>/);
+  assert.ok(deletedText);
+  assert.equal(source.slice(Number(deletedText[1]), Number(deletedText[2])), 'Why heading');
+  const accepted = source.slice(0, from) + source.slice(from + expected.length);
+  assert.equal(withoutReviewAnnotations(html), withoutReviewAnnotations(renderMarkdown(accepted)));
 });
 
 test('suggestion previews preserve inline Markdown context when ranges include delimiters', () => {
