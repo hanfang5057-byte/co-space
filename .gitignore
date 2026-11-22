@@ -3,3 +3,4 @@ node_modules/
 *.log
 .DS_Store
 coverage/
+client-src/editors/crepe-theme.generated.js

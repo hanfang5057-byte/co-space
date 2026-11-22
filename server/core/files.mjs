@@ -6,8 +6,6 @@ import {
   readText, resolveInside, sha256, titleFromPath, walk,
 } from './util.mjs'
 import { renderDocument, titleOf, outlineMarkdown } from './markdown.mjs'
-import { parseSlides, renderSlides, slideOutline } from './slides.mjs'
-import { readTable } from './tables.mjs'
 import { readSpaceMeta, resolveSpace, findConflicts } from './spaces.mjs'
 
 const BASE_DIR = '.space/base'
@@ -64,18 +62,14 @@ export async function readFile(client, config, { space, path: rel, maxChars = 20
   const { folder, root } = await resolveSpace(client, space, config)
   const { rel: normalized, full } = await resolveInside(root, rel)
   const meta = await metaFor(root, normalized)
-  if (meta.kind === 'image' || meta.kind === 'file' || meta.kind === 'workbook') {
+  if (meta.kind === 'image' || meta.kind === 'file') {
     throw httpError('UNSUPPORTED_FORMAT', `cannot read ${meta.kind} as text: ${normalized}`)
   }
   const text = await readText(full, config.limits?.maxTextBytes || 2_097_152)
-  if (meta.kind === 'table') {
-    const table = readTable(text, { limit: 200 })
-    return { ...meta, text: text.slice(0, maxChars), table, truncated: text.length > maxChars }
-  }
-  if (meta.kind === 'slides') {
-    const slides = parseSlides(text)
-    const rendered = renderSlides(text)
-    return { ...meta, text: text.slice(0, maxChars), slides: slides.slides, title: slides.title, html: rendered.html, css: rendered.css, truncated: text.length > maxChars }
+  if (meta.kind === 'legacy') {
+    // Retired formats (CSV / Marp / ODS) stay readable as plain text until they
+    // are moved to the trash by space_cleanup_legacy.
+    return { ...meta, text: text.slice(0, maxChars), title: titleFromPath(normalized), truncated: text.length > maxChars }
   }
   return {
     ...meta,
@@ -93,11 +87,6 @@ export async function outlineFile(client, config, { space, path: rel }) {
   const buffer = await fs.readFile(full)
   const kind = fileKind(normalized, buffer.subarray(0, 800).toString('utf8'))
   if (kind === 'document') return { path: normalized, kind, outline: outlineMarkdown(buffer.toString('utf8')) }
-  if (kind === 'slides') return { path: normalized, kind, slides: slideOutline(buffer.toString('utf8')) }
-  if (kind === 'table') {
-    const table = readTable(buffer.toString('utf8'), { limit: 1 })
-    return { path: normalized, kind, columns: table.columns, total: table.total }
-  }
   return { path: normalized, kind, outline: [] }
 }
 

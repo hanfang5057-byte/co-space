@@ -76,15 +76,14 @@ export async function resolveSpace(client, spaceRef, config) {
 
 async function folderStats(root) {
   const entries = await walk(root, '', { readHead: true, maxDepth: 8 })
-  const counts = { pages: 0, sheets: 0, slides: 0, assets: 0, files: 0 }
+  const counts = { documents: 0, legacy: 0, assets: 0, files: 0 }
   let bytes = 0
   for (const entry of entries) {
     if (entry.type !== 'file') continue
     if (entry.name.startsWith('.') || entry.path === 'README.md') continue
     bytes += entry.size || 0
-    if (entry.kind === 'document') counts.pages++
-    else if (entry.kind === 'table') counts.sheets++
-    else if (entry.kind === 'slides') counts.slides++
+    if (entry.kind === 'document') counts.documents++
+    else if (entry.kind === 'legacy') counts.legacy++
     else if (entry.kind === 'image') counts.assets++
     else counts.files++
   }
@@ -109,7 +108,7 @@ export async function listSpaces(client, config, { filter = 'all' } = {}) {
     const meta = await readSpaceMeta(folder.path) || { id: folder.id, name: folder.label || folder.id, description: '', createdBy: null }
     if (filter === 'owned' && meta.createdBy !== local) continue
     if (filter === 'shared' && meta.createdBy === local) continue
-    const stats = await folderStats(folder.path).catch(() => ({ counts: { pages: 0, sheets: 0, slides: 0, assets: 0, files: 0 }, bytes: 0, totalFiles: 0 }))
+    const stats = await folderStats(folder.path).catch(() => ({ counts: { documents: 0, legacy: 0, assets: 0, files: 0 }, bytes: 0, totalFiles: 0 }))
     const sync = await syncSummary(client, folder.id)
     out.push({
       id: folder.id,
@@ -206,10 +205,10 @@ function buildTree(flat) {
     const parentRel = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : ''
     const children = ensureDir(parentRel)
     let title = entry.name
-    if (entry.kind === 'document' || entry.kind === 'slides') title = titleFromPath(entry.path)
+    if (entry.kind === 'document' || entry.kind === 'legacy') title = titleFromPath(entry.path)
     children.push({ ...entry, title, children: [] })
   }
-  const order = { 'README.md': 0, pages: 1, sheets: 2, assets: 3, files: 4 }
+  const order = { 'README.md': 0, pages: 1, assets: 2, files: 3 }
   const sort = list => {
     list.sort((a, b) => (order[a.name] ?? 9) - (order[b.name] ?? 9) || a.name.localeCompare(b.name))
     for (const node of list) if (node.children?.length) sort(node.children)
@@ -231,7 +230,7 @@ async function findConflicts(root, rel = '') {
   try { entries = await fs.readdir(dir, { withFileTypes: true }) } catch { return [] }
   const conflicts = []
   for (const entry of entries) {
-    if (entry.name === '.space' || entry.name === '.stfolder' || entry.name === '.stversions') continue
+    if (entry.name === '.space' || entry.name === '.live' || entry.name === '.stfolder' || entry.name === '.stversions') continue
     const nextRel = rel ? `${rel}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
       conflicts.push(...await findConflicts(root, nextRel))
@@ -255,7 +254,7 @@ export async function spaceContext(client, config, { space, maxChars = 8000 }) {
     try { home = (await fs.readFile(path.join(root, homePath), 'utf8')).slice(0, Math.max(1000, Math.min(6000, maxChars / 2))) } catch {}
   }
   const recent = flat
-    .filter(entry => entry.kind === 'document' || entry.kind === 'slides' || entry.kind === 'table')
+    .filter(entry => entry.kind === 'document' || entry.kind === 'legacy')
     .sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0))
     .slice(0, 10)
     .map(entry => ({ path: entry.path, kind: entry.kind, title: entry.title, mtimeMs: entry.mtimeMs }))

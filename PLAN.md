@@ -1,5 +1,8 @@
 # DSH Space 方案（定稿）
 
+> **⚠️ v2 已变更范围（2026-11-21）**：本文档中的**表格（CSV）与幻灯片（Marp）部分已废止**，文档空间改为只做 Markdown。新方案见 [research/agent-editor/PLAN-v2.md](research/agent-editor/PLAN-v2.md)；M1 收缩已落地。
+>
+
 > 基于 Syncthing 的、Agent 友好的 P2P 共享空间 DSH 插件
 >
 > **协同模型：方案 A —— 文件级异步协同**

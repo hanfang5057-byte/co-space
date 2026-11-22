@@ -2,7 +2,6 @@ import { McpServer } from '@modelcontextprotocol/server'
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
 import path from 'node:path'
-import { promises as fs } from 'node:fs'
 import { resolveHome, loadConfig, ensureHome } from './config.mjs'
 import { ensureDaemon, stopDaemon, daemonStatus } from './daemon.mjs'
 import {
@@ -14,10 +13,12 @@ import {
   listFiles, readFile, writeFile, editFile, moveFile, deleteFile, importFile, outlineFile,
   conflicts, resolveConflict, conflictDetail,
 } from './core/files.mjs'
+import { createDocumentFile, appendDocumentFile } from './core/content.mjs'
+import { scanLegacy, cleanupLegacy } from './core/legacy.mjs'
 import {
-  createDocumentFile, appendDocumentFile, createSheetFile, readSheetFile, updateSheetFile, editSheetCellsFile,
-  createSlidesFile, readSlidesFile, updateSlidesFile,
-} from './core/content.mjs'
+  docBlocks, docPatch, docPropose, docProposals, docResolveProposal, docRestore, docVersions,
+} from './core/docs.mjs'
+import { readPresence } from './core/live.mjs'
 
 const home = resolveHome()
 const logger = { info: (...args) => console.error('[dsh-space]', ...args), warn: (...args) => console.error('[dsh-space]', ...args) }
@@ -68,11 +69,15 @@ const server = new McpServer({
   version: '0.1.0',
   instructions: [
     'Spaces are local folders synchronized by Syncthing between trusted devices.',
-    'Native content is open text: documents are Markdown .md, tables are CSV .csv, presentations are Marp Markdown .md with "marp: true".',
+    'Native content is open text Markdown .md documents. Tables and slide decks are retired: files in those formats are readable as plain text but must not be created.',
     'Call space_context first when entering a space; it returns the home page, page tree, recent files, and conflicts.',
     'Prefer file_edit for small changes; pass expectedSha256 when overwriting.',
     'After writes, use space_wait_sync to confirm peers received them.',
     'If file_conflicts reports entries, resolve them before further edits.',
+    'Prefer file_edit over file_write: a whole-file write discards other writers edits.',
+    'For documents, call doc_blocks first, then doc_patch with block anchors; large or destructive changes should be doc_propose so a human can accept them.',
+    'doc_patch returns LOCKED when someone holds the edit right; do not retry in a loop, switch to doc_propose.',
+    'Check doc_presence before editing a block that someone else is working on.',
     'Never store secrets in a space; any approved member can read every file.',
   ].join('\n'),
 })
@@ -89,7 +94,7 @@ server.registerTool('space_list', {
 }))
 
 server.registerTool('space_create', {
-  description: 'Create a new space (Syncthing folder) with the standard page/sheet/assets layout.',
+  description: 'Create a new space (Syncthing folder) with the standard pages/assets layout.',
   inputSchema: z.object({ name: z.string().min(1).max(80), description: z.string().optional() }),
 }, wrap(async ({ name, description }) => {
   const { client, config } = await context()
@@ -107,7 +112,7 @@ server.registerTool('space_get', {
 }))
 
 server.registerTool('space_tree', {
-  description: 'Return the page/sheet/asset tree of a space.',
+  description: 'Return the page/asset tree of a space.',
   inputSchema: z.object({ space: spaceRef, parent: z.string().optional(), depth: z.number().int().min(1).max(12).optional() }),
 }, wrap(async ({ space, parent = '', depth = 8 }) => {
   const { client, config } = await context()
@@ -336,86 +341,88 @@ server.registerTool('doc_append', {
   return appendDocumentFile(client, config, { space, path: rel, markdown, expectedSha256 })
 }))
 
-server.registerTool('sheet_create', {
-  description: 'Create a CSV table. Path defaults to sheets/<title>.csv.',
+server.registerTool('space_cleanup_legacy', {
+  description: 'List or clean retired content (CSV, Marp decks, Markdown with YAML front matter). Files move to the local trash folder; nothing is deleted outright.',
   inputSchema: z.object({
-    space: spaceRef, path: z.string().optional(), title: z.string().optional(), template: z.enum(['blank', 'tracker', 'budget']).optional(),
-    columns: z.array(z.object({ key: z.string(), title: z.string().optional(), type: z.string().optional() })).optional(),
-    rows: z.array(z.any()).optional(), hasHeader: z.boolean().optional(),
+    space: spaceRef,
+    dryRun: z.boolean().optional(),
+    deleteMarkdown: z.boolean().optional(),
   }),
-}, wrap(async ({ space, path: rel, title, template = 'blank', columns, rows, hasHeader = true }) => {
+}, wrap(async ({ space, dryRun = true, deleteMarkdown = false }) => {
   const { client, config } = await context()
-  return createSheetFile(client, config, { space, path: rel, title, template, columns, rows, hasHeader })
+  if (dryRun) return scanLegacy(client, config, { space })
+  return cleanupLegacy(client, config, { space, deleteMarkdown })
 }))
 
-server.registerTool('sheet_read', {
-  description: 'Read a CSV table as JSON with columns and paginated rows.',
-  inputSchema: z.object({
-    space: spaceRef, path: relPath, offset: z.number().int().min(0).optional(),
-    limit: z.number().int().min(1).max(2000).optional(), header: z.boolean().optional(),
-  }),
-}, wrap(async ({ space, path: rel, offset = 0, limit = 200, header = true }) => {
+server.registerTool('doc_blocks', {
+  description: 'List document blocks with stable anchors (blockId, heading, section, line range, sha). Call this before doc_patch.',
+  inputSchema: z.object({ space: spaceRef, path: relPath, heading: z.string().optional(), limit: z.number().int().min(1).max(500).optional() }),
+}, wrap(async ({ space, path: rel, heading, limit = 200 }) => {
   const { client, config } = await context()
-  return readSheetFile(client, config, { space, path: rel, offset, limit, header })
+  return docBlocks(client, config, { space, path: rel, heading, limit })
 }))
 
-server.registerTool('sheet_update', {
-  description: 'Append rows to a CSV table or replace all rows.',
+server.registerTool('doc_patch', {
+  description: 'Apply block-level ops to a document. Ops: replace_block/delete_block/insert_after/insert_before/replace_text/append_section. Returns LOCKED when someone else holds the edit right, VERSION_CONFLICT when the file changed.',
   inputSchema: z.object({
-    space: spaceRef, path: relPath, rows: z.array(z.any()),
-    mode: z.enum(['append', 'replace']).optional(), expectedSha256: z.string().optional(),
+    space: spaceRef, path: relPath, expectedSha256: z.string().optional(),
+    ops: z.array(z.any()).min(1),
   }),
-}, wrap(async ({ space, path: rel, rows, mode = 'append', expectedSha256 }) => {
+}, wrap(async ({ space, path: rel, expectedSha256, ops }) => {
   const { client, config } = await context()
-  return updateSheetFile(client, config, { space, path: rel, rows, mode, expectedSha256 })
+  return docPatch(client, config, { space, path: rel, expectedSha256, ops, writer: 'agent' })
 }))
 
-server.registerTool('sheet_edit_cells', {
-  description: 'Edit specific CSV cells by row and column without rewriting unrelated rows.',
+server.registerTool('doc_propose', {
+  description: 'Propose a document edit without writing it. A human accepts or rejects it from the editor. Use for large or destructive changes.',
   inputSchema: z.object({
-    space: spaceRef, path: relPath,
-    expectedSha256: z.string().optional(),
-    edits: z.array(z.object({
-      row: z.number().int().min(0),
-      column: z.union([z.number().int().min(0), z.string().min(1)]),
-      value: z.string(),
-    })).min(1),
+    space: spaceRef, path: relPath, expectedSha256: z.string().optional(),
+    ops: z.array(z.any()).min(1), rationale: z.string().optional(),
   }),
-}, wrap(async ({ space, path: rel, expectedSha256, edits }) => {
+}, wrap(async ({ space, path: rel, expectedSha256, ops, rationale }) => {
   const { client, config } = await context()
-  return editSheetCellsFile(client, config, { space, path: rel, edits, expectedSha256 })
+  return docPropose(client, config, { space, path: rel, expectedSha256, ops, rationale })
 }))
 
-server.registerTool('slides_create', {
-  description: 'Create a Marp Markdown deck. Path defaults to pages/<slug>.slides.md.',
-  inputSchema: z.object({
-    space: spaceRef, path: z.string().optional(), parent: z.string().optional(),
-    title: z.string().optional(), template: z.enum(['blank', 'review', 'pitch']).optional(),
-    slides: z.array(z.any()).optional(), markdown: z.string().optional(),
-  }),
-}, wrap(async ({ space, path: rel, parent, title, template = 'blank', slides, markdown }) => {
+server.registerTool('doc_proposals', {
+  description: 'List pending or resolved edit proposals for a document.',
+  inputSchema: z.object({ space: spaceRef, path: relPath, status: z.enum(['pending', 'accepted', 'rejected', 'all']).optional() }),
+}, wrap(async ({ space, path: rel, status = 'pending' }) => {
   const { client, config } = await context()
-  return createSlidesFile(client, config, { space, path: rel, parent, title, template, slides, markdown })
+  return docProposals(client, config, { space, path: rel, status })
 }))
 
-server.registerTool('slides_read', {
-  description: 'Read a Marp deck: slide titles, Markdown, notes, and rendered HTML/CSS.',
-  inputSchema: z.object({ space: spaceRef, path: relPath }),
+server.registerTool('doc_resolve_proposal', {
+  description: 'Accept or reject a pending edit proposal.',
+  inputSchema: z.object({ space: spaceRef, path: relPath, id: z.string().min(1), accept: z.boolean() }),
+}, wrap(async ({ space, path: rel, id, accept }) => {
+  const { client, config } = await context()
+  return docResolveProposal(client, config, { space, path: rel, id, accept })
+}))
+
+server.registerTool('doc_versions', {
+  description: 'List content-addressed versions of a document, with the writers that saw each one.',
+  inputSchema: z.object({ space: spaceRef, path: relPath, limit: z.number().int().min(1).max(200).optional() }),
+}, wrap(async ({ space, path: rel, limit = 30 }) => {
+  const { client, config } = await context()
+  return docVersions(client, config, { space, path: rel, limit })
+}))
+
+server.registerTool('doc_restore', {
+  description: 'Restore a document to a previous version sha.',
+  inputSchema: z.object({ space: spaceRef, path: relPath, sha: z.string().min(8) }),
+}, wrap(async ({ space, path: rel, sha }) => {
+  const { client, config } = await context()
+  return docRestore(client, config, { space, path: rel, sha })
+}))
+
+server.registerTool('doc_presence', {
+  description: 'Report who is editing which document and block right now (humans, devices, agents).',
+  inputSchema: z.object({ space: spaceRef, path: relPath.optional() }),
 }, wrap(async ({ space, path: rel }) => {
   const { client, config } = await context()
-  return readSlidesFile(client, config, { space, path: rel })
-}))
-
-server.registerTool('slides_update', {
-  description: 'Replace or append one slide in a Marp deck.',
-  inputSchema: z.object({
-    space: spaceRef, path: relPath, markdown: z.string(),
-    index: z.number().int().min(0).optional(), mode: z.enum(['replace', 'append']).optional(),
-    expectedSha256: z.string().optional(),
-  }),
-}, wrap(async ({ space, path: rel, markdown, index = 0, mode = 'replace', expectedSha256 }) => {
-  const { client, config } = await context()
-  return updateSlidesFile(client, config, { space, path: rel, markdown, index, mode, expectedSha256 })
+  const presence = await readPresence(client, config, { space })
+  return { presence: rel ? presence.filter(row => row.doc === rel) : presence }
 }))
 
 await server.connect(new StdioServerTransport())

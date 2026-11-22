@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Space",
-    "description": "Shared spaces of open-text pages, tables, and Marp slides, synced peer-to-peer with Syncthing.",
+    "description": "Shared Markdown document spaces synced peer-to-peer with Syncthing, with one-at-a-time editing and agent collaboration.",
     "detail": "docs/DETAIL.md"
   }
 }

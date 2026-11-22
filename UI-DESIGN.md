@@ -1,5 +1,8 @@
 # DSH Space UI 设计
 
+> **⚠️ v2 已变更范围（2026-11-21）**：本文档中的**表格（CSV）与幻灯片（Marp）部分已废止**，文档空间改为只做 Markdown。新方案见 [research/agent-editor/PLAN-v2.md](research/agent-editor/PLAN-v2.md)；M1 收缩已落地。
+>
+
 > 配套方案：[PLAN.md](PLAN.md) · 版本：v1.0 · 目标：让“空间/页面/同步/邀请”在没有命令行的情况下可完整验证。
 
 ---

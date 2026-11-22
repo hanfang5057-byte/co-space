@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
-export const IGNORED = new Set(['.space', '.stfolder', '.stversions', '.git', 'node_modules'])
+export const IGNORED = new Set(['.space', '.live', '.stfolder', '.stversions', '.git', 'node_modules'])
 
 export function nowIso() {
   return new Date().toISOString()
@@ -117,24 +117,26 @@ export async function readText(file, limit = 2_097_152) {
   return fs.readFile(file, 'utf8')
 }
 
+/** Content kinds. `legacy` covers CSV / Marp / other retired formats (readable, not editable). */
 export function fileKind(rel, content = '') {
   const lower = rel.toLowerCase()
-  if (lower.endsWith('.slides.md')) return 'slides'
+  if (lower.endsWith('.slides.md')) return 'legacy'
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
-    return /^---[\s\S]*?\bmarp\s*:\s*true\b/.test(content.slice(0, 800)) ? 'slides' : 'document'
+    return /^---[\s\S]*?\bmarp\s*:\s*true\b/.test(content.slice(0, 800)) ? 'legacy' : 'document'
   }
-  if (lower.endsWith('.csv') || lower.endsWith('.tsv')) return 'table'
-  if (lower.endsWith('.ods')) return 'workbook'
+  if (lower.endsWith('.csv') || lower.endsWith('.tsv') || lower.endsWith('.ods')) return 'legacy'
   if (/\.(png|jpe?g|gif|webp|svg|avif)$/.test(lower)) return 'image'
   return 'file'
 }
 
 export function isTextKind(kind) {
-  return kind === 'document' || kind === 'slides' || kind === 'table'
+  return kind === 'document' || kind === 'legacy'
 }
 
 export function titleFromPath(rel) {
-  const base = path.posix.basename(rel).replace(/\.(slides\.)?md$/i, '').replace(/\.(csv|tsv)$/i, '')
+  const base = path.posix.basename(rel)
+    .replace(/\.(slides\.)?md$/i, '')
+    .replace(/\.(csv|tsv|ods)$/i, '')
   return base.replace(/[-_]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
 }
 

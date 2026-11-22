@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-space",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Syncthing-backed shared spaces with open-text documents, tables, and slides",
@@ -35,28 +35,21 @@
     "dsh": "^0.2.2-rc.5"
   },
   "scripts": {
-    "build:client": "node scripts/generate-rdg-styles.mjs && node scripts/build-client.mjs"
+    "build:client": "node scripts/generate-crepe-styles.mjs && node scripts/build-client.mjs",
+    "test:smoke": "node scripts/smoke.mjs",
+    "check": "node scripts/contract-check.mjs && node scripts/smoke.mjs"
   },
   "dependencies": {
-    "@marp-team/marp-core": "^4.4.0",
+    "@milkdown/crepe": "^7.23.0",
+    "@milkdown/kit": "^7.23.0",
     "@modelcontextprotocol/server": "^2.4.0",
-    "csv-parse": "^7.0.3",
-    "csv-stringify": "^6.9.0",
-    "gray-matter": "^4.0.3",
     "markdown-it": "^15.0.3",
     "node-diff3": "^4.0.0",
     "sanitize-html": "^2.18.2",
     "zod": "^4.2.0"
   },
   "devDependencies": {
-    "@codemirror/commands": "^6.11.1",
-    "@codemirror/lang-markdown": "^6.5.2",
-    "@codemirror/language": "^6.13.1",
-    "@codemirror/search": "^6.7.2",
-    "@codemirror/state": "^6.7.6",
-    "@codemirror/view": "^6.43.15",
     "esbuild": "^0.25.0",
-    "react-aria-components": "^1.22.1",
-    "react-data-grid": "7.0.0-beta.47"
+    "react-aria-components": "^1.22.1"
   }
 }

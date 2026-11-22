@@ -1,7 +1,5 @@
-import matter from 'gray-matter'
 import MarkdownIt from 'markdown-it'
 import sanitizeHtml from 'sanitize-html'
-import { nowIso } from './util.mjs'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: false })
 md.enable('table')
@@ -33,28 +31,17 @@ export const DOC_TEMPLATES = {
   'decision-log': `## 决策\n\n\n## 背景\n\n\n## 备选方案\n\n\n## 影响\n\n`,
 }
 
-export function parseDocument(text) {
-  try {
-    return matter(String(text ?? ''))
-  } catch {
-    return { data: {}, content: String(text ?? '') }
-  }
-}
-
 export function titleOf(text, fallback = 'Untitled') {
-  const parsed = parseDocument(text)
-  if (parsed.data?.title) return String(parsed.data.title)
-  const heading = parsed.content.match(/^\s{0,3}#\s+(.+)$/m)
+  const heading = String(text ?? '').match(/^\s{0,3}#\s+(.+)$/m)
   return heading ? heading[1].trim() : fallback
 }
 
 export function renderMarkdownHtml(text) {
-  return sanitizeHtml(md.render(parseDocument(text).content), SANITIZE)
+  return sanitizeHtml(md.render(String(text ?? '')), SANITIZE)
 }
 
 export function outlineMarkdown(text) {
-  const parsed = parseDocument(text)
-  const tokens = md.parse(parsed.content, {})
+  const tokens = md.parse(String(text ?? ''), {})
   const headings = []
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]
@@ -68,13 +55,10 @@ export function outlineMarkdown(text) {
 
 export function createDocumentMarkdown({ title, markdown, template = 'blank' }) {
   const body = String(markdown ?? '').trim()
-  if (body.startsWith('---\n')) return body.endsWith('\n') ? body : body + '\n'
   const hasH1 = /^\s{0,3}#\s+/m.test(body)
   const heading = title && !hasH1 ? `# ${title}\n\n` : ''
   const templateBody = !body && template && DOC_TEMPLATES[template] ? DOC_TEMPLATES[template] : ''
-  const content = `${heading}${body || templateBody}`.replace(/\s+$/, '') + '\n'
-  const front = ['---', 'type: document', `title: ${JSON.stringify(title || 'Untitled')}`, `created: ${nowIso()}`, '---', ''].join('\n')
-  return front + content
+  return `${heading}${body || templateBody}`.replace(/\s+$/, '') + '\n'
 }
 
 export function appendDocument(markdown, addition) {

@@ -1,10 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, Heading, Modal, Tab, TabList, Tabs } from 'react-aria-components'
-import MarkdownEditor from './editors/MarkdownEditor.jsx'
-import CsvGridEditor from './editors/CsvGridEditor.jsx'
-import { RDG_STYLES } from './editors/rdgStyles.js'
+import MilkdownEditor from './editors/MilkdownEditor.jsx'
 
-const EMPTY = { pages: 0, sheets: 0, slides: 0, assets: 0, files: 0 }
+const EMPTY = { documents: 0, legacy: 0, assets: 0, files: 0 }
 
 async function rpc(method, args = {}) {
   const response = await fetch('/dsh-space-api', {
@@ -20,13 +18,61 @@ async function rpc(method, args = {}) {
   return body.result
 }
 
+/** Absolute URL for an in-space image, served by the plugin's asset route. */
+function assetUrl(spaceId, path) {
+  return `/dsh-space-api/asset?space=${encodeURIComponent(spaceId)}&path=${encodeURIComponent(path)}`
+}
+
+/**
+ * Rewrite relative image paths to authenticated asset URLs before the editor
+ * sees them, and back again before saving, so files keep plain relative paths.
+ */
+function toDisplayMarkdown(markdown, spaceId) {
+  if (!spaceId) return String(markdown ?? '')
+  return String(markdown ?? '').replace(/(!\[[^\]]*\]\()([^)\s]+)(\))/g, (match, open, url, close) => {
+    if (/^(https?:|\/|#|data:)/i.test(url)) return match
+    return `${open}${assetUrl(spaceId, url)}${close}`
+  })
+}
+
+function fromDisplayMarkdown(markdown, spaceId) {
+  if (!spaceId) return String(markdown ?? '')
+  const expectedSpace = encodeURIComponent(spaceId)
+  return String(markdown ?? '').replace(/(!\[[^\]]*\]\()([^)]*)(\))/g, (match, open, rawUrl, close) => {
+    // The Markdown serializer escapes `&` as `\&`; undo that before parsing.
+    const url = rawUrl.replace(/\\&/g, '&')
+    if (!url.startsWith('/dsh-space-api/asset?')) return match
+    let params
+    try { params = new URLSearchParams(url.slice(url.indexOf('?') + 1)) } catch { return match }
+    if (params.get('space') !== expectedSpace) return match
+    const rel = params.get('path')
+    return rel ? `${open}${rel}${close}` : match
+  })
+}
+
+/** Stable per-tab identity so two tabs on one device do not share an edit lease. */
+function readHolderId() {
+  try {
+    const existing = sessionStorage.getItem('dsh-space-holder')
+    if (existing) return existing
+    const next = `tab-${Math.random().toString(36).slice(2, 8)}`
+    sessionStorage.setItem('dsh-space-holder', next)
+    return next
+  } catch { return 'tab-local' }
+}
+
+/** A lease counts as ours while we hold it and it has not expired. */
+function leaseIsMine(lease, holderId) {
+  if (!lease || lease.holder !== holderId) return false
+  const expires = Date.parse(lease.expiresAt)
+  return Number.isFinite(expires) ? expires > Date.now() - 5_000 : false
+}
+
 function Icon({ name, size = 18 }) {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }
   const paths = {
     space: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 9h18M9 9v11" /></>,
     page: <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v5h4M10 13h5M10 17h5" /></>,
-    slides: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>,
-    sheet: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10M15 10v10M3 15h18" /></>,
     file: <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v5h4" /></>,
     plus: <><path d="M12 5v14M5 12h14" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" /></>,
@@ -44,7 +90,7 @@ function ButtonBase({ variant = 'default', className = '', onPress, onClick, isD
 }
 
 function SpaceIcon({ kind }) {
-  return <Icon name={kind === 'slides' ? 'slides' : kind === 'table' ? 'sheet' : kind === 'image' || kind === 'file' ? 'file' : 'page'} />
+  return <Icon name={kind === 'legacy' ? 'file' : kind === 'image' || kind === 'file' ? 'file' : 'page'} />
 }
 
 function statusText(sync) {
@@ -64,15 +110,22 @@ function App() {
   const [search, setSearch] = useState('')
   const [space, setSpace] = useState(null)
   const [tree, setTree] = useState([])
-  const [expanded, setExpanded] = useState(new Set(['pages', 'sheets', 'assets', 'files']))
+  const [expanded, setExpanded] = useState(new Set(['pages', 'assets', 'files']))
   const [node, setNode] = useState(null)
   const [content, setContent] = useState(null)
   const [contentLoading, setContentLoading] = useState(false)
-  const [mode, setMode] = useState('preview')
   const [draft, setDraft] = useState('')
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [sheetEdits, setSheetEdits] = useState({})
+  const [savedAt, setSavedAt] = useState(null)
+  const [saveConflict, setSaveConflict] = useState(null)
+  const [holderId] = useState(readHolderId)
+  const [device, setDevice] = useState('local')
+  const [lease, setLease] = useState(null)
+  const [presence, setPresence] = useState([])
+  const [proposals, setProposals] = useState([])
+  const [versionsOpen, setVersionsOpen] = useState(false)
+  const [selectionHeading, setSelectionHeading] = useState('')
   const [conflicts, setConflicts] = useState([])
   const [conflictOpen, setConflictOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
@@ -102,10 +155,10 @@ function App() {
     setError('')
     setContent(null)
     setNode(null)
-    setMode('preview')
     setDraft('')
     setDirty(false)
-    setSheetEdits({})
+    setSaveConflict(null)
+    setSavedAt(null)
     try {
       const [detail, treeResult, conflictList] = await Promise.all([
         rpc('get', { space: id }),
@@ -131,13 +184,13 @@ function App() {
     setNode(entry)
     setContentLoading(true)
     setError('')
-    setMode('preview')
     setDirty(false)
-    setSheetEdits({})
+    setSaveConflict(null)
     try {
       const value = await rpc('read', { space: view.spaceId, path: entry.path })
       setContent(value)
-      setDraft(value.text || '')
+      setDraft(toDisplayMarkdown(value.text, view.spaceId))
+      setSavedAt(value.mtimeMs || null)
     } catch (e) {
       setError(e.message)
       setContent(null)
@@ -165,68 +218,246 @@ function App() {
     if (!view.spaceId || !node) return
     const value = await rpc('read', { space: view.spaceId, path: node.path })
     setContent(value)
-    setDraft(value.text || '')
-    setSheetEdits({})
+    setDraft(toDisplayMarkdown(value.text, view.spaceId))
     setDirty(false)
+    setSaveConflict(null)
+    setSavedAt(value.mtimeMs || null)
     return value
   }, [view, node])
 
-  const changeMode = useCallback((next) => {
-    if (next === 'edit') {
-      setDraft(content?.text || '')
-      setSheetEdits({})
-      setDirty(false)
-    }
-    setMode(next)
-  }, [content])
-
-  const changeCell = useCallback((row, column, value) => {
-    setSheetEdits(previous => ({ ...previous, [`${row}:${column}`]: value }))
-    setDirty(true)
-  }, [])
-
-  const saveContent = useCallback(async () => {
+  /** Write the current draft, guarded by the sha256 of the version we loaded. */
+  const saveContent = useCallback(async (nextDraft) => {
     if (!view.spaceId || !node || !content) return
+    const markdown = fromDisplayMarkdown(nextDraft ?? draft, view.spaceId)
+    if (markdown === content.text) { setDirty(false); return }
     setSaving(true)
     setError('')
     try {
-      if (content.kind === 'table') {
-        const edits = Object.entries(sheetEdits).map(([key, value]) => {
-          const [row, column] = key.split(':').map(Number)
-          return { row, column, value }
-        })
-        if (edits.length) {
-          await rpc('editSheetCells', { space: view.spaceId, path: node.path, expectedSha256: content.sha256, edits })
-        }
-      } else {
-        await rpc('write', { space: view.spaceId, path: node.path, content: draft, expectedSha256: content.sha256, overwrite: true })
-      }
-      await Promise.all([reloadNode(), reloadSpaceMeta(), reloadConflicts()])
-      setMode('preview')
-      notify('已保存')
+      const meta = await rpc('write', {
+        space: view.spaceId, path: node.path, content: markdown,
+        expectedSha256: content.sha256, overwrite: true,
+      })
+      setContent(previous => previous ? { ...previous, ...meta, text: markdown } : previous)
+      setDirty(false)
+      setSaveConflict(null)
+      setSavedAt(meta.mtimeMs || Date.now())
+      void reloadSpaceMeta()
     } catch (e) {
-      setError(e.message)
+      if (e.code === 'VERSION_CONFLICT') {
+        setSaveConflict('文档已被其他人或 Agent 更新。你的改动还在这里，先重新载入最新的再合并。')
+      } else {
+        setError(e.message)
+      }
     } finally { setSaving(false) }
-  }, [view, node, content, sheetEdits, draft, reloadNode, reloadSpaceMeta, reloadConflicts, notify])
+  }, [view, node, content, draft, reloadSpaceMeta])
 
-  const discardContent = useCallback(() => {
-    setDraft(content?.text || '')
-    setSheetEdits({})
-    setDirty(false)
-    setMode('preview')
-  }, [content])
+  /** Drop local edits and reload the file from disk. */
+  const discardContent = useCallback(async () => {
+    await reloadNode()
+  }, [reloadNode])
 
-  const addSheetRow = useCallback(async () => {
-    if (!view.spaceId || !node || !content) return
-    const columns = content.table?.columns || []
-    const row = columns.map(() => '')
+  // Autosave: debounce user edits, flush on document switch/unmount.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+  useEffect(() => {
+    if (!dirty) return undefined
+    const handle = setTimeout(() => { void saveContent(draftRef.current) }, 700)
+    return () => clearTimeout(handle)
+  }, [draft, dirty, saveContent])
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        if (!dirtyRef.current) return
+        event.preventDefault()
+        void saveContent(draftRef.current)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [saveContent])
+
+  // -- live collaboration -------------------------------------------------
+
+  // Editing is exclusive: without a live lease held by this tab the document is
+  // read-only, and the reader can ask for the edit right explicitly.
+  const mine = leaseIsMine(lease, holderId)
+  const readOnly = content?.kind === 'document' ? !mine : true
+
+  const refreshDocState = useCallback(async () => {
+    if (!view.spaceId || !node) return
     try {
-      await rpc('updateSheet', { space: view.spaceId, path: node.path, rows: [row], mode: 'append' })
-      await Promise.all([reloadNode(), reloadSpaceMeta()])
-      setMode('edit')
-      notify('已添加空行')
-    } catch (e) { setError(e.message) }
-  }, [view, node, content, reloadNode, reloadSpaceMeta, notify])
+      const state = await rpc('docState', { space: view.spaceId, path: node.path })
+      setLease(state.lease || null)
+      setPresence(state.presence || [])
+      setDevice(current => current === 'local' ? (state.device || 'local') : current)
+    } catch { /* a stale document must not break the panel */ }
+  }, [view.spaceId, node])
+
+  const refreshProposals = useCallback(async () => {
+    if (!view.spaceId || !node) return
+    const result = await rpc('docProposals', { space: view.spaceId, path: node.path, status: 'pending' }).catch(() => ({ proposals: [] }))
+    setProposals(result.proposals || [])
+  }, [view.spaceId, node])
+
+  const reloadIfClean = useCallback(async () => {
+    if (!node) return
+    if (dirtyRef.current) {
+      setSaveConflict('文档已被其他人或 Agent 更新。你的本地改动还在，可先保存或载入最新版本。')
+      return
+    }
+    const value = await rpc('read', { space: view.spaceId, path: node.path }).catch(() => null)
+    if (!value) return
+    setContent(value)
+    setDraft(toDisplayMarkdown(value.text, view.spaceId))
+    setDirty(false)
+    setSavedAt(value.mtimeMs || null)
+    void refreshDocState()
+  }, [view.spaceId, node, refreshDocState])
+
+  const uploadImage = useCallback(async (file) => {
+    if (!view.spaceId) throw new Error('还没有选择空间')
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(reader.error || new Error('读取图片失败'))
+      reader.readAsDataURL(file)
+    })
+    const dataBase64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+    const result = await rpc('uploadAsset', {
+      space: view.spaceId,
+      filename: file.name || 'image.png',
+      dataBase64,
+    })
+    return assetUrl(view.spaceId, result.path)
+  }, [view.spaceId])
+
+  const requestEdit = useCallback(async () => {
+    if (!view.spaceId || !node) return
+    const result = await rpc('leaseAcquire', {
+      space: view.spaceId, path: node.path, holder: holderId,
+      label: device === 'local' ? '本机浏览器' : device,
+    }).catch(error => ({ granted: false, error }))
+    if (result.error) { setError(result.error.message); return }
+    setLease(result.lease || null)
+    notify(result.granted ? '已获得编辑权' : `${result.holder || '其他人'} 正在编辑`)
+    if (result.granted) {
+      void rpc('presence', { space: view.spaceId, doc: node.path, device, mode: 'editing' }).catch(() => {})
+    }
+  }, [view.spaceId, node, holderId, device, notify])
+
+  const releaseEdit = useCallback(async () => {
+    if (!view.spaceId || !node || !lease || lease.holder !== holderId) return
+    await rpc('leaseRelease', { space: view.spaceId, path: node.path, leaseId: lease.leaseId }).catch(() => {})
+    setLease(null)
+  }, [view.spaceId, node, lease, holderId])
+
+  const resolveProposal = useCallback(async (id, accept) => {
+    if (!view.spaceId || !node) return
+    try {
+      const result = await rpc('docResolveProposal', { space: view.spaceId, path: node.path, id, accept })
+      notify(accept ? '已接受提议' : '已拒绝提议')
+      await refreshProposals()
+      if (accept) await reloadIfClean()
+      return result
+    } catch (error) { setError(error.message) }
+  }, [view.spaceId, node, notify, refreshProposals, reloadIfClean])
+
+  const undoLastChange = useCallback(async () => {
+    if (!view.spaceId || !node) return
+    try {
+      const result = await rpc('docVersions', { space: view.spaceId, path: node.path, limit: 5 })
+      const previous = (result.versions || []).find(row => !row.current)
+      if (!previous) { notify('还没有可撤销的版本'); return }
+      await rpc('docRestore', { space: view.spaceId, path: node.path, sha: previous.sha })
+      notify('已撤销到上一个版本')
+      await reloadIfClean()
+    } catch (error) { setError(error.message) }
+  }, [view.spaceId, node, notify, reloadIfClean])
+
+  // Device identity once.
+  useEffect(() => {
+    rpc('devices').then(result => setDevice(result.device || 'local')).catch(() => {})
+  }, [])
+
+  // Load lease + presence + proposals whenever the document changes.
+  useEffect(() => {
+    if (!node) { setLease(null); setPresence([]); setProposals([]); return }
+    void refreshDocState()
+    void refreshProposals()
+  }, [node, refreshDocState, refreshProposals])
+
+  // Heartbeat: presence every 10s while a document is open.
+  useEffect(() => {
+    if (!view.spaceId || !node) return undefined
+    const beat = () => rpc('presence', {
+      space: view.spaceId, doc: node.path, device,
+      block: selectionHeading || null,
+      mode: readOnly ? 'reading' : 'editing',
+    }).catch(() => {})
+    beat()
+    const handle = setInterval(beat, 10_000)
+    return () => clearInterval(handle)
+  }, [view.spaceId, node, device, readOnly, selectionHeading])
+
+  // Renew our lease every 30s.
+  useEffect(() => {
+    if (!lease || lease.holder !== holderId) return undefined
+    const renew = async () => {
+      try {
+        const result = await rpc('leaseRenew', { space: view.spaceId, path: node.path, leaseId: lease.leaseId })
+        if (result?.renewed && result.lease) setLease(result.lease)
+        else setLease(null)
+      } catch { /* keep the previous lease until the next tick */ }
+    }
+    const handle = setInterval(() => { void renew() }, 30_000)
+    return () => clearInterval(handle)
+  }, [lease, holderId, view.spaceId, node])
+
+  // Server-sent events: remote changes, presence, proposals.
+  useEffect(() => {
+    if (view.kind !== 'space' || !view.spaceId) return undefined
+    const source = new EventSource(`/dsh-space-api/events?space=${encodeURIComponent(view.spaceId)}`)
+    // A remote write (agent, another device) can add or remove files, not just
+    // change the open document, so refresh the tree alongside the document.
+    let treeTimer = null
+    const scheduleTreeRefresh = () => {
+      if (treeTimer) return
+      treeTimer = setTimeout(() => { treeTimer = null; void reloadSpaceMeta() }, 400)
+    }
+    const onFs = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        scheduleTreeRefresh()
+        if (!node) return
+        if ((data.paths || []).includes(node.path)) void reloadIfClean()
+      } catch { /* ignore malformed frames */ }
+    }
+    const onDoc = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (node && data.path === node.path) void reloadIfClean()
+      } catch { /* ignore */ }
+    }
+    const onPresence = (event) => {
+      try { setPresence(JSON.parse(event.data).presence || []) } catch { /* ignore */ }
+    }
+    const onProposal = () => { if (node) void refreshProposals() }
+    source.addEventListener('fs-change', onFs)
+    source.addEventListener('doc-change', onDoc)
+    source.addEventListener('presence', onPresence)
+    source.addEventListener('proposal', onProposal)
+    source.addEventListener('proposal-resolved', onProposal)
+    return () => {
+      if (treeTimer) clearTimeout(treeTimer)
+      source.close()
+    }
+  }, [view.kind, view.spaceId, node, reloadIfClean, refreshProposals, reloadSpaceMeta])
+
+  // Leaving a document releases the edit right so others can take over.
+  useEffect(() => () => { void releaseEdit() }, [node?.path])
 
   const createSpace = useCallback(async (name, description) => {
     const created = await rpc('createSpace', { name, description })
@@ -245,10 +476,7 @@ function App() {
   }, [openSpace, refreshSpaces, notify])
 
   const createContent = useCallback(async (kind, title, template) => {
-    const args = { space: view.spaceId, title, template }
-    if (kind === 'doc') await rpc('createDoc', { ...args, parent: 'pages', markdown: '' })
-    if (kind === 'slides') await rpc('createSlides', { ...args, parent: 'pages' })
-    if (kind === 'sheet') await rpc('createSheet', { ...args, path: undefined })
+    await rpc('createDoc', { space: view.spaceId, title, template, parent: 'pages', markdown: '' })
     setNewContentOpen(false)
     const [treeResult, detail] = await Promise.all([
       rpc('tree', { space: view.spaceId }),
@@ -283,7 +511,7 @@ function App() {
 
   return (
     <div className="sp-root">
-      <style>{STYLE}{RDG_STYLES}</style>
+      <style>{STYLE}</style>
       {toast && <div className="sp-toast" role="status">{toast}</div>}
       {error && <div className="sp-error" role="alert">{error}<ButtonBase variant="ghost" onPress={() => setError('')}>关闭</ButtonBase></div>}
       {view.kind === 'home' ? (
@@ -312,17 +540,29 @@ function App() {
           contentLoading={contentLoading}
           counts={counts}
           conflicts={conflicts}
-          mode={mode}
           draft={draft}
           dirty={dirty}
           saving={saving}
-          sheetEdits={sheetEdits}
-          onModeChange={changeMode}
-          onDraftChange={(value) => { setDraft(value); setDirty(true) }}
-          onCellChange={changeCell}
+          savedAt={savedAt}
+          saveConflict={saveConflict}
+          readOnly={readOnly}
+          mine={mine}
+          lease={lease}
+          device={device}
+          holderId={holderId}
+          presence={presence}
+          proposals={proposals}
+          onRequestEdit={requestEdit}
+          onReleaseEdit={releaseEdit}
+          onResolveProposal={resolveProposal}
+          onReload={reloadIfClean}
+          onOpenVersions={() => setVersionsOpen(true)}
+          onUndo={undoLastChange}
+          onSelectionChange={setSelectionHeading}
+          onUploadImage={uploadImage}
+          onDraftChange={(value) => { setDraft(value); setDirty(true); setSaveConflict(null) }}
           onSave={saveContent}
           onDiscard={discardContent}
-          onAddRow={addSheetRow}
           onBack={() => { setView({ kind: 'home' }); refreshSpaces() }}
           onNewContent={() => setNewContentOpen(true)}
           onInvite={showInvite}
@@ -337,6 +577,7 @@ function App() {
       <MembersDialog open={membersOpen} setOpen={setMembersOpen} space={space} notify={notify} />
       <ConflictDialog open={conflictOpen} setOpen={setConflictOpen} space={space} conflicts={conflicts} onResolved={afterConflictResolved} notify={notify} />
       <SyncDialog open={syncOpen} setOpen={setSyncOpen} space={space} notify={notify} />
+      <VersionsDialog open={versionsOpen} setOpen={setVersionsOpen} space={space} path={node?.path} onRestored={reloadIfClean} notify={notify} />
     </div>
   )
 }
@@ -382,7 +623,7 @@ function Home({ spaces, loading, filter, setFilter, search, setSearch, onOpen, o
               <span className="sp-row-main">
                 <span className="sp-row-title">{item.name}</span>
                 <span className="sp-row-meta">
-                  {item.counts?.pages || 0} 页面 · {item.counts?.sheets || 0} 表格 · {item.counts?.slides || 0} 幻灯片
+                  {item.counts?.documents || 0} 文档{(item.counts?.legacy || 0) > 0 ? ` · ${item.counts.legacy} 旧格式` : ''}
                   {item.members ? ` · ${item.members} 位成员` : ''}
                   {item.description ? ` · ${item.description}` : ''}
                 </span>
@@ -398,7 +639,7 @@ function Home({ spaces, loading, filter, setFilter, search, setSearch, onOpen, o
   )
 }
 
-function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, contentLoading, counts, conflicts, mode, draft, dirty, saving, sheetEdits, onModeChange, onDraftChange, onCellChange, onSave, onDiscard, onAddRow, onBack, onNewContent, onInvite, onMembers, onReviewConflicts, onSync }) {
+function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, contentLoading, counts, conflicts, draft, dirty, saving, savedAt, saveConflict, readOnly, mine, lease, holderId, presence, proposals, device, onRequestEdit, onReleaseEdit, onResolveProposal, onReload, onOpenVersions, onUndo, onSelectionChange, onDraftChange, onSave, onDiscard, onBack, onNewContent, onInvite, onMembers, onReviewConflicts, onSync, onUploadImage }) {
   return (
     <div className="sp-detail">
       <div className="sp-detail-head">
@@ -425,9 +666,9 @@ function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, conte
       <div className="sp-detail-body">
         <aside className="sp-tree" aria-label="空间内容">
           <div className="sp-tree-summary">
-            <span>{counts.pages} 页面</span><span>{counts.sheets} 表格</span><span>{counts.slides} 幻灯片</span>
+            <span>{counts.documents} 文档</span>{counts.legacy > 0 && <span>{counts.legacy} 旧格式</span>}<span>{counts.assets + counts.files} 附件</span>
           </div>
-          {tree.length === 0 && <p className="sp-tree-empty">空间还是空的<br /><span>点击“新建”添加文档、表格或幻灯片。</span></p>}
+          {tree.length === 0 && <p className="sp-tree-empty">空间还是空的<br /><span>点击“新建”添加第一篇文档。</span></p>}
           {tree.map(entry => <TreeNode key={entry.path} entry={entry} depth={0} expanded={expanded} onOpen={onOpen} activePath={activePath} />)}
         </aside>
         <main className="sp-content">
@@ -435,23 +676,35 @@ function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, conte
             <ContentPane
               content={content}
               path={activePath}
-              mode={mode}
               draft={draft}
               dirty={dirty}
               saving={saving}
-              sheetEdits={sheetEdits}
-              onModeChange={onModeChange}
+              savedAt={savedAt}
+              saveConflict={saveConflict}
+              readOnly={readOnly}
+              mine={mine}
+              lease={lease}
+              holderId={holderId}
+              presence={presence}
+              proposals={proposals}
+              device={device}
+              onRequestEdit={onRequestEdit}
+              onReleaseEdit={onReleaseEdit}
+              onResolveProposal={onResolveProposal}
+              onReload={onReload}
+              onOpenVersions={onOpenVersions}
+              onUndo={onUndo}
+              onSelectionChange={onSelectionChange}
+              onUploadImage={onUploadImage}
               onDraftChange={onDraftChange}
-              onCellChange={onCellChange}
               onSave={onSave}
               onDiscard={onDiscard}
-              onAddRow={onAddRow}
             />
           ) : (
             <div className="sp-empty compact">
               <Icon name="page" size={36} />
               <h2>{tree.length ? '选择一个页面' : '这个空间还是空的'}</h2>
-              <p>{tree.length ? '从左侧选择 Page、表格或幻灯片。' : '新建一个 Markdown 文档、CSV 表格或 Marp 幻灯片开始。'}</p>
+              <p>{tree.length ? '从左侧选择一篇文档。' : '新建一篇 Markdown 文档开始。'}</p>
               <ButtonBase variant="primary" onPress={onNewContent}><Icon name="plus" /> 新建内容</ButtonBase>
             </div>
           )}
@@ -461,53 +714,91 @@ function SpaceDetail({ space, tree, expanded, onOpen, activePath, content, conte
   )
 }
 
-function ContentPane({ content, path, mode, draft, dirty, saving, sheetEdits, onModeChange, onDraftChange, onCellChange, onSave, onDiscard, onAddRow }) {
-  const preview = () => {
-    if (dirty && !window.confirm('放弃未保存的更改？')) return
-    onDiscard()
-  }
+function ContentPane({
+  content, path, draft, dirty, saving, savedAt, saveConflict,
+  readOnly, mine, lease, holderId, presence, proposals, device,
+  onRequestEdit, onReleaseEdit, onResolveProposal, onReload, onOpenVersions, onUndo, onSelectionChange,
+  onUploadImage, onDraftChange, onSave, onDiscard,
+}) {
+  const holder = lease && !mine ? (lease.label || lease.holder) : null
+  const hasConflict = Boolean(saveConflict)
+  const status = hasConflict ? '有更新冲突' : saving ? '保存中…' : dirty ? '未保存' : mine ? '已保存' : '只读'
+  const others = (presence || []).filter(row => row.doc === path && row.device !== device)
   return (
     <div className="sp-content-inner">
       <div className="sp-content-head">
         <span className="sp-path">{path}</span>
         <div className="sp-content-actions">
-          {dirty && <span className="sp-dirty">未保存</span>}
-          <div className="sp-seg" role="group" aria-label="查看模式">
-            <button type="button" className={mode === 'preview' ? 'active' : ''} onClick={preview}>预览</button>
-            <button type="button" className={mode === 'edit' ? 'active' : ''} onClick={() => onModeChange('edit')}>编辑</button>
-          </div>
-          {mode === 'edit' && (
+          {others.length > 0 && (
+            <span className="sp-presence" title={others.map(row => `${row.name || row.device}${row.block ? ` · ${row.block}` : ''}`).join('\n')}>
+              {others.length} 人在看
+            </span>
+          )}
+          <span className={`sp-savestate ${hasConflict ? 'warn' : dirty ? 'dirty' : 'ok'}`} aria-live="polite">{status}</span>
+          {savedAt && !dirty && !saving ? <span className="sp-muted sp-savedat">{new Date(savedAt).toLocaleTimeString('zh-CN', { hour12: false })}</span> : null}
+          <ButtonBase variant="ghost" onPress={onUndo}>撤销上一步</ButtonBase>
+          <ButtonBase variant="ghost" onPress={onOpenVersions}>历史</ButtonBase>
+          {mine ? (
             <>
-              <ButtonBase variant="ghost" onPress={onDiscard}>取消</ButtonBase>
-              <ButtonBase variant="primary" isDisabled={saving || !dirty} onPress={onSave}>{saving ? '保存中…' : '保存'}</ButtonBase>
+              <ButtonBase variant="ghost" onPress={() => onSave()} isDisabled={saving || !dirty}>立即保存</ButtonBase>
+              <ButtonBase variant="ghost" onPress={onReleaseEdit}>结束编辑</ButtonBase>
             </>
+          ) : (
+            <ButtonBase variant="primary" onPress={onRequestEdit}>{holder ? '请求编辑权' : '开始编辑'}</ButtonBase>
           )}
         </div>
       </div>
-      {mode === 'edit' ? (
-        content.kind === 'table' ? (
-          <SheetEditor content={content} sheetEdits={sheetEdits} onCellChange={onCellChange} onAddRow={onAddRow} />
-        ) : (
-          <MarkdownEditor value={draft} onChange={onDraftChange} ariaLabel="编辑内容" minHeight={360} />
-        )
-      ) : (
-        <Preview content={content} />
-      )}
-    </div>
-  )
-}
 
-function SheetEditor({ content, sheetEdits, onCellChange, onAddRow }) {
-  const columns = content.table?.columns || []
-  const rows = (content.table?.rows || []).map((row, rowIndex) =>
-    row.map((value, columnIndex) => sheetEdits[`${rowIndex}:${columnIndex}`] ?? value ?? ''))
-  return (
-    <div className="sp-sheet-shell">
-      <CsvGridEditor columns={columns} rows={rows} onCellChange={onCellChange} minHeight={360} />
-      <div className="sp-table-foot">
-        <p className="sp-muted">{content.table.rows.length} / {content.table.total} 行</p>
-        <ButtonBase onPress={onAddRow}><Icon name="plus" size={14} /> 添加空行</ButtonBase>
-      </div>
+      {!mine && content.kind === 'document' && (
+        <div className="sp-lease-banner" role="status">
+          <Icon name="alert" size={15} />
+          <span>
+            {holder
+              ? <><b>{holder}</b> 正在编辑这篇文档，你现在是只读。改动会自动实时同步。</>
+              : <>这篇文档还没人在编辑。取得编辑权后你的改动才会写入。</>}
+          </span>
+          <ButtonBase variant="ghost" onPress={onRequestEdit}>{holder ? '请求编辑权' : '开始编辑'}</ButtonBase>
+        </div>
+      )}
+
+      {hasConflict && (
+        <div className="sp-save-conflict" role="alert">
+          <Icon name="alert" size={15} />
+          <span>{saveConflict}</span>
+          <ButtonBase variant="ghost" onPress={onReload}>载入最新版本</ButtonBase>
+        </div>
+      )}
+
+      {proposals.length > 0 && (
+        <div className="sp-proposals" role="region" aria-label="待审阅的提议">
+          {proposals.map(proposal => (
+            <div key={proposal.id} className="sp-proposal">
+              <div className="sp-proposal-main">
+                <b>{proposal.author || 'Agent'}</b> 提议修改 {proposal.ops.length} 处
+                {proposal.rationale ? <span className="sp-muted"> · {proposal.rationale}</span> : null}
+              </div>
+              <div className="sp-proposal-actions">
+                <ButtonBase variant="ghost" onPress={() => onResolveProposal(proposal.id, false)}>拒绝</ButtonBase>
+                <ButtonBase variant="primary" onPress={() => onResolveProposal(proposal.id, true)}>接受</ButtonBase>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {content.kind === 'document' ? (
+        <MilkdownEditor
+          value={draft}
+          onChange={onDraftChange}
+          onSelectionChange={onSelectionChange}
+          onUploadImage={onUploadImage}
+          readOnly={readOnly}
+          ariaLabel="文档正文"
+          minHeight={360}
+        />
+      ) : (
+        <pre className="sp-pre">{content.text}</pre>
+      )}
     </div>
   )
 }
@@ -539,22 +830,51 @@ function Preview({ content }) {
   if (content.kind === 'document') {
     return <article className="sp-doc" dangerouslySetInnerHTML={{ __html: content.html }} />
   }
-  if (content.kind === 'slides') {
-    const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff}${content.css}</style></head><body>${content.html}</body></html>`
-    return <iframe className="sp-slides" sandbox="" title="幻灯片预览" srcDoc={srcdoc} />
-  }
-  if (content.kind === 'table') {
-    return (
-      <div className="sp-table-wrap">
-        <table className="sp-table">
-          <thead><tr>{content.table.columns.map(column => <th key={column.key}>{column.title}</th>)}</tr></thead>
-          <tbody>{content.table.rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{String(cell ?? '')}</td>)}</tr>)}</tbody>
-        </table>
-        <p className="sp-muted">{content.table.rows.length} / {content.table.total} 行</p>
-      </div>
-    )
-  }
   return <pre className="sp-pre">{content.text}</pre>
+}
+
+function VersionsDialog({ open, setOpen, space, path, onRestored, notify }) {
+  const [rows, setRows] = useState([])
+  const [busy, setBusy] = useState('')
+  useEffect(() => {
+    if (!open || !space?.id || !path) return
+    rpc('docVersions', { space: space.id, path, limit: 40 }).then(result => setRows(result.versions || [])).catch(() => setRows([]))
+  }, [open, space?.id, path])
+  const restore = async (sha) => {
+    setBusy(sha)
+    try {
+      await rpc('docRestore', { space: space.id, path, sha })
+      notify('已恢复到该版本')
+      await onRestored()
+      setOpen(false)
+    } catch (error) { notify(error.message) } finally { setBusy('') }
+  }
+  return (
+    <Modal isOpen={open} onOpenChange={setOpen} className="sp-modal-overlay">
+      <Dialog className="sp-dialog sp-dialog-wide" aria-label="版本历史">
+        {({ close }) => (
+          <div>
+            <Heading slot="title">版本历史</Heading>
+            {rows.length === 0 ? <p className="sp-muted">还没有历史版本。每次保存都会留下一个版本。</p> : (
+              <ul className="sp-versions">
+                {rows.map((row, index) => (
+                  <li key={row.sha}>
+                    <div>
+                      <b>{row.current ? '当前版本' : `v${rows.length - index}`}</b>
+                      <span className="sp-muted"> · {new Date(row.mtimeMs).toLocaleString('zh-CN', { hour12: false })} · {(row.size / 1024).toFixed(1)} KB</span>
+                      {row.writers?.length ? <span className="sp-muted"> · {row.writers.map(writer => writer.by || writer.writer).join(', ')}</span> : null}
+                    </div>
+                    {!row.current && <ButtonBase onPress={() => restore(row.sha)} isDisabled={busy === row.sha}>{busy === row.sha ? '恢复中…' : '恢复'}</ButtonBase>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="sp-dialog-actions"><ButtonBase variant="ghost" onPress={close}>关闭</ButtonBase></div>
+          </div>
+        )}
+      </Dialog>
+    </Modal>
+  )
 }
 
 function MembersDialog({ open, setOpen, space, notify }) {
@@ -804,7 +1124,7 @@ function NewContentDialog({ open, setOpen, onCreate }) {
           <div>
             <Heading slot="title">新建内容</Heading>
             <div className="sp-type-grid">
-              {[['doc', '文档', 'page'], ['slides', '幻灯片', 'slides'], ['sheet', '表格', 'sheet']].map(([value, label, icon]) => (
+              {[['doc', '文档', 'page']].map(([value, label, icon]) => (
                 <button key={value} className={`sp-type ${kind === value ? 'active' : ''}`} onClick={() => setKind(value)}>
                   <Icon name={icon} size={22} /><span>{label}</span>
                 </button>
@@ -816,10 +1136,6 @@ function NewContentDialog({ open, setOpen, onCreate }) {
                 <option value="blank">空白</option>
                 {kind === 'doc' && <option value="project-brief">项目简报</option>}
                 {kind === 'doc' && <option value="meeting-notes">会议纪要</option>}
-                {kind === 'slides' && <option value="review">复盘</option>}
-                {kind === 'slides' && <option value="pitch">Pitch</option>}
-                {kind === 'sheet' && <option value="tracker">Tracker</option>}
-                {kind === 'sheet' && <option value="budget">预算</option>}
               </select>
             </label>
             {error && <p className="sp-form-error">{error}</p>}
@@ -947,11 +1263,6 @@ const STYLE = `
 .sp-doc th,.sp-doc td{border:1px solid var(--dsw-alias-border-l1);padding:8px 10px;text-align:left}
 .sp-doc th{background:var(--dsw-alias-bg-layer-2)}
 .sp-doc blockquote{border-left:3px solid var(--dsw-alias-border-l2);margin:1em 0;padding:.2em 0 .2em 1em;color:var(--dsw-alias-label-secondary)}
-.sp-slides{width:100%;aspect-ratio:16/9;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:#fff}
-.sp-table-wrap{max-width:100%;overflow:auto}
-.sp-table{border-collapse:collapse;min-width:480px;width:100%}
-.sp-table th,.sp-table td{border:1px solid var(--dsw-alias-border-l1);padding:7px 10px;text-align:left;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}
-.sp-table th{background:var(--dsw-alias-bg-layer-2);position:sticky;top:0}
 .sp-muted{color:var(--dsw-alias-label-secondary);font-size:12px}
 .sp-pre{white-space:pre-wrap;word-break:break-word;background:var(--dsw-alias-bg-layer-2);padding:14px;border-radius:9px}
 
@@ -964,15 +1275,30 @@ const STYLE = `
 .sp-content-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .sp-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:140px}
 .sp-content-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sp-presence{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}
+.sp-lease-banner{display:flex;align-items:center;gap:10px;padding:8px 12px;margin:8px 0 0;border-radius:8px;
+  background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,var(--dsw-alias-bg-layer-1));
+  border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 26%,transparent);font-size:13px}
+.sp-proposals{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}
+.sp-proposal{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border-radius:8px;
+  background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);font-size:13px}
+.sp-proposal-actions{display:flex;gap:6px}
+.sp-versions{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.sp-versions li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;font-size:13px}
+.sp-dialog-wide{max-width:640px}
+.sp-savestate{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary)}
+.sp-savestate.ok{color:var(--dsw-alias-label-tertiary)}
+.sp-savestate.dirty{color:var(--dsw-alias-brand-primary);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent)}
+.sp-savestate.warn{color:var(--dsw-alias-label-warning,#b45309);border-color:color-mix(in srgb,var(--dsw-alias-label-warning,#b45309) 45%,transparent)}
+.sp-savedat{font-variant-numeric:tabular-nums}
+.sp-save-conflict{display:flex;align-items:center;gap:10px;padding:8px 12px;margin:8px 0 0;border-radius:8px;
+  background:color-mix(in srgb,var(--dsw-alias-label-warning,#b45309) 10%,var(--dsw-alias-bg-layer-1));
+  border:1px solid color-mix(in srgb,var(--dsw-alias-label-warning,#b45309) 30%,transparent);
+  color:var(--dsw-alias-label-primary);font-size:13px}
 .sp-dirty{font-size:11px;color:var(--dsw-alias-state-warn-primary)}
 .sp-seg{display:flex;padding:2px;background:var(--dsw-alias-bg-layer-2);border-radius:7px}
 .sp-seg button{border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;padding:4px 9px;border-radius:5px;cursor:pointer}
 .sp-seg button.active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}
-.sp-sheet-shell{flex:1;min-height:360px;display:flex;flex-direction:column;gap:8px;min-width:0}
-.sp-csv-grid{--rdg-background-color:var(--dsw-alias-bg-layer-1);--rdg-color:var(--dsw-alias-label-primary);--rdg-border-color:var(--dsw-alias-border-l1);--rdg-header-background-color:var(--dsw-alias-bg-layer-2);--rdg-row-hover-background-color:var(--dsw-alias-bg-layer-2);--rdg-row-selected-background-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,var(--dsw-alias-bg-layer-1));--rdg-row-selected-hover-background-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 15%,var(--dsw-alias-bg-layer-1));--rdg-selection-color:var(--dsw-alias-brand-primary);--rdg-font-size:13px}
-.sp-csv-grid .rdg{height:100%;border:1px solid var(--dsw-alias-border-l1);border-radius:8px}
-.sp-sheet-shell .sp-table-foot{margin-top:0}
-.sp-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .sp-dialog-wide{width:min(880px,100%)}
 .sp-section-title{font-size:13px;margin:18px 0 8px;color:var(--dsw-alias-label-secondary);font-weight:600}
 .sp-members{display:flex;flex-direction:column;gap:6px}
