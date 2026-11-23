@@ -4,15 +4,16 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {createHostApi,createHttpHandler} from '../server/host.js';
-import {documentFromMarkdown, SpaceService} from '../src/space-service.js';
+import {createHostApi} from '../adapters/dsh/server/host.js';
+import {createHttpHandler} from '../packages/transport-http/http-handler.js';
+import {documentFromMarkdown, SpaceService} from '../packages/review-core/src/space-service.js';
 
 test('host comment bridge requires explicit action and treats unconfirmed receipt as unknown',async()=>{
  const home=mkdtempSync(path.join(tmpdir(),'space-host-'));let sent=[];
  const host=createHostApi({home,prompt:async req=>{sent.push(req);return {accepted:false};}});
  try {
    // Agent creates through its service; this opens the same SQLite file.
-   const {SpaceService}=await import('../src/space-service.js');const service=new SpaceService(home);
+   const {SpaceService}=await import('../packages/review-core/src/space-service.js');const service=new SpaceService(home);
    service.createDocument({id:'d',content:documentFromMarkdown('abcd'),operationId:'create'});service.close();
    const note=await host.dispatch('createComment',{docId:'d',quote:'ab',body:'clarify',anchor:{from:0,to:2,version:0}});
    assert.equal(sent.length,0);
@@ -59,7 +60,7 @@ test('UI creates an untitled document with an empty body and replays its operati
 
 test('client bundle registers Space panel, picker action, and reference serialization',async()=>{
  const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
- const bundle=await readFile(new URL('../client.js',import.meta.url),'utf8');let descriptor;
+ const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value}}},document:{createElement:()=>({}),head:{append:()=>{}}},console};
  vm.runInNewContext(bundle,context);
  const react={createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
@@ -85,10 +86,86 @@ test('client bundle registers Space panel, picker action, and reference serializ
  assert.equal(sources[0].openReference({}, {ref:'space:doc-2'}), true);assert.equal(opened.at(-1),'dsh-resource://space/doc-2');
 });
 
+test('document picker inserts the checked documents into the bound conversation',async()=>{
+ const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
+ const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
+ class Element {
+   constructor(tag){this.tagName=tag;this.children=[];this.listeners={};this.checked=false;this.value='';this.textContent='';}
+   append(...children){this.children.push(...children);}
+   addEventListener(type,listener){this.listeners[type]=listener;}
+   setAttribute(){}
+   showModal(){this.open=true;}
+   close(){this.open=false;this.closed=true;}
+   remove(){this.removed=true;}
+   querySelectorAll(){return [];}
+ }
+ const elements=[];const modalRoot=[];const document={
+   createElement(tag){const element=new Element(tag);elements.push(element);return element;},
+   createTextNode(text){return {textContent:text};},
+   body:{append(element){modalRoot.push(element);}},
+   head:{append(){}},
+ };
+ const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
+   fetch:async()=>({ok:true,json:async()=>({result:[{id:'doc-1',title:'Selected document'}]})})};
+ vm.runInNewContext(bundle,context);
+ const react={createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
+ const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
+ const binding={ctx:{sessionId:'session-1'}};let inserted;let focused=false;
+ // DSH's live SessionInput facade inserts a batch through addFiles(references, attachmentIds).
+ const input={addFiles:(references,ids)=>{inserted={references,ids};return true;},focus:()=>{focused=true;}};
+ const ctx={sessions:{binding:()=>binding},conversation:{input:{for:()=>input}}};
+ await client.openSpacePicker(ctx,'session-1',key=>key);
+ const checkbox=elements.find(element=>element.tagName==='input');checkbox.checked=true;
+ const add=elements.find(element=>element.tagName==='button'&&element.textContent==='picker.add');
+ add.listeners.click();
+ assert.equal(inserted?.references.length,1);
+ assert.equal(inserted?.references[0].ref,'space:doc-1');
+ assert.equal(inserted?.ids.length,0);
+ assert.equal(focused,true);
+ assert.equal(modalRoot[0].closed,true);
+});
+
+test('document picker reports a failed insertion instead of throwing',async()=>{
+  const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
+  const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
+  class Element {
+    constructor(tag){this.tagName=tag;this.children=[];this.listeners={};this.checked=false;this.value='';this.textContent='';}
+    append(...children){this.children.push(...children);}
+    addEventListener(type,listener){this.listeners[type]=listener;}
+    setAttribute(){}
+    showModal(){this.open=true;}
+    close(){this.open=false;this.closed=true;}
+    remove(){this.removed=true;}
+    querySelectorAll(){return [];}
+  }
+  const elements=[];const modalRoot=[];const document={
+    createElement(tag){const element=new Element(tag);elements.push(element);return element;},
+    createTextNode(text){return {textContent:text};},
+    body:{append(element){modalRoot.push(element);}},
+    head:{append(){}},
+  };
+  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
+    fetch:async()=>({ok:true,json:async()=>({result:[{id:'doc-1',title:'Selected document'}]})})};
+  vm.runInNewContext(bundle,context);
+  const react={createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
+  const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
+  const binding={ctx:{sessionId:'session-1'}};
+  // A facade without the batch reference method must surface the failure note,
+  // not throw out of the DOM click handler and leave the modal looking inert.
+  const input={focus(){}};
+  const ctx={sessions:{binding:()=>binding},conversation:{input:{for:()=>input}}};
+  await client.openSpacePicker(ctx,'session-1',key=>key);
+  const checkbox=elements.find(element=>element.tagName==='input');checkbox.checked=true;
+  const add=elements.find(element=>element.tagName==='button'&&element.textContent==='picker.add');
+  assert.doesNotThrow(()=>add.listeners.click());
+  assert.equal(elements.find(element=>element.tagName==='p'&&element.textContent==='picker.failed')?.textContent,'picker.failed');
+  assert.notEqual(modalRoot[0].closed,true);
+});
+
 test('plugin registers MCP and web route against the same home and disposes them', async () => {
- const {apply}=await import('../index.js'); const home=mkdtempSync(path.join(tmpdir(),'space-apply-')); const old=process.env.DSH_SPACE_HOME;process.env.DSH_SPACE_HOME=home;
+ const {apply}=await import('../adapters/dsh/index.js'); const home=mkdtempSync(path.join(tmpdir(),'space-apply-')); const old=process.env.DSH_SPACE_HOME;process.env.DSH_SPACE_HOME=home;
  const regs=[],disposers=[];const ctx={get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>{disposers.push(fn());},mcpManager:{register:(name,config)=>{regs.push({name,config});return()=>{};}},webServer:{register:route=>{regs.push({route});return()=>{};}}};
- try {apply(ctx);assert.equal(regs[0].name,'space');assert.equal(regs[0].config.env.DSH_SPACE_HOME,home);assert.equal(regs[0].config.toolLoading,'eager');assert.match(regs[0].config.args[0],/server\/mcp\.js$/);assert.equal(regs[1].route.path,'/dsh-space-api');}
+ try {apply(ctx);assert.equal(regs[0].name,'space');assert.equal(regs[0].config.env.DSH_SPACE_HOME,home);assert.equal(regs[0].config.toolLoading,'eager');assert.match(regs[0].config.args[0],/server\/mcp-entry\.js$/);assert.equal(regs[1].route.path,'/dsh-space-api');}
  finally {for(const d of disposers.reverse())d?.(); if(old===undefined)delete process.env.DSH_SPACE_HOME;else process.env.DSH_SPACE_HOME=old;rmSync(home,{recursive:true,force:true});}
 });
 
@@ -115,7 +192,7 @@ test('sending without a conversation resolves a target once and reuses it on ret
     },
   });
   try {
-    const service = (await import('../src/space-service.js')).SpaceService;
+    const service = (await import('../packages/review-core/src/space-service.js')).SpaceService;
     const docs = new service(home);
     docs.createDocument({ id: 'd', content: '# D\n\nhello', operationId: 'create' });
     docs.close();
