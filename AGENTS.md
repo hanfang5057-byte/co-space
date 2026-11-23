@@ -6,7 +6,7 @@ This repository is a private npm workspace for CoSpace (智联文档空间). `as
 
 ## Build and Development
 
-Use Node.js 24 or later. Run `npm install` to install workspace dependencies. Run `npm run build:dsh` to build the complete DSH package; `npm run build:client` only rebuilds the client bundle. Run `npm run check` for the Node test suite and `sh scripts/test-ui.sh` for the simulated DOM UI flow. Run `npm run verify:dsh-package` to assemble and inspect the npm tarball without publishing it. Do not edit generated `adapters/dsh/client.js` or anything under `dist/` by hand.
+Use Node.js 24 or later. Run `npm install` to install workspace dependencies. Run `npm run build:dsh` to build the complete DSH package; `npm run build:client` only rewrites `adapters/dsh/client.js` and never updates `dist/dsh-plugin/`. Run `npm run dev:dsh` to watch `packages/`, `adapters/dsh/`, `assets/`, and `docs/` and rebuild `dist/dsh-plugin/` on each change when a linked local install is the test target. Run `npm run check` for the Node test suite and `sh scripts/test-ui.sh` for the simulated DOM UI flow. Run `npm run verify:dsh-package` to assemble and inspect the npm tarball without publishing it. Do not edit generated `adapters/dsh/client.js` or anything under `dist/` by hand.
 
 ## Code and Test Conventions
 

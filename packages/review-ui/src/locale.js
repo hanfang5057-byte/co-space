@@ -1,7 +1,11 @@
 /** Client locale namespace shared by the Space panel and its composer surfaces. */
+import { BRAND } from '../../brand/brand.js';
+
 export const NS = 'space';
 
 export const zh = {
+  'brand.name': BRAND.name.zh,
+  'brand.nameEnglish': BRAND.name.en,
   'header.eyebrow': 'SPACE / 文档审阅',
   'header.untitled': '个人文档',
   'header.pending': '{count} 条待处理',
@@ -48,6 +52,16 @@ export const zh = {
   'review.toggleShow': '修改建议 展开',
   'review.toggleHide': '修改建议 收起',
   'review.refresh': '刷新文档',
+  'export.button': '导出',
+  'build.versionTitle': '本地构建版本；发布版本不变',
+  'export.busy': '准备中…',
+  'export.note': '仅导出已接受正文，不含待处理建议和评论。',
+  'export.pdf': '打印 / 保存为 PDF',
+  'export.failed': '导出失败，请重试。',
+  'export.printUnavailable': '当前宿主无法打开打印窗口，请在浏览器中打开文档后重试。',
+  'export.printFailed': '打印功能不可用，请检查宿主的打印设置。',
+  'export.preparePrintFailed': '无法生成打印页面。请检查宿主是否允许打开并写入新窗口。',
+  'export.readFailed': '读取正文失败，无法生成 PDF。请刷新文档后重试。',
   'paper.aria': '文档正文',
   'comment.bubble': '评论',
   'comment.author': '用户',
@@ -137,6 +151,8 @@ export const zh = {
 };
 
 export const en = {
+  'brand.name': BRAND.name.zh,
+  'brand.nameEnglish': BRAND.name.en,
   'header.eyebrow': 'SPACE / Document review',
   'header.untitled': 'Personal documents',
   'header.pending': '{count} pending',
@@ -183,6 +199,16 @@ export const en = {
   'review.toggleShow': 'Suggested changes — expand',
   'review.toggleHide': 'Suggested changes — collapse',
   'review.refresh': 'Refresh document',
+  'export.button': 'Export',
+  'build.versionTitle': 'Local build version; the release version is unchanged',
+  'export.busy': 'Preparing…',
+  'export.note': 'Exports accepted content only; pending suggestions and comments are excluded.',
+  'export.pdf': 'Print / Save as PDF',
+  'export.failed': 'Export failed. Please try again.',
+  'export.printUnavailable': 'The host could not open a print window. Open the document in a browser and try again.',
+  'export.printFailed': 'Printing is unavailable. Check the host print settings.',
+  'export.preparePrintFailed': 'Could not prepare the print page. Check whether the host allows opening and writing to a new window.',
+  'export.readFailed': 'Could not read the document for PDF export. Refresh and try again.',
   'paper.aria': 'Document body',
   'comment.bubble': 'Comment',
   'comment.author': 'You',

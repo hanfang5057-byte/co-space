@@ -1,7 +1,5 @@
 {
   "meta": {
-    "title": "Space",
-    "description": "Create and review personal documents: start a new document (untitled, with an empty body) or let the agent create one with content, then review the agent's concrete suggestions and accept or reject each one. Browse documents from the Space entry in the sidebar, add them from the composer + menu as clickable document cards that open the review panel in the right sidebar, and explicitly ask the agent to process comments through Space tools. Documents stay in the local DSH data directory; accepted titles and bodies still change only after you accept suggestions.",
     "detail": "docs/DETAIL.md"
   }
 }

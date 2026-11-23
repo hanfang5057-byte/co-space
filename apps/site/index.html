@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fc">
+  <meta name="description" content="CoSpace 让 Agent 提出文档修改建议，由你逐条审阅并决定是否接受。">
+  <title>CoSpace — 和 AI 一起写，把决定权留给自己</title>
+  <link rel="icon" href="/assets/cospace-icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/site.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="CoSpace 首页"><img src="/assets/cospace-icon.svg" alt=""><span>CoSpace</span></a>
+    <nav aria-label="主导航"><a href="#workflow">工作方式</a><a href="#install">安装</a><a class="github" href="https://github.com/hanfang5057-byte/co-space" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a></nav>
+    <a class="nav-cta" href="#install">开始使用 <span aria-hidden="true">↗</span></a>
+  </header>
+  <main id="top">
+    <section class="hero shell">
+      <div class="hero-copy">
+        <div class="eyebrow">文档协作空间</div>
+        <h1>和 AI 一起写，<br>把决定权留给<span>自己。</span></h1>
+        <p class="hero-text">让 Agent 帮你起草、提出修改建议。每一处变化都清晰可见，由你审阅并决定是否接受。</p>
+        <div class="hero-actions"><a class="button primary" href="#install">开始使用 <span>↗</span></a><a class="text-link" href="#workflow">了解工作方式 <span>↓</span></a></div>
+      </div>
+      <div class="preview-wrap" aria-label="CoSpace 文档审阅界面示意图">
+        <div class="app-window">
+          <div class="window-bar"><div class="traffic"><i></i><i></i><i></i></div><span>CoSpace <b>/</b> 产品方向.md</span><span class="avatar">H</span></div>
+          <div class="app-body"><aside class="mini-sidebar"><div class="side-brand">◈ <span>Space</span></div><div class="side-label">我的文档</div><div class="doc active">◉ <span>产品方向.md</span></div><div class="doc">◉ <span>发布计划.md</span></div><div class="doc">◉ <span>会议记录.md</span></div><div class="side-add">＋ 新建文档</div></aside>
+            <div class="paper-area"><div class="paper-meta">文档 <span>·</span> 刚刚更新</div><h3>让好想法，<br>自然变成好文档。</h3><p>CoSpace 为 Agent 与人的协作，留出一块<strong>清晰、安心的空间</strong>。</p><p>Agent 可以阅读文档并提出修改建议。每一处变化都能被看见，最终由你决定是否接受。</p><div class="suggestion"><div class="suggestion-head"><span class="suggestion-mark">✳</span><b>修改建议</b><span class="pending">待审阅</span></div><p>让 Agent 与人的协作，留出一块 <mark>清晰、安心的空间</mark>。</p><div class="suggestion-actions"><button>接受建议</button><button>拒绝</button></div></div><p class="faint-line">好的协作，应该让每个人都知道发生了什么。</p></div>
+          </div>
+          <div class="window-foot"><span><i class="green-dot"></i> 本机空间</span><span>1 条待审阅建议</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="workflow section shell" id="workflow">
+      <div class="section-heading"><div><div class="eyebrow">工作方式</div><h2>从想法到定稿，<br>始终由你掌握。</h2></div></div>
+      <div class="steps"><article class="step"><div class="step-top"><span>01</span><span class="step-symbol">▤</span></div><h3>选择文档</h3><p>新建一份文档，或选择你想继续完善的内容。</p></article><div class="step-line"></div><article class="step"><div class="step-top"><span>02</span><span class="step-symbol">✳</span></div><h3>提出建议</h3><p>告诉 Agent 你的想法，也可以在文档中留下评论。</p></article><div class="step-line"></div><article class="step"><div class="step-top"><span>03</span><span class="step-symbol">✓</span></div><h3>由你决定</h3><p>逐条查看修改，接受你认可的内容，保留原有掌控。</p></article></div>
+    </section>
+
+    <section class="install section shell" id="install">
+      <div class="section-heading install-heading"><div><div class="eyebrow">安装</div><h2>选择你的工作环境。</h2></div></div>
+      <div class="install-cards">
+        <article class="install-card dsh-card"><div class="card-top"><div class="host-icon dsh-icon">D</div><span class="host-label">PLUGIN</span></div><h3>DSH</h3><p>通过 DSH 官方插件安装 CoSpace。</p><div class="install-details"><ol><li>打开 DSH 的「插件」页面。</li><li>搜索 <code>dsh-plugin-space</code> 并点击安装。</li><li>从侧边栏进入 Space。</li></ol><p class="requirements">需要 DSH <code>^0.2.2-rc.5</code> · Node.js 24+</p><a class="details-link" href="https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json" target="_blank" rel="noreferrer">查看插件索引 ↗</a></div></article>
+        <article class="install-card wb-card"><div class="card-top"><div class="host-icon wb-icon">W</div><span class="host-label">WORKBUDDY</span></div><h3>WorkBuddy</h3><p>复制安装提示词给 WorkBuddy Agent，使用官网 install.sh 安装 Connector。</p><div class="install-details"><div class="prompt-box"><p id="wb-prompt">请帮我安装 CoSpace WorkBuddy Connector。请从当前 CoSpace 官网下载并运行 install.sh，执行 install 安装；完成后告诉我是否需要重启 WorkBuddy，以及如何打开 CoSpace 文档空间。</p><button class="copy-command copy-prompt" aria-label="复制给 WorkBuddy Agent 的提示词">复制提示词</button></div><p class="requirements">将提示词复制到 WorkBuddy 对话中发送。安装脚本适用于 macOS 与 Linux。</p></div></article>
+      </div>
+      <p class="data-note">文档保存在本机。DSH 与 WorkBuddy 使用独立空间。</p>
+    </section>
+  </main>
+  <footer class="footer"><div class="shell footer-inner"><a class="brand" href="#top"><img src="/assets/cospace-icon.svg" alt=""><span>CoSpace</span></a><span class="footer-note">把文档，留在自己的掌控中。</span><div class="footer-links"><a href="https://github.com/hanfang5057-byte/co-space" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://github.com/hanfang5057-byte/co-space/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a></div></div></footer>
+</body>
+</html>

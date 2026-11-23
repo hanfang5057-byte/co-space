@@ -3,16 +3,23 @@ import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import brand from '../packages/brand/metadata.json' with { type: 'json' };
 
 const root = path.resolve(import.meta.dirname, '..');
 const packageRoot = path.join(root, 'dist/dsh-plugin');
 const manifest = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'));
 
 assert.equal(manifest.name, 'dsh-plugin-space');
+assert.equal(manifest.description, brand.description.en);
 assert.equal(manifest.private, undefined, 'the staged npm package must be publishable');
 assert.equal(manifest.dsh?.bundle?.patch, './cordis.patch.yml');
 for (const file of ['index.js', 'client.js', 'server/mcp-entry.js', 'cordis.patch.yml', 'icon.svg', 'locale/en.json', 'locale/zh.json']) {
   await access(path.join(packageRoot, file));
+}
+for (const [locale, language] of [['zh', 'zh'], ['en', 'en']]) {
+  const data = JSON.parse(await readFile(path.join(packageRoot, 'locale', `${locale}.json`), 'utf8'));
+  assert.equal(data.meta.title, brand.name[language]);
+  assert.equal(data.meta.description, brand.description[language]);
 }
 
 const bundledEntries = await Promise.all(['index.js', 'server/mcp-entry.js'].map(file => readFile(path.join(packageRoot, file), 'utf8')));

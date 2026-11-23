@@ -1,8 +1,10 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { renderMarkdown } from './markdown.js';
 import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
+import { createDocx, createPdfHtml, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import './space.css';
 
@@ -20,6 +22,11 @@ const documentCardTime = (item,t) => {
 
 /** Fallback translator keeps the panel renderable outside a locale seat, as in the DOM smoke test. */
 const defaultT = (key, vars) => translate(zh, key, vars);
+const localBuildVersion = typeof __COSPACE_BUILD_VERSION__ === 'undefined' ? 'development' : __COSPACE_BUILD_VERSION__;
+
+export function CospaceMark({ className = '' }) {
+  return <img className={className} src={cospaceIcon} alt="" aria-hidden="true"/>;
+}
 
 /** Render Markdown as annotated, escaped HTML; raw HTML stays disabled. */
 function documentView(html) { return <div className="space-markdown" dangerouslySetInnerHTML={{__html:html}} />; }
@@ -463,8 +470,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
       <div ref={surface} onPointerMove={trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
-      <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
-        {!hasAnnotations && <div className="space-comment-empty"><CommentIcon size={22}/><strong>{t('annotations.emptyTitle')}</strong><p>{t('annotations.emptyHint')}</p></div>}
+      {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
         <div className="space-comment-balloons is-positioned">
           {suggestionItems.map(annotation=><SuggestionBalloon key={annotation.key} item={annotation.item} index={annotation.index} active={active===annotation.item.id} busy={busy} t={t} onActivate={()=>activateSuggestion(annotation.item.id)} onDecide={decision=>decide(annotation.item.id,decision)} onPointerEnter={keepHover} setRef={(id,el)=>{if(el)cardRefs.current.set(id,el);else cardRefs.current.delete(id)}} style={{top:layout.positions[annotation.key],visibility:layout.positions[annotation.key]===undefined?'hidden':undefined,...(hoverPreview?.key===annotation.key?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===annotation.key?'is-hover-preview':''}/>) }
@@ -474,7 +480,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
           <h3>{t('comment.staleGroup')}</h3><p className="space-muted">{t('comment.staleHint')}</p>
           {staleComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={()=>{}} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}}/>)}
         </section>}
-      </aside>
+      </aside>}
       {layout.lines.length>0 && <svg className="space-comment-lines" aria-hidden="true">{layout.lines.map(line=><g key={line.key} className={line.active?'is-active':undefined}>
         <path pathLength="1" className={`space-connector-line ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} d={line.d}/>
         <circle className={`space-connector-dot is-origin ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x1} cy={line.y1} r="3"/>
@@ -501,6 +507,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
 export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = null }) {
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
   const [deleteTarget,setDeleteTarget]=useState(null);
+  const [exporting,setExporting]=useState(false);
   const deleteTitleId=useId();
   const user=useCurrentUser(api);
   const review=useSpaceReview(api,docId,sessionId,t,sendTarget);
@@ -542,13 +549,45 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
+  const exportDocument=async (format,popup=null)=>{
+    setExporting(true);setMessage('');
+    let stage='read';
+    try {
+      const snapshot=await call('readDocument',{docId});
+      if(!snapshot || typeof snapshot.content!=='string') throw new Error('Document unavailable');
+      const filename=exportFileName(snapshot.title,format);
+      stage=format==='pdf'?'preparePrintPage':'createFile';
+      if(format==='md') {
+        const blob=new Blob([snapshot.content],{type:'text/markdown;charset=utf-8'});
+        const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+      } else if(format==='docx') {
+        const blob=createDocx(snapshot.content),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+      } else {
+        if(!popup||popup.closed) throw new Error('PRINT_WINDOW_UNAVAILABLE');
+        popup.onload=()=>{
+          stage='callPrint';
+          try {
+            popup.document.title=filename.replace(/\.pdf$/,'');
+            popup.focus();
+            if(typeof popup.print!=='function') throw new Error('PRINT_API_UNAVAILABLE');
+            popup.print();
+          } catch { setMessage(t('export.printFailed')); }
+        };
+        popup.document.open();popup.document.write(createPdfHtml(snapshot.title,snapshot.content));popup.document.close();
+      }
+    } catch (error) {
+      try { popup?.close(); } catch { /* host window proxies may not expose close */ }
+      setMessage(error?.message==='PRINT_WINDOW_UNAVAILABLE' ? t('export.printUnavailable') : format==='pdf' ? t(stage==='read'?'export.readFailed':stage==='callPrint'?'export.printFailed':'export.preparePrintFailed') : t('export.failed'));
+    }
+    finally { setExporting(false); }
+  };
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const home=!docId;
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
-      <header className="space-home-header"><div className="space-brand"><span className="space-brand-mark" aria-hidden="true">S</span><span>SPACE</span></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></header>
+      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span><small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
         {documents.length ? <div className="space-home-grid">{documents.map((item,index)=><article className="space-home-card" key={item.id}>
@@ -560,8 +599,8 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
         </article>)}</div> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></div>}
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
-      <header className="space-top space-preview-top"><button type="button" className="space-back" aria-label={t('home.back')} title={t('home.back')} onClick={()=>setDocId(null)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12"/></svg></button><div className="space-preview-heading"><span>{t('home.eyebrow')}</span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-        <div className="space-header-tools">{review.doc&&<div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>}<button type="button" className="space-refresh" disabled={!docId||busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>{review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
+      <header className="space-top space-preview-top"><button type="button" className="space-back" aria-label={t('home.back')} title={t('home.back')} onClick={()=>setDocId(null)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12"/></svg></button><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
+            <div className="space-header-tools">{review.doc&&<div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>}{review.doc&&<details className="space-export-menu"><summary>{exporting?t('export.busy'):t('export.button')}</summary><div className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>exportDocument('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>exportDocument('docx')}>Word <span>.docx</span></button><button type="button" disabled={exporting} onClick={()=>{const popup=window.open('about:blank','_blank');if(!popup){setMessage(t('export.failed'));return;}void exportDocument('pdf',popup);}}>{t('export.pdf')}</button></div></details>}<button type="button" className="space-refresh" disabled={!docId||busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>{review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}

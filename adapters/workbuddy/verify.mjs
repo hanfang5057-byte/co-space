@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import brand from '../../packages/brand/metadata.json' with { type: 'json' };
 
 const adapterDir = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.resolve(adapterDir, '../../dist/workbuddy-connector');
@@ -15,6 +16,10 @@ const marketConfig = await readJson(path.join(marketDir, 'mcp.json'));
 const runtimeManifest = await readJson(path.join(runtimeDir, 'package.json'));
 const releaseManifest = await readJson(path.join(outputDir, 'release.json'));
 assert.equal(meta.type, 'mcp');
+assert.equal(meta.name_zh, brand.name.zh);
+assert.equal(meta.name_en, brand.name.en);
+assert.equal(meta.description_zh, brand.description.zh);
+assert.equal(meta.description_en, brand.description.en);
 assert.equal(meta.source, 'cospace-review');
 assert.equal(meta.minWorkbuddyVersion, '5.0.0');
 assert.equal(Object.keys(marketConfig.mcpServers).length, 1, 'Connector must configure exactly one MCP server');

@@ -184,10 +184,6 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-rail-counts .is-comment i { background: var(--space-comment); }
 .space-app .space-send-compact { grid-column: 2; grid-row: 1; margin: 0; align-self: center; background: var(--space-text); color: var(--space-paper); border-color: transparent; border-radius: 8px; min-block-size: 34px; padding: 6px 12px; font-size: 12px; box-shadow: 0 2px 6px rgba(20,16,10,.14); }
 .space-app .space-send-compact:hover:not(:disabled) { filter: brightness(1.06); }
-.space-comment-empty { display: grid; justify-items: center; gap: 8px; padding: 38px 14px; text-align: center; color: var(--space-muted); }
-.space-comment-empty svg { color: var(--space-comment); opacity: .72; }
-.space-comment-empty strong { color: var(--space-text); font-size: 13px; font-weight: 600; }
-.space-comment-empty p { margin: 0; max-inline-size: 22em; font-size: 12px; line-height: 1.6; }
 .space-annotation-balloon { background: var(--space-card); border: 1px solid var(--space-border); border-radius: 12px; padding: 14px; box-shadow: 0 1px 2px rgba(60,45,25,.04), 0 6px 18px rgba(60,45,25,.045); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
 .space-annotation-balloon:hover { border-color: var(--space-border-strong); box-shadow: 0 2px 4px rgba(60,45,25,.05), 0 10px 24px rgba(60,45,25,.06); transform: translateY(-1px); }
 .space-comment-balloon { border-inline-start: 3px solid var(--space-comment); }
@@ -271,6 +267,15 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-app .space-send-header { block-size: 32px; min-block-size: 32px; margin: 0; padding: 0 14px; line-height: 1; box-sizing: border-box; }
 .space-app .space-refresh { display: inline-flex; align-items: center; justify-content: center; inline-size: 32px; block-size: 32px; min-block-size: 32px; padding: 0; border-radius: 999px; background: var(--space-card); color: var(--space-muted); }
 .space-app .space-refresh:hover:not(:disabled) { color: var(--space-text); border-color: var(--space-border-strong); }
+.space-export-menu { position: relative; z-index: 30; font-size: 12px; }
+.space-export-menu summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--space-border); border-radius: 999px; background: var(--space-card); color: var(--space-text); }
+.space-export-menu summary::-webkit-details-marker { display: none; }
+.space-export-menu[open] { align-self: center; }
+.space-export-panel { position: absolute; inset-block-start: calc(100% + 8px); inset-inline-end: 0; width: 236px; padding: 6px; border: 1px solid var(--space-border); border-radius: 12px; background: var(--space-card); box-shadow: 0 10px 30px rgba(40,34,24,.14); }
+.space-export-panel p { margin: 0 6px 5px; padding: 6px 4px 10px; border-bottom: 1px solid var(--space-border); color: var(--space-muted); font-size: 12px; line-height: 1.5; }
+.space-app .space-export-panel button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; margin: 0; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--space-text); text-align: left; font-size: 13px; cursor: pointer; }
+.space-app .space-export-panel button:hover:not(:disabled), .space-app .space-export-panel button:focus-visible { background: var(--space-comment-soft); }
+.space-export-panel button span { color: var(--space-muted); font-size: 11px; }
 
 /* Workspace polish: quieter navigation, a clearer paper hierarchy, and
    always discoverable document actions with keyboard and touch support. */
@@ -554,7 +559,11 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-home { display:flex; flex:1; flex-direction:column; min-block-size:0; overflow:auto; overscroll-behavior:contain; padding:0 clamp(22px,5vw,76px) 36px; background:radial-gradient(ellipse at 82% 6%,rgba(241,228,206,.52),transparent 34%),var(--space-home-paper); color:var(--space-home-ink); }
 .space-home-header { display:flex; flex:none; align-items:center; justify-content:space-between; min-block-size:76px; border-block-end:1px solid var(--space-home-line); }
 .space-brand { display:flex; align-items:center; gap:10px; color:#383932; font-family:var(--font-ui); font-size:12px; font-weight:750; letter-spacing:.15em; }
-.space-brand-mark { display:grid; place-items:center; inline-size:30px; block-size:30px; border-radius:9px; background:#34382f; color:#f5f0e4; font-family:var(--font-ui); font-size:18px; font-weight:700; letter-spacing:0; }
+.space-brand-icon { display:block; inline-size:30px; block-size:30px; flex:none; border-radius:8px; }
+.space-brand { letter-spacing:0; }
+.space-brand-names { display:grid; gap:2px; line-height:1.1; }
+.space-brand-names strong { font-size:12px; font-weight:750; }
+.space-brand-names small { color:#777b73; font-size:9px; font-weight:600; letter-spacing:.08em; }
 .space-app .space-home-new { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-block-size:42px; padding:0 16px; border:1px solid #34382f; border-radius:9px; background:#34382f; color:#fffdf9; font-size:13px; font-weight:650; box-shadow:0 3px 8px rgba(46,47,38,.12); }
 .space-app .space-home-new:hover:not(:disabled) { background:#4a4d42; }
 .space-home-new span { font-size:20px; line-height:1; font-weight:400; }
@@ -604,6 +613,8 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-back svg { inline-size:22px; block-size:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .space-preview-heading { display:grid; min-inline-size:0; gap:1px; }
 .space-preview-heading>span { overflow:hidden; color:#898d87; font-size:9px; font-weight:700; letter-spacing:.12em; text-overflow:ellipsis; white-space:nowrap; }
+.space-build-version { display:inline-block; margin-inline-start:5px; color:#888c84; font:500 8px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:0; vertical-align:middle; }
+.space-brand .space-build-version { max-inline-size:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .space-preview-heading h1 { overflow:hidden; max-inline-size:min(42vw,540px); margin:0; color:#33362f; font-size:14px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
 .space-preview-top .space-header-tools { margin-inline-start:auto; }
 .space-preview-loading { display:grid; flex:1; place-items:center; min-block-size:0; color:var(--space-muted); }

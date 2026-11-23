@@ -1,0 +1,11 @@
+{
+  "name": {
+    "zh": "智联文档空间",
+    "en": "CoSpace"
+  },
+  "description": {
+    "zh": "本机文档管理与 AI 修改审阅。",
+    "en": "Manage local documents and review AI edits."
+  },
+  "icon": "assets/cospace-icon.svg"
+}

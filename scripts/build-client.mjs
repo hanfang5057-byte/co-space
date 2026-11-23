@@ -1,8 +1,9 @@
 import {build} from 'esbuild';
 import {readFile,writeFile,rm} from 'node:fs/promises';
 import path from 'node:path';
+import { localBuildVersion } from './local-build-version.mjs';
 const root=path.resolve(import.meta.dirname,'..');const adapter=path.join(root,'adapters/dsh');const temp=path.join(root,'.space-client-build.cjs');
-const result=await build({entryPoints:[path.join(adapter,'client/index.jsx')],outfile:temp,bundle:true,format:'cjs',platform:'browser',target:'es2020',jsx:'automatic',minify:true,metafile:true,external:['react','react-dom','react/jsx-runtime'],logLevel:'info'});
+const result=await build({entryPoints:[path.join(adapter,'client/index.jsx')],outfile:temp,bundle:true,format:'cjs',platform:'browser',target:'es2020',jsx:'automatic',minify:true,metafile:true,loader:{'.svg':'dataurl'},external:['react','react-dom','react/jsx-runtime'],define:{__COSPACE_BUILD_VERSION__:JSON.stringify(localBuildVersion)},logLevel:'info'});
 // A second React copy would break hooks and split context; fail the build instead.
 const packaged=Object.keys(result.metafile.inputs).filter(input=>/(?:^|\/)node_modules\/(?:react|react-dom)(?:\/|$)/.test(input));
 if(packaged.length) throw new Error(`Refusing to bundle React into the client: ${packaged.join(', ')}`);

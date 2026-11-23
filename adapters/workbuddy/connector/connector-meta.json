@@ -1,10 +1,4 @@
 {
-  "name": "智联文档空间",
-  "name_zh": "智联文档空间",
-  "name_en": "CoSpace Document Review",
-  "description": "智联文档空间（CoSpace）：在本机管理个人文档，并审阅 Agent 提交的逐条修改建议。",
-  "description_zh": "在本机管理个人文档，并审阅 Agent 提交的逐条修改建议。",
-  "description_en": "Manage personal documents locally and review each edit proposed by an agent.",
   "source": "cospace-review",
   "type": "mcp",
   "version": "0.1.4",

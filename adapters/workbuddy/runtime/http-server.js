@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpHandler } from '../../../packages/transport-http/http-handler.js';
+import brand from '../../../packages/brand/metadata.json' with { type: 'json' };
 
 const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const assets = new Map([
@@ -16,7 +17,7 @@ const INDEX = Buffer.from(`<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>智联文档空间（CoSpace）文档审阅</title>
+  <title>${brand.name.zh}（${brand.name.en}）文档审阅</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/client.css">
 </head>

@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { ReviewSendButton, SpaceApp, SpaceReviewSurface, useSpaceReview } from '../../../packages/review-ui/src/SpaceApp.jsx';
+import { CospaceMark, ReviewSendButton, SpaceApp, SpaceReviewSurface, useSpaceReview } from '../../../packages/review-ui/src/SpaceApp.jsx';
 import { useCurrentUser } from '../../../packages/review-ui/src/current-user.js';
 import { translate, zh, en } from '../../../packages/review-ui/src/locale.js';
 import '../../../packages/review-ui/src/space.css';
@@ -27,7 +27,7 @@ function ReviewPage({ docId }) {
   return <div className="space-app space-web-review">
     <header className="space-web-header">
       <a className="space-web-brand" href="/" aria-label={t('home.back')}>
-        <span className="space-brand-mark" aria-hidden="true">S</span><span>SPACE</span>
+        <CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span>
       </a>
       <div className="space-web-title"><span>{t('home.eyebrow')}</span><h1>{review.doc?.title || docId}</h1></div>
       <div className="space-header-counts" role="group" aria-label={t('annotations.title')}>

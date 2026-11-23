@@ -2,6 +2,8 @@ import { build } from 'esbuild';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localBuildVersion } from '../../scripts/local-build-version.mjs';
+import brand from '../../packages/brand/metadata.json' with { type: 'json' };
 
 const adapterDir = path.dirname(fileURLToPath(import.meta.url));
 const repoDir = path.resolve(adapterDir, '../..');
@@ -10,6 +12,16 @@ const runtimeDir = path.join(outputDir, 'runtime-package');
 const publicDir = path.join(runtimeDir, 'public');
 const marketDir = path.join(outputDir, 'market');
 const manifest = JSON.parse(await readFile(path.join(adapterDir, 'package.json'), 'utf8'));
+manifest.description = brand.description.en;
+const connectorMeta = JSON.parse(await readFile(path.join(adapterDir, 'connector/connector-meta.json'), 'utf8'));
+Object.assign(connectorMeta, {
+  name: brand.name.zh,
+  name_zh: brand.name.zh,
+  name_en: brand.name.en,
+  description: brand.description.zh,
+  description_zh: brand.description.zh,
+  description_en: brand.description.en,
+});
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(publicDir, { recursive: true });
@@ -37,6 +49,8 @@ await build({
   target: 'es2020',
   format: 'iife',
   jsx: 'automatic',
+  loader: { '.svg': 'dataurl' },
+  define: { __COSPACE_BUILD_VERSION__: JSON.stringify(localBuildVersion) },
   nodePaths: [path.join(adapterDir, 'node_modules')],
   sourcemap: false,
   minify: true,
@@ -49,9 +63,9 @@ for (const server of Object.values(marketConfig.mcpServers)) {
 }
 
 await Promise.all([
-  cp(path.join(adapterDir, 'connector/connector-meta.json'), path.join(marketDir, 'connector-meta.json')),
-  cp(path.join(repoDir, 'assets/cospace-icon.svg'), path.join(marketDir, 'icon.svg')),
-  cp(path.join(repoDir, 'assets/cospace-icon.svg'), path.join(publicDir, 'icon.svg')),
+  writeFile(path.join(marketDir, 'connector-meta.json'), `${JSON.stringify(connectorMeta, null, 2)}\n`),
+  cp(path.join(repoDir, brand.icon), path.join(marketDir, 'icon.svg')),
+  cp(path.join(repoDir, brand.icon), path.join(publicDir, 'icon.svg')),
   cp(path.join(adapterDir, 'connector/skills/space-review/SKILL.md'), path.join(marketDir, 'skills/space-review/SKILL.md')),
   cp(path.join(adapterDir, 'README.md'), path.join(outputDir, 'README.md')),
   cp(path.join(adapterDir, 'install.sh'), path.join(outputDir, 'install.sh')),

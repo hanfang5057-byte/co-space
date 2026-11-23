@@ -93,7 +93,17 @@ npm install                 # 首次安装依赖或依赖变更后
 npm run build:dsh
 ```
 
-`build:dsh` 会先运行 `build:client`，将 `adapters/dsh/client/index.jsx` 和共享审阅 UI 编译为生成文件 `adapters/dsh/client.js`，再组装完整插件到 `dist/dsh-plugin/`。不要手工修改 `client.js` 或 `dist/` 中的生成文件。
+`build:dsh` 会先运行 `build:client`，将 `adapters/dsh/client/index.jsx` 和共享审阅 UI 编译为生成文件 `adapters/dsh/client.js`，再组装完整插件到 `dist/dsh-plugin/`。不要手工修改 `client.js` 或 `dist/` 中的生成文件。只运行 `build:client` 不会更新 `dist/dsh-plugin/`，因此不会影响已安装的插件。
+
+品牌名称和中英文简介的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包和 WorkBuddy Connector 构建均从这里读取。图标源文件由该配置的 `icon` 指定。修改这些品牌字段后，分别运行 `npm run build:dsh` 和 `npm run build:workbuddy` 生成宿主包元数据。
+
+已把本地插件以 `link:` 方式安装到 DSH profile 时，用监听模式开发：
+
+```sh
+npm run dev:dsh
+```
+
+该命令监听 `packages/`、`adapters/dsh/`、`assets/`、`docs/`，保存后自动重新构建 `dist/dsh-plugin/` 并打印本次构建戳；DSH 的 client-hmr 约 0.5 秒内热替换插件客户端，通常无需刷新页面（若页面控制台出现 `client-hmr: /plugins/events closed`，刷新一次即可）。
 
 校验构建包：
 

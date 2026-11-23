@@ -4,7 +4,6 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "WorkBuddy MCP connector for local 智联文档空间（CoSpace） document review",
   "engines": {
     "node": ">=24"
   },
