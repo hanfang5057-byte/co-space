@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-space",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Review agent-proposed edits to personal documents: create documents, accept or reject each suggestion, and send comments to the current conversation.",
   "type": "module",
   "license": "MIT",
