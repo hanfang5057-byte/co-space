@@ -3,7 +3,7 @@
     "cospace-review": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "cospace-workbuddy-connector@0.1.0"],
+      "args": ["-y", "cospace-workbuddy-connector@__PACKAGE_VERSION__"],
       "timeout": 30000,
       "runtime": {
         "type": "node",

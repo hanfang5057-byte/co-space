@@ -7,7 +7,7 @@
   "description_en": "Manage personal documents locally and review each edit proposed by an agent.",
   "source": "cospace-review",
   "type": "mcp",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "minWorkbuddyVersion": "5.0.0",
   "examples_zh": [
     "把这份方案存入 Space，并提出三条独立修改建议",

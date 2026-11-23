@@ -19,7 +19,11 @@
     "check": "node --test test/*.test.js",
     "build:client": "node scripts/build-client.mjs",
     "build:dsh": "npm run build:client && node scripts/build-dsh.mjs",
-    "pack:dsh": "npm run build:dsh && npm pack ./dist/dsh-plugin --pack-destination ./dist",
+    "build:workbuddy": "node adapters/workbuddy/build.mjs",
+    "verify:workbuddy-package": "npm run build:workbuddy && node adapters/workbuddy/verify.mjs",
+    "pack:workbuddy": "node scripts/pack-npm.mjs workbuddy",
+    "pack:npm": "node scripts/pack-npm.mjs",
+    "pack:dsh": "node scripts/pack-npm.mjs dsh",
     "verify:dsh-package": "npm run build:dsh && node scripts/verify-dsh-package.mjs && npm pack ./dist/dsh-plugin --dry-run"
   },
   "devDependencies": {

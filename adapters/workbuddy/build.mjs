@@ -9,6 +9,7 @@ const outputDir = path.join(repoDir, 'dist/workbuddy-connector');
 const runtimeDir = path.join(outputDir, 'runtime-package');
 const publicDir = path.join(runtimeDir, 'public');
 const marketDir = path.join(outputDir, 'market');
+const manifest = JSON.parse(await readFile(path.join(adapterDir, 'package.json'), 'utf8'));
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(publicDir, { recursive: true });
@@ -42,24 +43,41 @@ await build({
   logLevel: 'info',
 });
 
+const marketConfig = JSON.parse(await readFile(path.join(adapterDir, 'connector/mcp.json'), 'utf8'));
+for (const server of Object.values(marketConfig.mcpServers)) {
+  server.args = server.args.map(value => value.replace('__PACKAGE_VERSION__', manifest.version));
+}
+
 await Promise.all([
   cp(path.join(adapterDir, 'connector/connector-meta.json'), path.join(marketDir, 'connector-meta.json')),
-  cp(path.join(adapterDir, 'connector/mcp.json'), path.join(marketDir, 'mcp.json')),
   cp(path.join(repoDir, 'assets/cospace-icon.svg'), path.join(marketDir, 'icon.svg')),
   cp(path.join(repoDir, 'assets/cospace-icon.svg'), path.join(publicDir, 'icon.svg')),
   cp(path.join(adapterDir, 'connector/skills/space-review/SKILL.md'), path.join(marketDir, 'skills/space-review/SKILL.md')),
   cp(path.join(adapterDir, 'README.md'), path.join(outputDir, 'README.md')),
+  cp(path.join(adapterDir, 'install.sh'), path.join(outputDir, 'install.sh')),
 ]);
+await writeFile(path.join(marketDir, 'mcp.json'), `${JSON.stringify(marketConfig, null, 2)}\n`);
 
-const manifest = JSON.parse(await readFile(path.join(adapterDir, 'package.json'), 'utf8'));
 await writeFile(path.join(runtimeDir, 'package.json'), `${JSON.stringify({
   name: manifest.name,
   version: manifest.version,
   description: manifest.description,
   type: 'module',
   engines: manifest.engines,
+  license: manifest.license,
   bin: { 'cospace-workbuddy-connector': './server.js' },
-  files: ['server.js', 'public/'],
+  files: ['server.js', 'public/', 'README.md', 'LICENSE'],
+}, null, 2)}\n`);
+await Promise.all([
+  cp(path.join(adapterDir, 'npm/README.md'), path.join(runtimeDir, 'README.md')),
+  cp(path.join(repoDir, 'LICENSE'), path.join(runtimeDir, 'LICENSE')),
+]);
+await writeFile(path.join(outputDir, 'release.json'), `${JSON.stringify({
+  name: manifest.name,
+  version: manifest.version,
+  source: 'cospace-review',
+  mcpServer: 'cospace-review',
+  node: manifest.engines.node,
 }, null, 2)}\n`);
 
 const localConfig = {

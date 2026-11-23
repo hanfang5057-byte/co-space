@@ -8,15 +8,29 @@ From the repository root, install this adapter's dependencies and build the test
 
 ```sh
 npm install --prefix adapters/workbuddy
-node adapters/workbuddy/build.mjs
-node adapters/workbuddy/verify.mjs
+npm run verify:workbuddy-package
 ```
 
-The generated package is `dist/workbuddy-connector/`. It contains the WorkBuddy-only MCP runtime, shared review core and UI bundles, Connector metadata, MCP configuration, icon and Skill. Do not edit generated output by hand.
+The generated package is `dist/workbuddy-connector/`. It contains the WorkBuddy-only MCP runtime, shared review core and UI bundles, Connector metadata, MCP configuration, icon and Skill. Do not edit generated output by hand. Use root `npm run pack:npm` to create both npm archives at the shared version.
+
+## Private Connector installation
+
+`install.sh` installs or updates the published public npm MCP package by adding one managed entry to the user's `~/.workbuddy/mcp.json`. It resolves the current `latest` npm version at install/update time, pins that exact version in WorkBuddy's config, and declares WorkBuddy-managed Node runtime (`>=24`). It requires Bash and Python 3; it does not require system Node or npm. The config is backed up before every change, and other MCP entries are preserved.
+
+```sh
+bash adapters/workbuddy/install.sh install
+bash adapters/workbuddy/install.sh update
+bash adapters/workbuddy/install.sh uninstall
+bash adapters/workbuddy/install.sh uninstall --purge-data --yes
+```
+
+Uninstall preserves `~/.workbuddy/space` by default. Data removal requires `--purge-data`, asks for a `DELETE` confirmation, and requires WorkBuddy to be closed first; `--yes` skips the prompt for a non-interactive flow. For the one-line `curl | bash` distribution, host the built `install.sh` from `dist/workbuddy-connector/` at a stable HTTPS URL. The installer has no embedded package version; the build generates `release.json` and market `mcp.json` from the version in this package manifest. The package itself is published from `dist/workbuddy-connector/runtime-package/`, not from this private source directory.
+
+The installer edits the on-disk MCP config only. WorkBuddy reload behavior varies by client version and is not forced by the script; if the new server does not appear, restart WorkBuddy.
 
 ## Local WorkBuddy verification
 
-`connector/mcp.local.json` is a developer-only config template. The build script substitutes the current local Node executable and absolute bundled runtime path into the generated `mcp.local.json`; use that file only for local verification in WorkBuddy's MCP manager. The market `mcp.json` uses the published npm package name and is not installable until that package is published.
+`dist/workbuddy-connector/mcp.local.json` is a developer-only config generated with the current local Node executable and absolute bundled runtime path; use it only for local verification in WorkBuddy's MCP manager. The market `mcp.json` uses the published npm package name and is not installable until that package is published.
 
 The local MCP process exposes document tools over stdio. When a review page is requested, it starts or reuses a temporary OS-managed user service: launchd in the current macOS GUI session, `systemd --user` on Linux, or an interactive one-time Task Scheduler task on Windows. These services are not configured to start at login. On Linux without a working user systemd manager, the review page reports an actionable error instead of relying on a detached process that the host may kill. The sidecar binds only to an ephemeral `127.0.0.1` port and unloads after 30 minutes without activity. Browser requests and every MCP document-service call refresh this sliding idle timeout. The sidecar stores mode-0600 lifecycle metadata in the WorkBuddy data root and requires a random per-run token on its health endpoint. The connector prints no diagnostics to stdout.
 

@@ -82,7 +82,7 @@ npm run check
 
 ## 打包
 
-根目录是私有 npm workspace，不直接发布。DSH 插件和 WorkBuddy Connector 分别构建、校验和交付；修改共享审阅 UI 后，需要分别构建两个适配器。
+根目录是私有 npm workspace，不直接发布。DSH 插件和 WorkBuddy Connector 分别构建、校验和交付；修改共享审阅 UI 后，需要分别构建两个适配器。两个公开 npm 包共用 [`release/npm-version.json`](release/npm-version.json) 中的版本。发布前运行 `npm run pack:npm`，它会同步两边的包清单、lockfile 和 Connector 元数据，构建校验后把两个 tarball 放进 `dist/npm-packages/`。
 
 ### DSH 插件
 
@@ -107,7 +107,7 @@ npm run verify:dsh-package
 npm run pack:dsh
 ```
 
-tarball 输出到 `dist/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`；发布 npm 包时使用生成的 tarball。
+`npm run pack:dsh` 会调用统一打包脚本并只产出 DSH tarball。完整发布优先使用 `npm run pack:npm`；tarball 输出到 `dist/npm-packages/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`。
 
 ### WorkBuddy Connector
 
@@ -131,6 +131,8 @@ node adapters/workbuddy/verify.mjs
 ```
 
 WorkBuddy 构建会直接从共享源码生成自己的审阅页面，不依赖 DSH 的 `adapters/dsh/client.js`；因此共享 UI 改动后，两个适配器都要各自重新构建。
+
+`npm run pack:workbuddy` 也调用统一打包脚本，只产出 WorkBuddy tarball；两个包的版本仍会同步。
 
 ## 许可证
 
