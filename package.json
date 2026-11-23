@@ -5,10 +5,10 @@
   "type": "module",
   "license": "MIT",
   "author": "hanfang",
-  "homepage": "https://gitee.com/hanfang5057/dsh-space",
+  "homepage": "https://github.com/hanfang5057-byte/dsh-space",
   "repository": {
     "type": "git",
-    "url": "https://gitee.com/hanfang5057/dsh-space.git"
+    "url": "https://github.com/hanfang5057-byte/dsh-space.git"
   },
   "keywords": [
     "dsh",
