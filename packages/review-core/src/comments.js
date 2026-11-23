@@ -89,10 +89,14 @@ export class CommentStore {
         CREATE TABLE IF NOT EXISTS space_comments(id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, quote TEXT NOT NULL, body TEXT NOT NULL, from_pos INTEGER NOT NULL, to_pos INTEGER NOT NULL, doc_version INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', request_id TEXT, context_before TEXT NOT NULL DEFAULT '', context_after TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS space_comment_sends(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, session_id TEXT NOT NULL, doc_id TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error TEXT);
         CREATE TABLE IF NOT EXISTS space_comment_completions(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, doc_id TEXT NOT NULL, result TEXT NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS space_comment_processing(comment_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, status TEXT NOT NULL, suggestion_ids TEXT NOT NULL, reason TEXT, operation_id TEXT NOT NULL, updated_at TEXT NOT NULL);`);
+        CREATE TABLE IF NOT EXISTS space_comment_results(comment_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, suggestion_ids TEXT NOT NULL, operation_id TEXT NOT NULL, updated_at TEXT NOT NULL);`);
       const columns=new Set(this.db.prepare('PRAGMA table_info(space_comments)').all().map(column=>column.name));
       if(!columns.has('context_before')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_before TEXT NOT NULL DEFAULT ''");
       if(!columns.has('context_after')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_after TEXT NOT NULL DEFAULT ''");
+      const legacy=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_comment_processing'").get();
+      if(legacy){
+        this.db.exec('DELETE FROM space_comments; DELETE FROM space_comment_sends; DELETE FROM space_comment_results; DELETE FROM space_comment_completions; DROP TABLE space_comment_processing');
+      }
       this.db.exec('COMMIT');
     } catch(error) {
       try { this.db.exec('ROLLBACK'); } catch {}
@@ -125,7 +129,7 @@ export class CommentStore {
       const row=this.db.prepare('SELECT id,doc_id,status FROM space_comments WHERE id=? AND doc_id=?').get(commentId,docId);
       if(!row) fail('COMMENT_NOT_FOUND','Comment not found');
       if(row.status==='sending') fail('COMMENT_BUSY','Comment is being sent');
-      this.db.prepare('DELETE FROM space_comment_processing WHERE comment_id=?').run(commentId);
+      this.db.prepare('DELETE FROM space_comment_results WHERE comment_id=?').run(commentId);
       this.db.prepare('DELETE FROM space_comments WHERE id=? AND doc_id=?').run(commentId,docId);
       return {id:commentId,deleted:true};
     });
@@ -136,7 +140,7 @@ export class CommentStore {
       if(this.db.prepare("SELECT id FROM space_comments WHERE doc_id=? AND status='sending' LIMIT 1").get(docId)) fail('COMMENT_BUSY','A comment for this document is being sent');
       this.db.prepare('DELETE FROM space_comments WHERE doc_id=?').run(docId);
       this.db.prepare('DELETE FROM space_comment_sends WHERE doc_id=?').run(docId);
-      this.db.prepare('DELETE FROM space_comment_processing WHERE doc_id=?').run(docId);
+      this.db.prepare('DELETE FROM space_comment_results WHERE doc_id=?').run(docId);
       this.db.prepare('DELETE FROM space_comment_completions WHERE doc_id=?').run(docId);
       return {docId,deleted:true};
     });
@@ -145,7 +149,7 @@ export class CommentStore {
     const document=this.db.prepare('SELECT version,content FROM review_documents WHERE id=?').get(docId);if(!document) fail('DOCUMENT_NOT_FOUND','Document not found');
     const doc=document.content;
     const backfill=this.db.prepare('UPDATE space_comments SET context_before=?,context_after=? WHERE id=?');
-    const processing = new Map(this.db.prepare('SELECT * FROM space_comment_processing WHERE doc_id=?').all(docId).map(row=>[row.comment_id,row]));
+    const results = new Map(this.db.prepare('SELECT * FROM space_comment_results WHERE doc_id=?').all(docId).map(row=>[row.comment_id,row]));
     return this.db.prepare('SELECT * FROM space_comments WHERE doc_id=? ORDER BY rowid').all(docId).map(r=>{
       let contextBefore=r.context_before||'', contextAfter=r.context_after||'';
       // Comments created before context columns existed can be backfilled while
@@ -161,29 +165,23 @@ export class CommentStore {
       }
       const row={...r,context_before:contextBefore,context_after:contextAfter};
       const resolved=resolveAnchor(doc,row,document.version);
-      const state=processing.get(r.id);
+      const state=results.get(r.id);
       const suggestionIds=state?parse(state.suggestion_ids):[];
       const suggestions=suggestionIds.map(id=>this.db.prepare('SELECT id,status FROM review_suggestions WHERE id=? AND doc_id=?').get(id,r.doc_id)).filter(Boolean);
-      return {id:r.id,docId:r.doc_id,quote:r.quote,body:r.body,anchor:{from:r.from_pos,to:r.to_pos,version:r.doc_version},resolved,status:r.status,stale:resolved===null,requestId:r.request_id,processing:state?{status:state.status,suggestionIds,suggestions,reason:state.reason,operationId:state.operation_id,updatedAt:state.updated_at}:{status:'pending',suggestionIds:[],suggestions:[],reason:null,operationId:null,updatedAt:null}};
+      return {id:r.id,docId:r.doc_id,quote:r.quote,body:r.body,anchor:{from:r.from_pos,to:r.to_pos,version:r.doc_version},resolved,status:r.status,stale:resolved===null,requestId:r.request_id,processing:{suggestionIds,suggestions,operationId:state?.operation_id??null,updatedAt:state?.updated_at??null}};
     });
   }
   completeProcessing({docId,operationId,results}) {
     if(!nonempty(docId)||!nonempty(operationId)||!Array.isArray(results)||!results.length) fail('INVALID_INPUT','Document, operation ID and comment results are required');
     const normalized=results.map(result=>({
       commentId:result?.commentId,
-      status:result?.status,
       suggestionIds:[...(result?.suggestionIds||[])].sort((a,b)=>a-b),
-      reason:result?.reason??null,
     })).sort((a,b)=>String(a.commentId).localeCompare(String(b.commentId)));
     if(normalized.some(x=>!nonempty(x.commentId))||new Set(normalized.map(x=>x.commentId)).size!==normalized.length) fail('INVALID_INPUT','Comment IDs must be non-empty and unique');
     for(const result of normalized) {
-      if(result.status==='processed') {
-        if(!result.suggestionIds.length||result.suggestionIds.some(id=>!Number.isSafeInteger(id)||id<=0)||new Set(result.suggestionIds).size!==result.suggestionIds.length||result.reason!==null) fail('INVALID_INPUT','Processed comments require unique suggestion IDs and no reason');
-      } else if(result.status==='needs_clarification') {
-        if(typeof result.reason!=='string'||!result.reason.trim()||result.reason.length>1000||result.suggestionIds.length) fail('INVALID_INPUT','Clarification results require a reason and no suggestion IDs');
-      } else fail('INVALID_INPUT','Invalid comment processing status');
+      if(!result.suggestionIds.length||result.suggestionIds.some(id=>!Number.isSafeInteger(id)||id<=0)||new Set(result.suggestionIds).size!==result.suggestionIds.length) fail('INVALID_INPUT','Completed comments require unique suggestion IDs');
     }
-    const normalizedResults=normalized.map(x=>({...x,reason:x.reason?.trim()||null}));
+    const normalizedResults=normalized;
     const fingerprint=digest({docId,results:normalizedResults});
     return this.transaction(()=>{
       const prior=this.db.prepare('SELECT fingerprint,result FROM space_comment_completions WHERE id=?').get(operationId);
@@ -193,18 +191,18 @@ export class CommentStore {
       }
       const suggestionExists=this.db.prepare('SELECT id FROM review_suggestions WHERE id=? AND doc_id=?');
       for(const result of normalizedResults) {
-        const comment=this.db.prepare('SELECT id FROM space_comments WHERE id=? AND doc_id=?').get(result.commentId,docId);
+        const comment=this.db.prepare('SELECT id,status FROM space_comments WHERE id=? AND doc_id=?').get(result.commentId,docId);
         if(!comment) fail('COMMENT_NOT_FOUND','Comment not found',{commentId:result.commentId});
-        const existing=this.db.prepare('SELECT status,operation_id FROM space_comment_processing WHERE comment_id=?').get(result.commentId);
-        if(existing?.status==='processed') fail('COMMENT_ALREADY_PROCESSED','Comment was already processed',{commentId:result.commentId});
+        if(comment.status==='processed') fail('COMMENT_ALREADY_PROCESSED','Comment was already processed',{commentId:result.commentId});
         if(result.status==='processed') for(const suggestionId of result.suggestionIds) {
           if(!suggestionExists.get(suggestionId,docId)) fail('SUGGESTION_NOT_FOUND','Suggestion does not belong to this document',{commentId:result.commentId,suggestionId});
         }
       }
       const updatedAt=new Date().toISOString();
-      const upsert=this.db.prepare(`INSERT INTO space_comment_processing(comment_id,doc_id,status,suggestion_ids,reason,operation_id,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(comment_id) DO UPDATE SET status=excluded.status,suggestion_ids=excluded.suggestion_ids,reason=excluded.reason,operation_id=excluded.operation_id,updated_at=excluded.updated_at`);
-      for(const result of normalizedResults) upsert.run(result.commentId,docId,result.status,JSON.stringify(result.suggestionIds),result.reason,operationId,updatedAt);
-      const result={docId,operationId,results:normalizedResults.map(({commentId,status,suggestionIds,reason})=>({commentId,status,suggestionIds,reason}))};
+      const upsert=this.db.prepare(`INSERT INTO space_comment_results(comment_id,doc_id,suggestion_ids,operation_id,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(comment_id) DO UPDATE SET suggestion_ids=excluded.suggestion_ids,operation_id=excluded.operation_id,updated_at=excluded.updated_at`);
+      const updateStatus=this.db.prepare('UPDATE space_comments SET status=? WHERE id=? AND doc_id=?');
+      for(const result of normalizedResults){upsert.run(result.commentId,docId,JSON.stringify(result.suggestionIds),operationId,updatedAt);updateStatus.run('processed',result.commentId,docId)}
+      const result={docId,operationId,results:normalizedResults.map(({commentId,suggestionIds})=>({commentId,suggestionIds}))};
       this.db.prepare('INSERT INTO space_comment_completions(id,fingerprint,doc_id,result,created_at) VALUES(?,?,?,?,?)').run(operationId,fingerprint,docId,JSON.stringify(result),updatedAt);
       return {...result,replay:false};
     });
@@ -222,7 +220,7 @@ export class CommentStore {
       if(prior){if(prior.fingerprint!==fp)fail('OPERATION_ID_CONFLICT','Send ID already used');return {requestId:operationId,sessionId,comments:parse(prior.payload),status:prior.status,replay:true};}
       const all=this.list(docId), selected=commentIds.map(id=>all.find(x=>x.id===id));
       if(selected.some(x=>!x)) fail('COMMENT_NOT_FOUND','Comment not found');
-      if(selected.some(x=>!['pending','failed','sent'].includes(x.status))) fail('COMMENT_NOT_SENDABLE','Comment is currently sending or has an unknown delivery result');
+      if(selected.some(x=>!['pending','failed','sent'].includes(x.status))) fail('COMMENT_NOT_SENDABLE','Comment is currently sending, processed, or has an unknown delivery result');
       const payload=selected.map(({id,docId,quote,body,anchor,stale})=>({id,docId,quote,body,anchor,stale}));
       this.db.prepare('INSERT INTO space_comment_sends VALUES (?,?,?,?,?,?,NULL)').run(operationId,fp,sessionId,docId,JSON.stringify(payload),'sending');
       const update=this.db.prepare("UPDATE space_comments SET status='sending',request_id=? WHERE id=?"); for(const id of commentIds)update.run(operationId,id);

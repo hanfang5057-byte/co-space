@@ -79,18 +79,18 @@ test('the Space MCP server scopes tools to named documents and processes comment
     const completed = await call(client, 'space_comment_complete', {
       docId: created.id,
       operationId: 'agent-comment-complete-1',
-      results: [{ commentId: comment.id, status: 'processed', suggestionIds: [proposed.suggestion.id] }],
+      results: [{ commentId: comment.id, suggestionIds: [proposed.suggestion.id] }],
     });
-    assert.equal(completed.results[0].status, 'processed');
+    assert.equal(completed.results[0].commentId, comment.id);
     assert.equal(completed.replay, false);
     const completionReplay = await call(client, 'space_comment_complete', {
       docId: created.id,
       operationId: 'agent-comment-complete-1',
-      results: [{ commentId: comment.id, status: 'processed', suggestionIds: [proposed.suggestion.id] }],
+      results: [{ commentId: comment.id, suggestionIds: [proposed.suggestion.id] }],
     });
     assert.equal(completionReplay.replay, true);
     const withProcessing = await call(client, 'space_document_read', { id: created.id });
-    assert.equal(withProcessing.comments[0].processing.status, 'processed');
+    assert.equal(withProcessing.comments[0].status, 'processed');
     assert.deepEqual(withProcessing.comments[0].processing.suggestionIds, [proposed.suggestion.id]);
 
     const pending = await call(client, 'space_suggestion_list', { docId: created.id, status: 'pending' });
@@ -109,7 +109,7 @@ test('the Space MCP server scopes tools to named documents and processes comment
     assert.equal(decided.suggestions[0].status, 'accepted');
     const accepted = await call(client, 'space_document_read', { id: created.id });
     assert.equal(accepted.content, '# Agent document\n\nHello Space');
-    assert.equal(accepted.comments[0].processing.status, 'processed');
+    assert.equal(accepted.comments[0].status, 'processed');
     assert.equal(accepted.comments[0].processing.suggestions[0].status, 'accepted');
   } finally {
     await client.close().catch(() => {});

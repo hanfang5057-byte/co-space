@@ -8,7 +8,7 @@ import './space.css';
 
 const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
-const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown', processed:'status.processed', needs_clarification:'status.needsClarification'};
+const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown', processed:'status.processed'};
 const suggestionStatusKeys = {pending:'suggestion.pendingStatus', accepted:'suggestion.acceptedStatus', rejected:'suggestion.rejectedStatus', conflicted:'suggestion.conflictedStatus'};
 const safeUrl = value => typeof value === 'string' && /^(https?:|mailto:)/i.test(value) ? value : null;
 const documentCardTime = (item,t) => {
@@ -77,6 +77,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const surface=useRef(null), cardRefs=useRef(new Map()), commentRefs=useRef(new Map()), loadSequence=useRef(0);
+  const snapshot=useRef(null), busyRef=useRef(false);
   // Async callbacks may outlive a render; read the active locale at completion time.
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
@@ -84,23 +85,39 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     const sequence=++loadSequence.current;
     const next=await call('readDocument',{docId:id});
     if (sequence!==loadSequence.current) return;
-    setDoc(next);setComments(next?.comments || []);setSelection(null);
+    const nextComments=next?.comments || [];
+    const signature=JSON.stringify(next);
+    const contentChanged=!snapshot.current || snapshot.current.content!==next?.content || snapshot.current.version!==next?.version;
+    if(snapshot.current?.signature!==signature){setDoc(next);setComments(nextComments)}
+    snapshot.current={signature,content:next?.content,version:next?.version};
+    if(contentChanged) setSelection(null);
     if (next?.title) rememberDocumentTitle(id,next.title);
   },[call]);
   useEffect(()=>{
     if (!docId) {
       loadSequence.current++;
+      snapshot.current=null;
       setDoc(null);setComments([]);setActive(null);setActiveComment(null);setSelection(null);setDraft('');setMessage('');
       return;
     }
+    snapshot.current=null;
     setDoc(null);setMessage('');
     reload(docId).catch(e=>setMessage(errorText(e,translateNow.current)));
   },[docId,reload]);
   useEffect(()=>()=>{loadSequence.current++;},[]);
+  useEffect(()=>{busyRef.current=busy},[busy]);
+  useEffect(()=>{
+    if(!docId) return;
+    let stopped=false;
+    const sync=()=>{if(stopped||document.visibilityState==='hidden'||busyRef.current)return;reload(docId).catch(()=>{})};
+    const timer=setInterval(sync,2500);
+    document.addEventListener('visibilitychange',sync);
+    return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',sync)};
+  },[docId,reload]);
 
   // Suggestion ids follow submission order; review cards follow document order.
   const suggestions=useMemo(()=>[...(doc?.suggestions || [])].sort((left,right)=>(left.from ?? 0)-(right.from ?? 0)),[doc]);
-  const statusText=item=>{const processing=item.processing?.status;const status=processing&&processing!=='pending'?processing:item.status;return statusKeys[status] ? t(statusKeys[status]) : status;};
+  const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
   const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollSourceRange(surface.current,item.from,item.to))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
@@ -111,7 +128,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
   });
   const send=()=>perform(async()=>{
-    const ids=comments.filter(item=>item.processing?.status!=='processed'&&item.status!=='sending'&&item.status!=='unknown').map(item=>item.id);
+    const ids=comments.filter(item=>!['processed','sending','unknown'].includes(item.status)).map(item=>item.id);
     if(!ids.length) throw Error(t('send.none'));
     if(sendTarget?.mode==='copy') {
       if(typeof navigator?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
@@ -171,12 +188,9 @@ function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avat
 }
 
 function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style }) {
-  const processingStatus=comment.processing?.status;
-  const visibleStatus=processingStatus&&processingStatus!=='pending' ? processingStatus : comment.status;
+  const visibleStatus=comment.status;
   const locked=busy || comment.status==='sending';
-  const status=processingStatus
-    ? statusText(comment)
-    : comment.status==='pending'
+  const status=comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
   const authorName=author?.name || (author?.signedIn?t('comment.deepseekUser'):null);
@@ -185,7 +199,6 @@ function CommentBalloon({ comment, author, active, busy, t, statusText, confirmi
     {status && <div className="space-annotation-head"><span className={`space-comment-status is-${visibleStatus}`}>{status}</span></div>}
     <p className="space-comment-body">{comment.body}</p>
     {comment.processing?.suggestions?.length>0 && <div className="space-comment-processing-meta">{t('comment.relatedSuggestions',{states:comment.processing.suggestions.map(item=>suggestionStatusKeys[item.status]?t(suggestionStatusKeys[item.status]):item.status).join('、')})}</div>}
-    {comment.processing?.status==='needs_clarification' && comment.processing.reason && <div className="space-comment-processing-meta">{comment.processing.reason}</div>}
     <button type="button" className="space-comment-delete-icon" disabled={locked} aria-label={t('comment.delete')} title={t('comment.delete')} onClick={event=>{event.stopPropagation();onAskDelete(comment.id)}}><TrashIcon/></button>
     {confirming && <div className="space-comment-footer is-confirming" onClick={event=>event.stopPropagation()}>
       <span className="space-comment-confirm-text">{t('comment.deleteConfirm')}</span>
@@ -219,7 +232,7 @@ function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef
 export function ReviewSendButton({ review, sessionId, sendTarget = null, t = defaultT, compact = false }) {
   const titleId=useId();
   const [confirming,setConfirming]=useState(false);
-  const sendable=review.comments.filter(item=>item.processing?.status!=='processed'&&item.status!=='sending'&&item.status!=='unknown');
+  const sendable=review.comments.filter(item=>!['processed','sending','unknown'].includes(item.status));
   const copyMode=sendTarget?.mode==='copy';
   const canCreate=!sessionId && sendTarget?.canCreate === true;
   const disabled=review.busy || !sendable.length || (!copyMode && !sessionId && !canCreate);
@@ -283,7 +296,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   // Keep the annotated HTML stable across selection/card state so the browser
   // selection and its text nodes are never replaced by an equal re-render.
   const markdownHtml=useMemo(()=>doc?renderMarkdown(doc.content,doc.suggestions||[]):'',[doc?.content,doc?.suggestions]);
-  const visibleComments=useMemo(()=>comments,[comments]);
+  const visibleComments=useMemo(()=>comments.filter(comment=>comment.status!=='processed'),[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
   const staleComments=useMemo(()=>visibleComments.filter(comment=>!commentRange(comment)),[visibleComments]);
   const hasAnnotations=suggestions.length>0 || visibleComments.length>0;
@@ -307,7 +320,6 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     let alive=true;document.fonts.ready.then(()=>{if(alive)setResizeTick(tick=>tick+1)});
     return ()=>{alive=false};
   },[]);
-
   // Direct selection on the rendered paper is the primary comment entry point.
   // Comments are anchored to rendered Markdown text; source editing is not exposed.
   useEffect(()=>{
@@ -477,8 +489,17 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
   const review=useSpaceReview(api,docId,sessionId,t,sendTarget);
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
-  const reloadDocs=useCallback(async()=>{const list=await call('listDocuments');setDocuments(list);return list;},[call]);
+  const documentsSnapshot=useRef(null);
+  const reloadDocs=useCallback(async()=>{const list=await call('listDocuments');const signature=JSON.stringify(list);if(signature!==documentsSnapshot.current){documentsSnapshot.current=signature;setDocuments(list)}return list;},[call]);
   useEffect(()=>{let cancelled=false;reloadDocs().catch(e=>{if(!cancelled)setMessage(errorText(e,translateNow.current))});return()=>{cancelled=true}},[reloadDocs]);
+  useEffect(()=>{
+    if(docId) return;
+    let stopped=false;
+    const sync=()=>{if(!stopped&&document.visibilityState!=='hidden')reloadDocs().catch(()=>{})};
+    const timer=setInterval(sync,4000);
+    document.addEventListener('visibilitychange',sync);
+    return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',sync)};
+  },[docId,reloadDocs]);
   const newDocument=async()=>{
     setBusy(true);setMessage('');
     try {
@@ -504,7 +525,7 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
-  const visibleComments=review.comments;
+  const visibleComments=review.comments.filter(comment=>comment.status!=='processed');
   const selectedDocument=documents.find(item=>item.id===docId);
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const home=!docId;

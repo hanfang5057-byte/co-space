@@ -1,4 +1,5 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,17 @@ export async function startMcpServer({ home = resolveHome(), transport = new Std
   return { service, server };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// A profile `link:` install exposes this entry through a symlink, so compare
+// canonical paths: argv[1] is the link while import.meta.url is the real file.
+function isDirectInvocation(argv1 = process.argv[1]) {
+  if (!argv1) return false;
+  try {
+    return realpathSync(path.resolve(argv1)) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectInvocation()) {
   await startMcpServer();
 }

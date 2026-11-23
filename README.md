@@ -13,8 +13,8 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 ## 安装与启用
 
 - DSH npm 包名为 `dsh-plugin-space`。根目录是私有 workspace，不直接安装或发布；构建发布包后安装 `dist/dsh-plugin/`，或运行 `npm pack ./dist/dsh-plugin` 生成 npm tarball。
-- 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/dsh-space/main/market/index.json`。
-- 本地开发时修改源码后运行 `npm run build:dsh`，再将生成的 `dist/dsh-plugin/` 安装到 DSH。
+- 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`。
+- 本地开发时修改源码后，按下方「打包」中的命令构建，再将生成的目录安装到对应宿主。
 - 插件声明 `engines.dsh = ^0.2.2-rc.5`；升级 DSH 大版本后需要重新核对兼容性。
 - `adapters/dsh/client.js` 是 DSH 客户端生成产物；修改 `packages/review-ui/src/` 或 `adapters/dsh/client/` 后运行 `npm run build:client`，不要手工编辑生成文件。
 - React 由宿主提供：构建保持 `react`、`react-dom`、`react/jsx-runtime` 外置，`npm run build:client` 会在发现 React 被打包进 `client.js` 时直接失败；插件不声明自己的 React 依赖。
@@ -79,6 +79,58 @@ npm run check
 ```
 
 测试包含真实 MCP stdio、SQLite 存储、建议决策、评论处理模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。可用 `sh scripts/test-ui.sh` 运行模拟 DOM 的界面测试，该脚本在临时目录安装测试依赖。
+
+## 打包
+
+根目录是私有 npm workspace，不直接发布。DSH 插件和 WorkBuddy Connector 分别构建、校验和交付；修改共享审阅 UI 后，需要分别构建两个适配器。
+
+### DSH 插件
+
+在仓库根目录执行：
+
+```sh
+npm install                 # 首次安装依赖或依赖变更后
+npm run build:dsh
+```
+
+`build:dsh` 会先运行 `build:client`，将 `adapters/dsh/client/index.jsx` 和共享审阅 UI 编译为生成文件 `adapters/dsh/client.js`，再组装完整插件到 `dist/dsh-plugin/`。不要手工修改 `client.js` 或 `dist/` 中的生成文件。
+
+校验构建包：
+
+```sh
+npm run verify:dsh-package
+```
+
+该命令会重新构建 DSH 包、检查包内容和入口，并执行 `npm pack --dry-run`。如需生成 npm tarball：
+
+```sh
+npm run pack:dsh
+```
+
+tarball 输出到 `dist/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`；发布 npm 包时使用生成的 tarball。
+
+### WorkBuddy Connector
+
+在仓库根目录执行：
+
+```sh
+npm install --prefix adapters/workbuddy   # 首次安装依赖或依赖变更后
+node adapters/workbuddy/build.mjs
+```
+
+构建结果位于 `dist/workbuddy-connector/`：
+
+- `market/`：市场上传所需的 Connector 元数据、MCP 配置、图标和 Skill。
+- `runtime-package/`：Connector 运行时包，包含 MCP 服务端和审阅页面资源。
+- `mcp.local.json`：本机 WorkBuddy 验证用配置，不用于市场上传。
+
+校验构建结果：
+
+```sh
+node adapters/workbuddy/verify.mjs
+```
+
+WorkBuddy 构建会直接从共享源码生成自己的审阅页面，不依赖 DSH 的 `adapters/dsh/client.js`；因此共享 UI 改动后，两个适配器都要各自重新构建。
 
 ## 许可证
 

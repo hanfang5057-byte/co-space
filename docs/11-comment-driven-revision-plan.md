@@ -48,7 +48,7 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 | `space_document_read` | DSH、WorkBuddy | 默认读取指定文档的正文、建议和评论 |
 | `space_suggest` | DSH、WorkBuddy | 仅提交建议，不管理评论状态 |
 | `space_suggestion_list` | DSH、WorkBuddy | 查询建议状态 |
-| `space_comment_complete` | DSH、WorkBuddy | 记录评论处理结果及关联建议，或标记需要澄清 |
+| `space_comment_complete` | DSH、WorkBuddy | 将评论标记为已处理并记录关联建议 |
 | `space_review_open` | WorkBuddy | 打开审阅页并返回服务可用状态 |
 
 工具数量减少不得合并不同的领域动作（例如建议提交与建议查询），也不得删除用户决策边界、显式创建或指定文档读取能力。MCP 不提供文档枚举入口。
@@ -57,12 +57,12 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 |---|---|---|
 | `space_document_read` | 默认返回文档评论 | 不增加参数；每次读取指定文档都返回正文、建议及评论，评论包含稳定 ID、引用、锚点有效性和处理状态 |
 | `space_suggest` | 不改变评论语义 | 只提交建议，不读写评论处理状态，也不接收评论 ID |
-| `space_comment_complete` | 新增独立完成操作 | 输入文档 ID、稳定 `operationId` 和每条评论的结果；结果为 `processed` 并附一个或多个建议 ID，或 `needs_clarification` 并附原因；验证评论和建议属于同一文档，按操作 ID 幂等 |
+| `space_comment_complete` | 新增独立完成操作 | 输入文档 ID、稳定 `operationId` 和每条评论关联的一个或多个建议 ID；验证评论和建议属于同一文档，按操作 ID 幂等，并将评论状态置为 `processed` |
 | `space_suggestion_list` | 保持现有建议查询职责 | 继续列出建议及决策状态；评论关联由评论处理记录查询/展示，不改变建议工具语义 |
 
-评论随指定文档的读取结果默认返回；读取不等于处理授权。只有用户明确要求处理评论时，Agent 才依据评论生成建议，并在建议提交后调用 `space_comment_complete` 记录评论 ID 与建议 ID 的关联。未明确要求处理时，Agent 不得因为读到了评论就自行提交建议或完成评论。无法安全转成建议时，以 `needs_clarification` 记录原因。用户补充或编辑评论后可重新打开处理。
+评论随指定文档的读取结果默认返回；读取不等于处理授权。只有用户明确要求处理评论时，Agent 才依据评论生成建议，并在建议提交后调用 `space_comment_complete` 记录评论 ID 与建议 ID 的关联。未明确要求处理时，Agent 不得因为读到了评论就自行提交建议或完成评论。无法安全转成建议时，在对话中询问用户并保持评论未完成。用户补充说明后可重新处理。
 
-`space_comment_complete` 独立维护评论处理状态与评论—建议关联。完成记录只表示 Agent 已提交关联建议，不代表正文已修改，也不代表建议已接受；UI 继续展示评论及其建议的决策状态。多个建议可关联同一评论；一个建议可关联多条评论，以支持拆分和合并处理。该操作不领取评论、不代替 `space_suggest`，也不直接修改正文。
+评论使用单一状态贯穿发送与 Agent 处理。`space_comment_complete` 将评论标记为 `processed` 并记录评论—建议关联；完成记录只表示 Agent 已提交关联建议，不代表正文已修改，也不代表建议已接受。已处理评论从审阅页隐藏，建议继续保留各自的决策状态。多个建议可关联同一评论；一个建议可关联多条评论，以支持拆分和合并处理。该操作不领取评论、不代替 `space_suggest`，也不直接修改正文。
 
 ## 一致性、安全与失败处理
 
@@ -104,6 +104,5 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 ## 后续待定
 
 - UI 当前处理全部未完成评论；是否增加逐条选择处理需要独立产品需求。
-- 用户如何补充 `needs_clarification`（编辑原评论、追加回复或关闭后新建）尚未定义。
 - 用户在 Agent 处理期间删除或编辑评论时的冲突策略尚未定义。
 - 本机测试覆盖 shared contract、MCP、UI copy flow 和 WorkBuddy sidecar 接口；DSH/WorkBuddy 宿主真实会话端到端验证仍需安排。

@@ -141,7 +141,9 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
     const comment = (await commentResponse.json()).result;
     const commentRead = await callTool('space_document_read', { id: created.id });
     assert.equal(commentRead.comments[0].id, comment.id);
-    await callTool('space_comment_complete', { docId: created.id, operationId: 'wb-runtime-complete', results: [{ commentId: comment.id, status: 'processed', suggestionIds: [proposal.suggestion.id] }] });
+    await callTool('space_comment_complete', { docId: created.id, operationId: 'wb-runtime-complete', results: [{ commentId: comment.id, suggestionIds: [proposal.suggestion.id] }] });
+    const completedComment = await callTool('space_document_read', { id: created.id });
+    assert.equal(completedComment.comments[0].status, 'processed');
 
     await request('decide', { docId: created.id, suggestionId: proposal.suggestion.id, decision: 'accept', operationId: 'wb-runtime-decide' });
     const decided = await callTool('space_suggestion_list', { docId: created.id, status: 'all' });
