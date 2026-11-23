@@ -1,7 +1,7 @@
 {
   "source": "cospace-review",
   "type": "mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "minWorkbuddyVersion": "5.0.0",
   "examples_zh": [
     "把这份方案存入 Space，并提出三条独立修改建议",
