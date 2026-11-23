@@ -37,15 +37,8 @@ export async function startWorkBuddyConnector({ transport = new StdioServerTrans
     }, withToolErrors(async ({ docId }) => {
       if (docId) service.readDocument(docId);
       const baseUrl = await ensureReviewDaemon(home, fileURLToPath(import.meta.url));
-      return { name: 'Space', available: true, reviewUrl: docId ? `${baseUrl}/document/${encodeURIComponent(docId)}` : baseUrl };
+      return { name: 'Space', available: true, storage: 'local-only', reviewUrl: docId ? `${baseUrl}/document/${encodeURIComponent(docId)}` : baseUrl };
     }));
-    server.registerTool('space_status', {
-      description: 'Report whether the local Space document service and review page are available. Does not reveal local file paths.',
-      inputSchema: {},
-    }, withToolErrors(async () => ({
-      name: 'Space', available: true, storage: 'local-only',
-      reviewUrl: await ensureReviewDaemon(home, fileURLToPath(import.meta.url)),
-    })));
     await server.connect(transport);
     return { server, service };
   } catch (error) {

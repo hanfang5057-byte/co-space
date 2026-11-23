@@ -76,6 +76,29 @@ test('Markdown comments use source offsets and rebase after accepted replacement
  }finally{comments?.close();service?.close();rmSync(dir,{recursive:true,force:true})}
 });
 
+test('comment completion links suggestions and replays idempotently',()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'md-comment-complete-'));const service=new SpaceService(dir);
+ try {
+  service.createDocument({id:'d',content:'alpha beta',operationId:'create-comments'});
+  const first=service.createComment({docId:'d',quote:'alpha',body:'Improve this',anchor:{from:0,to:5,version:0}});
+  const second=service.createComment({docId:'d',quote:'beta',body:'Clarify this',anchor:{from:6,to:10,version:0}});
+  const proposal=service.propose({docId:'d',baseVersion:0,from:0,to:5,expected:'alpha',replacement:'Alpha',operationId:'comment-proposal'});
+  const input={docId:'d',operationId:'complete-comments',results:[
+   {commentId:first.id,status:'processed',suggestionIds:[proposal.suggestion.id]},
+   {commentId:second.id,status:'needs_clarification',reason:'Please clarify what should change.'},
+  ]};
+  const result=service.completeCommentProcessing(input);
+  assert.equal(result.replay,false);
+  const doc=service.readDocument('d');
+  assert.equal(doc.comments.find(comment=>comment.id===first.id).processing.status,'processed');
+  assert.deepEqual(doc.comments.find(comment=>comment.id===first.id).processing.suggestionIds,[proposal.suggestion.id]);
+  assert.equal(doc.comments.find(comment=>comment.id===second.id).processing.reason,'Please clarify what should change.');
+  assert.deepEqual(service.completeCommentProcessing(input),{...result,replay:true});
+  assert.throws(()=>service.completeCommentProcessing({...input,results:[{commentId:first.id,status:'needs_clarification',reason:'different'}]}),err('OPERATION_ID_CONFLICT'));
+  assert.throws(()=>service.completeCommentProcessing({docId:'d',operationId:'complete-again',results:[{commentId:first.id,status:'processed',suggestionIds:[proposal.suggestion.id]}]}),err('COMMENT_ALREADY_PROCESSED'));
+ } finally {service.close();rmSync(dir,{recursive:true,force:true})}
+});
+
 test('unmarked review databases are rejected without deleting user data',async()=>{
  const dir=mkdtempSync(path.join(tmpdir(),'md-unsupported-'));let s;
  try{

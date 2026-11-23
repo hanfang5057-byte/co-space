@@ -17,6 +17,7 @@ export class SpaceRepository {
   createComment(input) { return this.comments.create(input); }
   deleteComment(input) { return this.comments.delete(input); }
   listComments(docId) { return this.comments.list(docId); }
+  completeCommentProcessing(input) { return this.comments.completeProcessing(input); }
   findSend(id) { return this.comments.findSend(id); }
   prepareSend(input) { return this.comments.prepareSend(input); }
   finishSend(input) { return this.comments.finishSend(input); }
@@ -40,6 +41,8 @@ export class SpaceRepository {
       if (db.prepare("SELECT id FROM space_comments WHERE doc_id=? AND status='sending' LIMIT 1").get(id)) fail('COMMENT_BUSY', 'A comment for this document is being sent');
       db.prepare('DELETE FROM space_comments WHERE doc_id=?').run(id);
       db.prepare('DELETE FROM space_comment_sends WHERE doc_id=?').run(id);
+      db.prepare('DELETE FROM space_comment_processing WHERE doc_id=?').run(id);
+      db.prepare('DELETE FROM space_comment_completions WHERE doc_id=?').run(id);
       db.prepare('DELETE FROM review_suggestions WHERE doc_id=?').run(id);
       db.prepare('DELETE FROM review_changes WHERE doc_id=?').run(id);
       for (const operation of db.prepare('SELECT id,result FROM review_operations').all()) {

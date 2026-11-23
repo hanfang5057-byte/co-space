@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -48,6 +50,24 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
     return JSON.parse(response.result.content[0].text);
   };
 
+  const reservePort = async () => {
+    const listener = createServer();
+    await new Promise((resolve, reject) => listener.once('error', reject).listen(0, '127.0.0.1', resolve));
+    const { port } = listener.address();
+    await new Promise(resolve => listener.close(resolve));
+    return port;
+  };
+  const waitForHealth = async (port, token) => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/health`, { headers: { 'x-workbuddy-review-token': token } });
+        if (response.ok) return;
+      } catch {}
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('WorkBuddy loopback review server did not start');
+  };
+
   try {
     assert.equal(child.pid > 0, true);
     const initialized = await rpc('initialize', {
@@ -60,6 +80,11 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
     assert(toolNames.includes('space_review_open'));
     assert(toolNames.includes('space_document_create'));
     assert(toolNames.includes('space_suggest'));
+    assert(toolNames.includes('space_comment_complete'));
+    assert.equal(toolNames.length, 6);
+    assert(!toolNames.includes('space_status'));
+    assert(!toolNames.includes('space_documents'));
+    assert(!toolNames.includes('space_list'));
 
     const created = await callTool('space_document_create', { text: '# Runtime check\n\nOriginal text.\n', operationId: 'wb-runtime-create' });
     const read = await callTool('space_document_read', { id: created.id });
@@ -74,6 +99,20 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
       operationId: 'wb-runtime-suggest',
     });
     assert.equal(proposal.docId, created.id);
+
+    // Run the real bundled loopback server directly and seed its runtime state.
+    // This exercises the actual MCP/UI/database path without requiring launchd
+    // bootstrap privileges in the test sandbox.
+    const port = await reservePort();
+    const token = randomBytes(32).toString('hex');
+    const stateFile = path.join(temporaryHome, '.workbuddy/space/.review-http.json');
+    const sidecar = spawn(process.execPath, [serverFile, '--review-daemon'], {
+      env: { ...process.env, HOME: temporaryHome, WORKBUDDY_REVIEW_TOKEN: token, WORKBUDDY_REVIEW_PORT: String(port) },
+      stdio: 'ignore',
+    });
+    reviewDaemonPid = sidecar.pid;
+    writeFileSync(stateFile, `${JSON.stringify({ port, token, pid: reviewDaemonPid })}\n`, { mode: 0o600 });
+    await waitForHealth(port, token);
 
     const page = await callTool('space_review_open', { docId: created.id });
     assert.match(page.reviewUrl, /^http:\/\/127\.0\.0\.1:\d+\/document\//);
@@ -97,12 +136,18 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
     assert.equal((await request('serviceStatus')).status, 200);
     assert.equal((await request('listDocuments', {}, 'http://attacker.invalid')).status, 403);
 
+    const commentResponse = await request('createComment', { docId: created.id, quote: 'Original text.', body: 'Make this clearer', anchor: { from: start, to: start + 'Original text.'.length, version: 0 } });
+    assert.equal(commentResponse.status, 200);
+    const comment = (await commentResponse.json()).result;
+    const commentRead = await callTool('space_document_read', { id: created.id });
+    assert.equal(commentRead.comments[0].id, comment.id);
+    await callTool('space_comment_complete', { docId: created.id, operationId: 'wb-runtime-complete', results: [{ commentId: comment.id, status: 'processed', suggestionIds: [proposal.suggestion.id] }] });
+
     await request('decide', { docId: created.id, suggestionId: proposal.suggestion.id, decision: 'accept', operationId: 'wb-runtime-decide' });
     const decided = await callTool('space_suggestion_list', { docId: created.id, status: 'all' });
     assert.equal(decided.suggestions[0].status, 'accepted');
-    const homeStatus = await callTool('space_status', {});
-    assert.equal(homeStatus.storage, 'local-only');
-    assert(!JSON.stringify(homeStatus).includes(temporaryHome));
+    assert.equal(page.storage, 'local-only');
+    assert(!JSON.stringify(page).includes(temporaryHome));
 
     const workbuddyDatabase = path.join(temporaryHome, '.workbuddy/space/review.sqlite');
     assert.equal(readFileSync(workbuddyDatabase).length > 0, true);

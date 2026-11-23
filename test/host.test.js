@@ -19,7 +19,7 @@ test('host comment bridge requires explicit action and treats unconfirmed receip
    assert.equal(sent.length,0);
    const payload={docId:'d',sessionId:'session-1',commentIds:[note.id],operationId:'send-1'};
    assert.equal((await host.dispatch('sendComments',payload)).status,'unknown');
-   assert.equal(sent.length,1);assert.equal(sent[0].sessionId,'session-1');assert.match(sent[0].content[0].text,/clarify/);assert.match(sent[0].content[0].text,/^space:d\n/);assert.match(sent[0].content[0].text,/space_document_read/);assert.doesNotMatch(sent[0].content[0].text,/文档 ID|评论 ID/);assert.doesNotMatch(sent[0].content[0].text,new RegExp(note.id));
+   assert.equal(sent.length,1);assert.equal(sent[0].sessionId,'session-1');assert.match(sent[0].content[0].text,/^space:d\n/);assert.match(sent[0].content[0].text,/space_document_read/);assert.match(sent[0].content[0].text,/space_comment_complete/);assert.doesNotMatch(sent[0].content[0].text,/clarify/);assert.doesNotMatch(sent[0].content[0].text,new RegExp(note.id));
    assert.equal((await host.dispatch('sendComments',payload)).status,'unknown');assert.equal(sent.length,1);
  } finally {host.close();rmSync(home,{recursive:true,force:true});}
 });
@@ -205,6 +205,8 @@ test('sending without a conversation resolves a target once and reuses it on ret
     assert.equal(first.workspace.workspaceId, 'w1');
     assert.equal(sent.length, 1);
     assert.equal(sent[0].sessionId, 'created-session');
+    assert.match(sent[0].content[0].text,/space_comment_complete/);
+    assert.doesNotMatch(sent[0].content[0].text,/clarify/);
     assert.equal(resolved, 1);
     const retry = await host.dispatch('sendComments', payload);
     assert.equal(retry.status, 'sent');

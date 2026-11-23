@@ -343,7 +343,7 @@ const fixtures = [
       '',
       '## 发送',
       '',
-      '评论创建后不应自动发送；确认无当前对话或会话不可用时仍保留评论。只有点击顶部「全部发送」才送入当前对话。',
+      '评论创建后不应自动触发处理；只有点击「让 Agent 处理评论」才发起处理请求。',
     ),
     proposals: [
       { label: '评论位置前插入', op: 'insert', at: '需要评论的句子位于这一段中间。', edge: 'start', text: '在评论之前插入的一句话。' },
@@ -548,8 +548,7 @@ try {
     }
     console.log(`  created ${doc.id} · ${doc.title} · ${doc.proposals.length} suggestions · version ${created.version}`);
   }
-  const listed = await callTool(client, 'space_documents', {});
-  console.log(`\nTotal documents: ${listed.documents.length}`);
+  console.log(`\nTotal documents: ${planned.length}`);
   console.log(`Seed suffix: ${suffix}`);
 } finally {
   await client.close();

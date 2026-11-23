@@ -8,7 +8,8 @@ import './space.css';
 
 const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
-const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown'};
+const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown', processed:'status.processed', needs_clarification:'status.needsClarification'};
+const suggestionStatusKeys = {pending:'suggestion.pendingStatus', accepted:'suggestion.acceptedStatus', rejected:'suggestion.rejectedStatus', conflicted:'suggestion.conflictedStatus'};
 const safeUrl = value => typeof value === 'string' && /^(https?:|mailto:)/i.test(value) ? value : null;
 const documentCardTime = (item,t) => {
   const timestamp=item.updatedAt || item.createdAt;
@@ -56,14 +57,14 @@ function SpaceDialog({ open, onClose, labelledBy, className = '', children }) {
  * Load and drive one document's review state.
  *
  * One controller serves the Space page and the right Sidebar tab: both read the
- * same authoritative document, decide suggestions, save comments and send them
- * to the current conversation. The controller owns no layout; the surface
+ * same authoritative document, decide suggestions, save comments and request
+ * comment processing. The controller owns no layout; the surface
  * decides where the paper, comment rail and review panel sit.
  * @param {(method: string, args?: object) => Promise<any>} api - plugin HTTP client.
  * @param {string | null} docId - document to review, or null for no selection.
  * @param {string | null} sessionId - conversation that receives sent comments.
  * @param {(key: string, vars?: object) => string} t - bound translator.
- * @param {{canCreate?: boolean, openSession?: (sessionId: string) => void} | null} sendTarget - optional conversation creation/navigation face.
+ * @param {{mode?: 'copy', canCreate?: boolean, openSession?: (sessionId: string) => void} | null} sendTarget - optional comment processing action mode.
  * @returns {object} review state and the actions that change it.
  */
 export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget = null) {
@@ -81,9 +82,9 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
   const call=useCallback((method,args={})=>api(method,args),[api]);
   const reload=useCallback(async id=>{
     const sequence=++loadSequence.current;
-    const [next,notes]=await Promise.all([call('readDocument',{docId:id}),call('listComments',{docId:id})]);
+    const next=await call('readDocument',{docId:id});
     if (sequence!==loadSequence.current) return;
-    setDoc(next);setComments(notes);setSelection(null);
+    setDoc(next);setComments(next?.comments || []);setSelection(null);
     if (next?.title) rememberDocumentTitle(id,next.title);
   },[call]);
   useEffect(()=>{
@@ -99,7 +100,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
 
   // Suggestion ids follow submission order; review cards follow document order.
   const suggestions=useMemo(()=>[...(doc?.suggestions || [])].sort((left,right)=>(left.from ?? 0)-(right.from ?? 0)),[doc]);
-  const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
+  const statusText=item=>{const processing=item.processing?.status;const status=processing&&processing!=='pending'?processing:item.status;return statusKeys[status] ? t(statusKeys[status]) : status;};
   const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollSourceRange(surface.current,item.from,item.to))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
@@ -110,8 +111,16 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
   });
   const send=()=>perform(async()=>{
-    const ids=comments.filter(item=>item.status==='pending'||item.status==='failed').map(item=>item.id);
+    const ids=comments.filter(item=>item.processing?.status!=='processed'&&item.status!=='sending'&&item.status!=='unknown').map(item=>item.id);
     if(!ids.length) throw Error(t('send.none'));
+    if(sendTarget?.mode==='copy') {
+      if(typeof navigator?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
+      const text=`space:${encodeURIComponent(docId)}\n${t('send.processingPrompt')}`;
+      await navigator.clipboard.writeText(text);
+      setMessage(t('send.copied'));
+      setActiveComment(null);
+      return {copied:true};
+    }
     // The current conversation wins. Without one, the Host resolves the most
     // recent workspace (creating a default one when necessary), creates or
     // reuses a Session, and returns the exact identity it used. The client only
@@ -162,15 +171,21 @@ function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avat
 }
 
 function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style }) {
+  const processingStatus=comment.processing?.status;
+  const visibleStatus=processingStatus&&processingStatus!=='pending' ? processingStatus : comment.status;
   const locked=busy || comment.status==='sending';
-  const status=comment.status==='pending'
+  const status=processingStatus
+    ? statusText(comment)
+    : comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
   const authorName=author?.name || (author?.signedIn?t('comment.deepseekUser'):null);
   return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onClick={()=>onActivate(comment.id)}>
     <AnnotationIdentity name={authorName} avatarUrl={author?.avatarUrl} createdAt={comment.createdAt} fallback={t('comment.author')}/>
-    {status && <div className="space-annotation-head"><span className={`space-comment-status is-${comment.status}`}>{status}</span></div>}
+    {status && <div className="space-annotation-head"><span className={`space-comment-status is-${visibleStatus}`}>{status}</span></div>}
     <p className="space-comment-body">{comment.body}</p>
+    {comment.processing?.suggestions?.length>0 && <div className="space-comment-processing-meta">{t('comment.relatedSuggestions',{states:comment.processing.suggestions.map(item=>suggestionStatusKeys[item.status]?t(suggestionStatusKeys[item.status]):item.status).join('、')})}</div>}
+    {comment.processing?.status==='needs_clarification' && comment.processing.reason && <div className="space-comment-processing-meta">{comment.processing.reason}</div>}
     <button type="button" className="space-comment-delete-icon" disabled={locked} aria-label={t('comment.delete')} title={t('comment.delete')} onClick={event=>{event.stopPropagation();onAskDelete(comment.id)}}><TrashIcon/></button>
     {confirming && <div className="space-comment-footer is-confirming" onClick={event=>event.stopPropagation()}>
       <span className="space-comment-confirm-text">{t('comment.deleteConfirm')}</span>
@@ -204,11 +219,13 @@ function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef
 export function ReviewSendButton({ review, sessionId, sendTarget = null, t = defaultT, compact = false }) {
   const titleId=useId();
   const [confirming,setConfirming]=useState(false);
-  const sendable=review.comments.filter(item=>item.status==='pending'||item.status==='failed');
+  const sendable=review.comments.filter(item=>item.processing?.status!=='processed'&&item.status!=='sending'&&item.status!=='unknown');
+  const copyMode=sendTarget?.mode==='copy';
   const canCreate=!sessionId && sendTarget?.canCreate === true;
-  const disabled=review.busy || !sendable.length || (!sessionId && !canCreate);
-  const hint=!sessionId ? (canCreate?t('send.newSessionHint'):t('send.hint')) : undefined;
-  const start=()=>{ if(canCreate) setConfirming(true); else void review.send(); };
+  const disabled=review.busy || !sendable.length || (!copyMode && !sessionId && !canCreate);
+  const hint=copyMode?t('send.copyHint'):!sessionId ? (canCreate?t('send.newSessionHint'):t('send.hint')) : undefined;
+  const start=()=>{ if(copyMode) void review.send(); else if(canCreate) setConfirming(true); else void review.send(); };
+  if(!sendable.length) return null;
   return <>
     <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={start}>{t('send.all',{count:sendable.length})}</button>
     <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} className="space-send-dialog">
@@ -266,7 +283,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   // Keep the annotated HTML stable across selection/card state so the browser
   // selection and its text nodes are never replaced by an equal re-render.
   const markdownHtml=useMemo(()=>doc?renderMarkdown(doc.content,doc.suggestions||[]):'',[doc?.content,doc?.suggestions]);
-  const visibleComments=useMemo(()=>comments.filter(comment=>comment.status!=='sent'),[comments]);
+  const visibleComments=useMemo(()=>comments,[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
   const staleComments=useMemo(()=>visibleComments.filter(comment=>!commentRange(comment)),[visibleComments]);
   const hasAnnotations=suggestions.length>0 || visibleComments.length>0;
@@ -487,7 +504,7 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
-  const visibleComments=review.comments.filter(comment=>comment.status!=='sent');
+  const visibleComments=review.comments;
   const selectedDocument=documents.find(item=>item.id===docId);
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const home=!docId;

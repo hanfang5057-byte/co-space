@@ -41,7 +41,7 @@ export class SpaceService {
   }
   readDocument(id) {
     const doc = this.repository.readDocument(id);
-    return { ...doc, title: titleFor(doc.content, id) };
+    return { ...doc, title: titleFor(doc.content, id), comments: this.repository.listComments(id) };
   }
   /**
    * Read the complete suggestion history, including decisions the UI already
@@ -60,6 +60,7 @@ export class SpaceService {
   createComment(input) { return this.repository.createComment(input); }
   deleteComment(input) { return this.repository.deleteComment(input); }
   listComments(docId) { return this.repository.listComments(docId); }
+  completeCommentProcessing(input) { return this.repository.completeCommentProcessing(input); }
   findSend(id) { return this.repository.findSend(id); }
   prepareSend(input) { return this.repository.prepareSend(input); }
   finishSend(input) { return this.repository.finishSend(input); }

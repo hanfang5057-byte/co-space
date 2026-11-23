@@ -21,7 +21,7 @@ const call = async (client, name, args = {}) => {
   return body;
 };
 
-test('the Space MCP server supports the full create/read/suggest/status loop', async () => {
+test('the Space MCP server scopes tools to named documents and processes comments', async () => {
   const home = mkdtempSync(path.join(tmpdir(), 'space-mcp-'));
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -34,9 +34,11 @@ test('the Space MCP server supports the full create/read/suggest/status loop', a
 
     const tools = await client.listTools();
     const names = tools.tools.map(tool => tool.name);
-    for (const name of ['space_list', 'space_documents', 'space_document_create', 'space_document_read', 'space_suggest', 'space_suggestion_list']) {
+    for (const name of ['space_document_create', 'space_document_read', 'space_suggest', 'space_suggestion_list', 'space_comment_complete']) {
       assert.ok(names.includes(name), `missing ${name}`);
     }
+    assert.equal(names.includes('space_list'), false);
+    assert.equal(names.includes('space_documents'), false);
 
     const created = await call(client, 'space_document_create', {
       text: '# Agent document\n\nHello world',
@@ -52,12 +54,15 @@ test('the Space MCP server supports the full create/read/suggest/status loop', a
       operationId: 'agent-create-1',
     });
     assert.equal(replayed.id, created.id);
-    const list = await call(client, 'space_documents');
-    assert.equal(list.documents.filter(document => document.id === created.id).length, 1);
+    const commentService = new SpaceService(home);
+    const comment = commentService.createComment({ docId: created.id, quote: 'world', body: 'Clarify the ending', anchor: { from: 24, to: 29, version: 0 } });
+    commentService.close();
 
     const read = await call(client, 'space_document_read', { id: created.reference });
     assert.equal(read.version, 0);
     assert.match(read.content, /Hello world/);
+    assert.equal(read.comments.length, 1);
+    assert.equal(read.comments[0].id, comment.id);
 
     const from = read.content.indexOf('world');
     const proposed = await call(client, 'space_suggest', {
@@ -70,6 +75,23 @@ test('the Space MCP server supports the full create/read/suggest/status loop', a
       operationId: 'agent-suggest-1',
     });
     assert.equal(proposed.suggestion.expected, 'world');
+
+    const completed = await call(client, 'space_comment_complete', {
+      docId: created.id,
+      operationId: 'agent-comment-complete-1',
+      results: [{ commentId: comment.id, status: 'processed', suggestionIds: [proposed.suggestion.id] }],
+    });
+    assert.equal(completed.results[0].status, 'processed');
+    assert.equal(completed.replay, false);
+    const completionReplay = await call(client, 'space_comment_complete', {
+      docId: created.id,
+      operationId: 'agent-comment-complete-1',
+      results: [{ commentId: comment.id, status: 'processed', suggestionIds: [proposed.suggestion.id] }],
+    });
+    assert.equal(completionReplay.replay, true);
+    const withProcessing = await call(client, 'space_document_read', { id: created.id });
+    assert.equal(withProcessing.comments[0].processing.status, 'processed');
+    assert.deepEqual(withProcessing.comments[0].processing.suggestionIds, [proposed.suggestion.id]);
 
     const pending = await call(client, 'space_suggestion_list', { docId: created.id, status: 'pending' });
     assert.equal(pending.suggestions.length, 1);
@@ -85,7 +107,10 @@ test('the Space MCP server supports the full create/read/suggest/status loop', a
     }
     const decided = await call(client, 'space_suggestion_list', { docId: created.id });
     assert.equal(decided.suggestions[0].status, 'accepted');
-    assert.equal((await call(client, 'space_document_read', { id: created.id })).content, '# Agent document\n\nHello Space');
+    const accepted = await call(client, 'space_document_read', { id: created.id });
+    assert.equal(accepted.content, '# Agent document\n\nHello Space');
+    assert.equal(accepted.comments[0].processing.status, 'processed');
+    assert.equal(accepted.comments[0].processing.suggestions[0].status, 'accepted');
   } finally {
     await client.close().catch(() => {});
     rmSync(home, { recursive: true, force: true });

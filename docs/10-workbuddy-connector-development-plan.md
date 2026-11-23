@@ -28,14 +28,14 @@
 
 Connector 负责向 Agent 暴露受控的 Space 文档工具。它不是 WorkBuddy 内的面板插件，也不会读取或操作 WorkBuddy 对话数据库、账号资料、会话文件或 UI。WorkBuddy 的“连接器”是宿主加载 MCP 工具的产品能力；用户看到的市场 Connector 元数据与其底层 MCP Server 是两个不同层次。
 
-首版提供文档和建议工作流。用户接受/拒绝建议的权力继续留在审阅 UI；Agent 不能代替用户接受建议，也不能直接覆盖已有正文。评论发送至当前 WorkBuddy 对话、会话引用卡片、WorkBuddy 用户身份作者信息均不属于首版。
+当前实现提供文档、建议和评论处理工作流。评论保存在本机；`space_document_read` 对用户指定文档默认返回评论。用户点击审阅页的处理按钮后，WorkBuddy 只复制包含文档引用的短提示词，用户手动粘贴到对话；Agent 通过工具读取评论、提交建议并调用 `space_comment_complete` 记录结果。没有受支持的会话注入、会话引用卡片或 WorkBuddy 身份资料 API。用户仍在审阅 UI 接受/拒绝建议，Agent 不能直接覆盖已有正文。
 
 ## 现有代码映射
 
 | 仓库路径 | 现状 | 方案中的用途 |
 | --- | --- | --- |
 | `packages/review-core/` | 已有 SpaceService、SQLite 持久化和事务语义 | 唯一领域写入路径；保持现有审阅行为 |
-| `packages/transport-mcp/server.js` | 已有宿主无关 MCP 工具：列表、创建/读取文档、提交/查询建议 | 复用工具定义和说明；WorkBuddy 运行入口负责 stdio 生命周期 |
+| `packages/transport-mcp/server.js` | 提供指定文档创建/读取、建议提交/查询和评论处理完成工具；不提供文档枚举 | DSH 与 WorkBuddy 共用工具定义；WorkBuddy 运行入口负责 stdio 生命周期 |
 | `packages/transport-http/` | 已有宿主无关 HTTP handler | 由 WorkBuddy runtime 适配层绑定 API facade，保持同源请求契约 |
 | `packages/review-ui/` | 已有审阅 UI 组件 | 嵌入 `apps/review-web` 的独立页面壳，补齐自动初始化状态、连接状态和待审入口 |
 | `adapters/workbuddy/` | 仅有占位 README | 增加 runtime 入口、路径/生命周期适配、Connector 配置和 Skill 源文件 |
@@ -75,7 +75,7 @@ HTTP 服务必须仅绑定 `127.0.0.1`（需要 IPv6 时同时验证 `::1`），
 
 - `space_review_open`：返回文档审阅页 URL、当前服务状态和简短操作说明；没有目标文档时返回文档首页。Space 和默认目录已经自动初始化，不提供设置页。
 - 文档创建、建议提交的响应可附 `reviewUrl`，让 Agent 在每次修改建议后提供直达审阅入口。
-- `space_status`：提供服务版本、自动初始化状态和页面服务是否运行；不得向 Agent 不必要地暴露绝对数据路径。
+- `space_review_open`：同时启动/检查审阅 sidecar，并在响应中提供服务可用状态和页面地址；不单独暴露 `space_status`。
 
 如果实现上保持原公共 MCP tools 全宿主无关，则通过 WorkBuddy adapter 注册额外工具并包装现有响应；如果需要给 `transport-mcp` 增加可选 URL provider 参数，应确保 DSH 默认行为、现有响应兼容且不触及 review-core。无用户可见写操作由 Agent 直接执行；正文接受/拒绝始终由用户在审阅页发起。
 

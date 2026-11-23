@@ -189,6 +189,7 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-comment-balloon.is-stale { border-style: dashed; background: color-mix(in srgb, var(--space-card) 88%, var(--space-muted) 12%); }
 .space-annotation-head { margin-block-end: 8px; }
 .space-comment-status { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; background: var(--space-comment-soft); color: var(--space-comment); font-size: 10px; line-height: 1.4; }
+.space-comment-processing-meta { margin-block-start: 7px; color: var(--space-muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .space-comment-status.is-failed, .space-comment-status.is-unknown { background: color-mix(in srgb, var(--space-danger) 12%, transparent); color: var(--space-danger); }
 .space-comment-body { margin: 0; padding-inline-end: 24px; font-size: 13px; line-height: 1.65; color: var(--space-text); }
 .space-app .space-comment-delete-icon { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; display: inline-flex; align-items: center; justify-content: center; inline-size: 26px; block-size: 26px; min-block-size: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--space-muted); opacity: 0; pointer-events: none; transition: opacity .14s ease, background-color .14s ease, color .14s ease; }

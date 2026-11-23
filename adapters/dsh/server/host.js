@@ -50,14 +50,11 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
         }
         const prepared = space.prepareSend({ ...args, sessionId: target.sessionId, operationId });
         if (prepared.replay) return {requestId:operationId,status:prepared.status,sessionId:target.sessionId,createdSession:false};
-        // Lead with the protocol reference so the conversation renders the
-        // document card and the Agent can resolve the same id. The document id
-        // appears once, in that reference; comment ids stay internal because no
-        // Agent tool consumes them.
+        // Only send the reference and explicit processing instruction. Comment
+        // bodies remain in local storage and are read through space_document_read.
         const reference = `space:${encodeURIComponent(args.docId)}`;
-        const instruction = '请先使用 space_document_read 读取该文档的最新正文和版本，再针对以下评论逐条提出具体修订建议；每条评论形成一个独立建议，不要直接修改已有正文。';
-        const commentLines = prepared.comments.map((c, i) => `\n评论 ${i + 1}\n引用${c.stale ? '（位置已失效，请按最新正文重新定位）' : ''}：${c.quote}\n意见：${c.body}`).join('\n');
-        const text = `${reference}\n${instruction}\n${commentLines}`;
+        const instruction = '请处理此文档中尚未处理的评论：先调用 space_document_read 读取最新正文、版本和评论，对每条可执行评论逐条提交具体修订建议；完成后调用 space_comment_complete 记录评论与建议 ID 的关联。无法安全定位或意图不清时记录 needs_clarification。不要直接修改已有正文，也不要接受或拒绝建议。';
+        const text = `${reference}\n${instruction}`;
         try {
           const receipt = await prompt({ requestId: operationId, sessionId: target.sessionId, mode:'queue', content:[{type:'text',text}] });
           if (receipt?.accepted !== true) throw new Error('宿主未确认接收');
