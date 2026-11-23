@@ -1,0 +1,20 @@
+{
+  "name": "Space 文档审阅",
+  "name_zh": "Space 文档审阅",
+  "name_en": "Space Document Review",
+  "description": "在本机管理个人文档，并审阅 Agent 提交的逐条修改建议。",
+  "description_zh": "在本机管理个人文档，并审阅 Agent 提交的逐条修改建议。",
+  "description_en": "Manage personal documents locally and review each edit proposed by an agent.",
+  "source": "dsh-space-review",
+  "type": "mcp",
+  "version": "0.1.0",
+  "minWorkbuddyVersion": "5.0.0",
+  "examples_zh": [
+    "把这份方案存入 Space，并提出三条独立修改建议",
+    "打开 Space 中待审的修改建议"
+  ],
+  "examples_en": [
+    "Save this plan to Space and propose three independent edits",
+    "Open the pending suggestions in Space"
+  ]
+}

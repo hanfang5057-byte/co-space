@@ -1,0 +1,19 @@
+{
+  "name": "dsh-space-workbuddy-connector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WorkBuddy MCP connector for local DSH Space document review",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "verify": "node verify.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}

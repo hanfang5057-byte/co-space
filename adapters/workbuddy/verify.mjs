@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { access, readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const adapterDir = path.dirname(fileURLToPath(import.meta.url));
+const outputDir = path.resolve(adapterDir, '../../dist/workbuddy-connector');
+const marketDir = path.join(outputDir, 'market');
+const runtimeDir = path.join(outputDir, 'runtime-package');
+const readJson = async file => JSON.parse(await readFile(file, 'utf8'));
+
+await access(path.join(outputDir, 'mcp.local.json'));
+const meta = await readJson(path.join(marketDir, 'connector-meta.json'));
+const marketConfig = await readJson(path.join(marketDir, 'mcp.json'));
+const runtimeManifest = await readJson(path.join(runtimeDir, 'package.json'));
+assert.equal(meta.type, 'mcp');
+assert.equal(meta.source, 'dsh-space-review');
+assert.equal(meta.minWorkbuddyVersion, '5.0.0');
+assert.equal(Object.keys(marketConfig.mcpServers).length, 1, 'Connector must configure exactly one MCP server');
+const [server] = Object.values(marketConfig.mcpServers);
+assert.equal(server.type, 'stdio');
+assert.equal(server.runtime.type, 'node');
+assert.equal(server.runtime.version, '>=24.0.0');
+assert.match(server.args.join(' '), /dsh-space-workbuddy-connector@0\.1\.0/);
+assert.deepEqual(runtimeManifest.files, ['server.js', 'public/']);
+assert.equal(runtimeManifest.engines.node, '>=24');
+await access(path.join(runtimeDir, 'server.js'));
+assert.match(await readFile(path.join(runtimeDir, 'server.js'), 'utf8'), /^#!\/usr\/bin\/env node\n/);
+for (const file of ['client.js', 'client.css', 'icon.svg']) await access(path.join(runtimeDir, 'public', file));
+await access(path.join(marketDir, 'skills/space-review/SKILL.md'));
+
+const marketFiles = await readdir(marketDir, { recursive: true });
+assert(!marketFiles.some(file => file.endsWith('.map')), 'Market package must not include source maps');
+assert(!marketFiles.some(file => file.startsWith('adapters/dsh')), 'Market package must not include DSH adapter sources');
+const mcp = await readFile(path.join(marketDir, 'mcp.json'), 'utf8');
+assert(!mcp.includes('/Users/'), 'Market MCP config must not contain local absolute paths');
+const localConfig = await readJson(path.join(outputDir, 'mcp.local.json'));
+const [localServer] = Object.values(localConfig.mcpServers);
+assert.equal(localServer.command, process.execPath);
+assert.equal(localServer.args[0], path.join(runtimeDir, 'server.js'));
+console.log('WorkBuddy Connector package boundaries and manifests verified.');

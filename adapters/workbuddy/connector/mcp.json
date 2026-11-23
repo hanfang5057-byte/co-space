@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "dsh-space-review": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "dsh-space-workbuddy-connector@0.1.0"],
+      "timeout": 30000,
+      "runtime": {
+        "type": "node",
+        "version": ">=24.0.0"
+      }
+    }
+  }
+}
