@@ -6,10 +6,10 @@
   "type": "module",
   "license": "MIT",
   "author": "hanfang",
-  "homepage": "https://github.com/hanfang5057-byte/dsh-space",
+  "homepage": "https://github.com/hanfang5057-byte/co-space",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hanfang5057-byte/dsh-space.git"
+    "url": "git+https://github.com/hanfang5057-byte/co-space.git"
   },
   "keywords": [
     "dsh",
