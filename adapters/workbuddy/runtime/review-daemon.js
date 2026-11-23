@@ -17,9 +17,12 @@ function statePath(home) { return path.join(home, STATE_FILE); }
 function launchdPath(home) { return path.join(home, LAUNCHD_FILE); }
 function taskPath(home) { return path.join(home, TASK_FILE); }
 function serviceId(home) { return createHash('sha256').update(home).digest('hex').slice(0, 16); }
-function launchdLabel(home) { return `com.dsh-space.workbuddy-review-${serviceId(home)}`; }
-function systemdUnit(home) { return `dsh-space-workbuddy-review-${serviceId(home)}.service`; }
-function taskName(home) { return `DshSpaceWorkBuddyReview_${serviceId(home)}`; }
+function launchdLabel(home) { return `com.cospace.workbuddy-review-${serviceId(home)}`; }
+function systemdUnit(home) { return `cospace-workbuddy-review-${serviceId(home)}.service`; }
+function taskName(home) { return `CoSpaceWorkBuddyReview_${serviceId(home)}`; }
+function legacyLaunchdLabel(home) { return `com.dsh-space.workbuddy-review-${serviceId(home)}`; }
+function legacySystemdUnit(home) { return `dsh-space-workbuddy-review-${serviceId(home)}.service`; }
+function legacyTaskName(home) { return `DshSpaceWorkBuddyReview_${serviceId(home)}`; }
 function launchdDomain() { return `gui/${process.getuid()}`; }
 function xml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
@@ -56,12 +59,16 @@ function runSystemctl(args) {
 function stopPlatformService(home) {
   if (process.platform === 'darwin') {
     runLaunchctl(['bootout', `${launchdDomain()}/${launchdLabel(home)}`]);
+    runLaunchctl(['bootout', `${launchdDomain()}/${legacyLaunchdLabel(home)}`]);
     removeLaunchdPlist(home);
   } else if (process.platform === 'linux') {
     const result = runSystemctl(['stop', systemdUnit(home)]);
     if (result.error?.code !== 'ENOENT') runSystemctl(['reset-failed', systemdUnit(home)]);
+    runSystemctl(['stop', legacySystemdUnit(home)]);
+    runSystemctl(['reset-failed', legacySystemdUnit(home)]);
   } else if (process.platform === 'win32') {
     spawnSync('schtasks.exe', ['/Delete', '/TN', taskName(home), '/F'], { encoding: 'utf8', timeout: 5000 });
+    spawnSync('schtasks.exe', ['/Delete', '/TN', legacyTaskName(home), '/F'], { encoding: 'utf8', timeout: 5000 });
     try { unlinkSync(taskPath(home)); } catch {}
   }
 }
@@ -134,7 +141,7 @@ async function isReady(state) {
       headers: { 'x-workbuddy-review-token': state.token },
       signal: AbortSignal.timeout(500),
     });
-    return response.ok && (await response.json()).service === 'workbuddy-space-review';
+    return response.ok && (await response.json()).service === 'cospace-workbuddy-review';
   } catch { return false; }
 }
 

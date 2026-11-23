@@ -4,8 +4,9 @@ import { SpaceDocumentReference } from '../../../packages/review-ui/src/SpaceRef
 import { SpaceSidebarDocument, SpaceSidebarTitle } from '../../../packages/review-ui/src/SpaceSidebar.jsx';
 import { api as request } from '../../../packages/review-ui/src/api.js';
 import { NS, en, errorText, zh } from '../../../packages/review-ui/src/locale.js';
-import { documentIdFromReference, matchSpaceReference, spaceReferenceFor, spaceResourceFor, documentIdFromResource } from '../../../packages/review-ui/src/space-reference.js';
+import { documentIdFromReference, matchSpaceReference, spaceReferenceFor } from '../../../packages/review-ui/src/space-reference.js';
 import { documentTitle } from '../../../packages/review-ui/src/document-titles.js';
+import { documentIdFromDshResource, dshSpaceResourceFor } from './resource-reference.js';
 
 export const name = 'dsh-space-client';
 /** Client services: slots, the current Session, copy, conversation text, and the right Sidebar. */
@@ -16,6 +17,14 @@ export const api = request;
 const SIDEBAR_ID = 'dsh-plugin-space';
 const SIDEBAR_KIND = 'space-document';
 const SIDEBAR_PATTERN = 'dsh-resource://space/**';
+
+function DshSpaceSidebarDocument(props) {
+  return <SpaceSidebarDocument {...props} getDocumentIdFromResource={documentIdFromDshResource}/>;
+}
+
+function DshSpaceSidebarTitle(props) {
+  return <SpaceSidebarTitle {...props} getDocumentIdFromResource={documentIdFromDshResource}/>;
+}
 
 function SpaceIcon({size=16}) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M9 9v11"/></svg>; }
 
@@ -46,7 +55,7 @@ function createSendBridge(ctx) {
 function openSpaceDocument(ctx, docId) {
   if (typeof docId !== 'string' || docId === '') return false;
   try {
-    ctx.sidebarRight.openResource(spaceResourceFor(docId));
+    ctx.sidebarRight.openResource(dshSpaceResourceFor(docId));
     return true;
   } catch {
     const layout=ctx.get?.('layout');
@@ -133,16 +142,16 @@ export function apply(ctx) {
   // identity, so a reload restores the same document rather than a blank page.
   ctx.effect(()=>ctx.sidebarRightTabs.register({
     id:SIDEBAR_ID, kind:SIDEBAR_KIND, patterns:[SIDEBAR_PATTERN], priority:'extension',
-    canOpen:address=>documentIdFromResource(address)!==null,
-    title:address=>documentTitle(documentIdFromResource(address)) || t('sidebar.title'),
+    canOpen:address=>documentIdFromDshResource(address)!==null,
+    title:address=>documentTitle(documentIdFromDshResource(address)) || t('sidebar.title'),
   }),'dsh-space: sidebar document type');
   ctx.slots.inject('sidebar.right.pane.tab',()=>ctx.slots.register({
     name:'sidebar.right.pane.tab', key:SIDEBAR_ID, locale:NS,
     inject:()=>({sendTarget:sendBridge}),
-  },SpaceSidebarDocument));
+  },DshSpaceSidebarDocument));
   ctx.slots.inject('sidebar.right.pane.tab.title',()=>ctx.slots.register({
     name:'sidebar.right.pane.tab.title', key:SIDEBAR_ID, locale:NS,
-  },SpaceSidebarTitle));
+  },DshSpaceSidebarTitle));
 
   ctx.inject(['inputTriggers'],scope=>{
     scope.effect(()=>scope.inputTriggers.registerSource({

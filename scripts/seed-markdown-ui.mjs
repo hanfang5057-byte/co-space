@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Seed a running (or stopped) DSH Space home with Markdown review fixtures for
+ * Seed a running (or stopped) 智联文档空间（CoSpace） home with Markdown review fixtures for
  * manual UI acceptance. Uses the real Space MCP tools over stdio, so every
  * document and suggestion goes through the same validation as an Agent call.
  *
@@ -22,8 +22,8 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { SpaceService } from '../src/space-service.js';
-import { CommentStore } from '../src/comments.js';
+import { SpaceService } from '../packages/review-core/src/space-service.js';
+import { CommentStore } from '../packages/review-core/src/comments.js';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const home = path.resolve(process.env.DSH_SPACE_HOME || path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'space'));
@@ -480,7 +480,7 @@ async function openClient() {
   const client = new Client({ name: 'space-markdown-ui-seed', version: '0.1.0' });
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [path.join(repo, 'server', 'mcp.js')],
+    args: [path.join(repo, 'adapters', 'dsh', 'server', 'mcp-entry.js')],
     env: { ...process.env, DSH_SPACE_HOME: home },
     stderr: 'pipe',
   });

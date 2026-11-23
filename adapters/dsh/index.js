@@ -1,7 +1,8 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHostApi, createHttpHandler } from './server/host.js';
+import { createHostApi } from './server/host.js';
+import { createHttpHandler, COSPACE_API_PATH } from '../../packages/transport-http/http-handler.js';
 import { createSendTargetResolver } from './server/send-target.js';
 import { createUserResolver } from './server/user.js';
 
@@ -15,7 +16,7 @@ export function apply(ctx) {
   if(process.versions.electron) env.ELECTRON_RUN_AS_NODE='1';
   ctx.inject(['mcpManager'],scope=>{
     scope.effect(()=>scope.mcpManager.register('space',{
-      transport:'stdio',command:process.execPath,args:[fileURLToPath(new URL('./server/mcp.js',import.meta.url))],env,toolLoading:'eager',failOnStartupError:false,
+      transport:'stdio',command:process.execPath,args:[fileURLToPath(new URL('./server/mcp-entry.js',import.meta.url))],env,toolLoading:'eager',failOnStartupError:false,
     }),'dsh-space: MCP tools');
   });
   ctx.inject(['webServer'],scope=>{
@@ -29,6 +30,6 @@ export function apply(ctx) {
       getUser:createUserResolver(ctx),
       resolveTarget:createSendTargetResolver(ctx),
     });
-    scope.effect(()=>{const dispose=scope.webServer.register({kind:'prefix',path:'/dsh-space-api',handler:createHttpHandler(api)});return ()=>{dispose();api.close();}},'dsh-space: UI API');
+    scope.effect(()=>{const dispose=scope.webServer.register({kind:'prefix',path:COSPACE_API_PATH,handler:createHttpHandler(api)});return ()=>{dispose();api.close();}},'dsh-space: UI API');
   });
 }

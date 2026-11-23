@@ -1,9 +1,9 @@
 {
-  "name": "dsh-space-workbuddy-connector",
+  "name": "cospace-workbuddy-connector",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "WorkBuddy MCP connector for local DSH Space document review",
+  "description": "WorkBuddy MCP connector for local 智联文档空间（CoSpace） document review",
   "engines": {
     "node": ">=24"
   },

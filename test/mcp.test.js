@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { SpaceService } from '../src/space-service.js';
+import { SpaceService } from '../packages/review-core/src/space-service.js';
 
 const payload = result => {
   const block = result?.content?.find(item => item.type === 'text');
@@ -25,7 +25,7 @@ test('the Space MCP server supports the full create/read/suggest/status loop', a
   const home = mkdtempSync(path.join(tmpdir(), 'space-mcp-'));
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [fileURLToPath(new URL('../server/mcp.js', import.meta.url))],
+    args: [fileURLToPath(new URL('../adapters/dsh/server/mcp-entry.js', import.meta.url))],
     env: { ...process.env, DSH_SPACE_HOME: home },
   });
   const client = new Client({ name: 'space-test', version: '1.0.0' });

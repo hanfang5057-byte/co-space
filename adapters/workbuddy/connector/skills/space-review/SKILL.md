@@ -2,10 +2,10 @@
 name: space-review
 description: Manage local Space documents and review agent-proposed edits without applying them automatically.
 version: 0.1.0
-author: DSH Space
+author: CoSpace
 ---
 
-# Space 文档审阅
+# 智联文档空间（CoSpace）文档审阅
 
 使用 `space_*` 工具管理保存在本机的 Space 文档。Space 数据与 DSH 插件数据完全隔离。
 

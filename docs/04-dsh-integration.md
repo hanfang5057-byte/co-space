@@ -2,6 +2,8 @@
 
 ## 入口和职责
 
+评论由提示词全文携带改为经工具读取的跨宿主提案见[评论驱动修改方案](11-comment-driven-revision-plan.md)；本文件描述当前 DSH 接入契约。
+
 - 左侧 Space 总入口负责浏览个人文档和打开审阅界面。
 - 任意 DSH 对话输入框的加号可选择一个或多个 Space 文件，引用格式为 `space:<docId>`。该入口已在 DSH `0.2.2-rc.5` 中接入（见下）；真实对话内的插入、引用解析和跨会话行为仍待端到端验收，不把入口可用等同于插件接入已验证。
 - 用户发送文件和修改要求后，Agent 通过受控能力读取对应正文、版本、待处理建议，并逐条提交具体建议；接受和拒绝由用户在 UI 发起。
@@ -25,12 +27,12 @@
 
 ## 已接入的宿主接口（0.2.2-rc.5）
 
-实现位置：[index.js](../index.js)、[server/host.js](../server/host.js)、[server/mcp.js](../server/mcp.js)、[client-src/index.jsx](../client-src/index.jsx)。
+实现位置：[DSH 插件入口](../adapters/dsh/index.js)、[宿主 HTTP API](../adapters/dsh/server/host.js)、[MCP 进程入口](../adapters/dsh/server/mcp-entry.js)、[DSH 客户端入口](../adapters/dsh/client/index.jsx)。
 
 | 接入点 | 实现方式 | 当前状态 |
 |---|---|---|
 | Agent 工具 | `mcpManager.register('space', { transport:'stdio', toolLoading:'eager' })`；工具为 `space_list`、`space_documents`、`space_document_create`、`space_document_read`、`space_suggest`、`space_suggestion_list` | 已注册；MCP stdio 创建、读取、建议和决策查询由 Node 测试覆盖 |
-| UI API | `webServer.register({ kind:'prefix', path:'/dsh-space-api' })`，POST 请求分发到文档新建、读取、决策、评论、账号名称/头像和发送目标服务 | 已注册；新建文档入口、插件页、详情预览图、侧边栏 Space 入口和空状态已加载 |
+| UI API | `webServer.register({ kind:'prefix', path:'/cospace-api' })`，POST 请求分发到文档新建、读取、决策、评论、账号名称/头像和发送目标服务 | 已注册；新建文档入口、插件页、详情预览图、侧边栏 Space 入口和空状态已加载 |
 | 左侧入口 | Client slot `main`（key `spaces`）与 `sidebar.panellist`（id `spaces`） | 已在 DSH 页面渲染 |
 | 输入框多选 | `commandUi.register` 打开原生对话框；`inputTriggers.registerSource` 提供引用编解码，引用格式 `space:<docId>` | 已注册；真实对话中的插入与 Agent 引用解析仍待验收 |
 | 发送引用渲染 | `uiConversation.userText.register` 匹配完整 `space:<docId>`；`conversation.user.text.node` 注册文档卡片；只读场景保持卡片但不可点击 | 已在本地构建中渲染卡片 |

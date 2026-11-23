@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "dsh-space-review": {
+    "cospace-review": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "dsh-space-workbuddy-connector@0.1.0"],
+      "args": ["-y", "cospace-workbuddy-connector@0.1.0"],
       "timeout": 30000,
       "runtime": {
         "type": "node",

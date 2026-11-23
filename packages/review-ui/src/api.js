@@ -1,6 +1,8 @@
-/** Browser transport to the plugin's Host HTTP route; every surface shares it. */
+/** Browser transport to the CoSpace Host HTTP route; every surface shares it. */
+import { COSPACE_API_PATH } from '../../transport-http/http-handler.js';
+
 export async function api(method, args = {}) {
-  const response = await fetch('/dsh-space-api', {
+  const response = await fetch(COSPACE_API_PATH, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ method, args }),

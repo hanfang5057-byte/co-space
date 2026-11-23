@@ -45,8 +45,8 @@ await build({
 await Promise.all([
   cp(path.join(adapterDir, 'connector/connector-meta.json'), path.join(marketDir, 'connector-meta.json')),
   cp(path.join(adapterDir, 'connector/mcp.json'), path.join(marketDir, 'mcp.json')),
-  cp(path.join(adapterDir, 'connector/icon.svg'), path.join(marketDir, 'icon.svg')),
-  cp(path.join(adapterDir, 'connector/icon.svg'), path.join(publicDir, 'icon.svg')),
+  cp(path.join(repoDir, 'assets/cospace-icon.svg'), path.join(marketDir, 'icon.svg')),
+  cp(path.join(repoDir, 'assets/cospace-icon.svg'), path.join(publicDir, 'icon.svg')),
   cp(path.join(adapterDir, 'connector/skills/space-review/SKILL.md'), path.join(marketDir, 'skills/space-review/SKILL.md')),
   cp(path.join(adapterDir, 'README.md'), path.join(outputDir, 'README.md')),
 ]);
@@ -58,13 +58,13 @@ await writeFile(path.join(runtimeDir, 'package.json'), `${JSON.stringify({
   description: manifest.description,
   type: 'module',
   engines: manifest.engines,
-  bin: { 'dsh-space-workbuddy-connector': './server.js' },
+  bin: { 'cospace-workbuddy-connector': './server.js' },
   files: ['server.js', 'public/'],
 }, null, 2)}\n`);
 
 const localConfig = {
   mcpServers: {
-    'dsh-space-review-local': {
+    'cospace-review-local': {
       type: 'stdio',
       command: process.execPath,
       args: [path.join(runtimeDir, 'server.js')],

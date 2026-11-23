@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const root = path.resolve(import.meta.dirname, '..');
+const packageRoot = path.join(root, 'dist/dsh-plugin');
+const manifest = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'));
+
+assert.equal(manifest.name, 'dsh-plugin-space');
+assert.equal(manifest.private, undefined, 'the staged npm package must be publishable');
+assert.equal(manifest.dsh?.bundle?.patch, './cordis.patch.yml');
+for (const file of ['index.js', 'client.js', 'server/mcp-entry.js', 'cordis.patch.yml', 'icon.svg', 'locale/en.json', 'locale/zh.json']) {
+  await access(path.join(packageRoot, file));
+}
+
+const bundledEntries = await Promise.all(['index.js', 'server/mcp-entry.js'].map(file => readFile(path.join(packageRoot, file), 'utf8')));
+for (const source of bundledEntries) {
+  assert.doesNotMatch(source, /(?:from\s*|import\s*)["'](?:\.\.?\/|(?:packages|adapters)\/)/, 'release entries must not depend on monorepo source paths');
+}
+
+const home = await mkdtemp(path.join(tmpdir(), 'space-pack-check-'));
+const previousHome = process.env.DSH_SPACE_HOME;
+process.env.DSH_SPACE_HOME = home;
+const registrations = [];
+const disposers = [];
+const ctx = {
+  get: () => undefined,
+  inject: (_dependencies, callback) => callback(ctx),
+  effect: callback => { disposers.push(callback()); },
+  mcpManager: { register: (name, config) => { registrations.push({ name, config }); return () => {}; } },
+  webServer: { register: route => { registrations.push({ route }); return () => {}; } },
+};
+
+try {
+  const plugin = await import(pathToFileURL(path.join(packageRoot, 'index.js')).href);
+  assert.equal(plugin.name, 'dsh-space');
+  plugin.apply(ctx);
+  assert.equal(registrations[0].name, 'space');
+  assert.equal(registrations[0].config.env.DSH_SPACE_HOME, home);
+  await access(registrations[0].config.args[0]);
+  assert.equal(registrations[1].route.path, '/cospace-api');
+} finally {
+  for (const dispose of disposers.reverse()) dispose?.();
+  if (previousHome === undefined) delete process.env.DSH_SPACE_HOME;
+  else process.env.DSH_SPACE_HOME = previousHome;
+  await rm(home, { recursive: true, force: true });
+}
+
+console.log(`Verified ${manifest.name}@${manifest.version}: staged files, bundled source boundaries, plugin entry, MCP entry, and HTTP registration.`);

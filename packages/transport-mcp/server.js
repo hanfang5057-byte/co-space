@@ -1,11 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { homedir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { SpaceService, documentFromMarkdown } from '../src/space-service.js';
+import { documentFromMarkdown } from '../review-core/src/space-service.js';
 
 const text = result => ({ content: [{ type: 'text', text: JSON.stringify(result) }] });
 const wrap = fn => async args => {
@@ -55,12 +51,4 @@ export function createMcpServer(service) {
     return { ...result, reference: referenceFor(result.id) };
   }));
   return server;
-}
-
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const home = path.resolve(process.env.DSH_SPACE_HOME || path.join(process.env.DSH_HOME || path.join(homedir(), '.dsh'), 'space'));
-  const service = new SpaceService(home);
-  const server = createMcpServer(service);
-  process.on('SIGTERM', () => { service.close(); process.exit(0); });
-  await server.connect(new StdioServerTransport());
 }

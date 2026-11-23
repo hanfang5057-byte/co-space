@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSendTarget } from '../server/send-target.js';
+import { resolveSendTarget } from '../adapters/dsh/server/send-target.js';
 
 const session = (sessionId, updatedAt = 1, cwd = undefined) => ({ sessionId, updatedAt, ...(cwd === undefined ? {} : { cwd }) });
 const workspace = (id, overrides = {}) => ({

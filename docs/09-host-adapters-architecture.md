@@ -1,6 +1,6 @@
-# 09 · 多宿主适配器与 WorkBuddy Connector 架构方案
+# 09 · CoSpace 多宿主适配器与 WorkBuddy Connector 架构
 
-> 架构基线。2026-11-23，DSH 源码已迁入私有 workspace、独立 adapter 和共享包边界；DSH npm 包从暂存目录构建且通过 `npm pack --dry-run` 与 `npm publish --dry-run`。WorkBuddy 运行时代码与独立审阅页仍未实现，目录仅为占位。真实 DSH 宿主验收状态仍以 [04 · DSH 集成契约](04-dsh-integration.md) 为准。
+> 架构基线。2026-11-23，CoSpace 已形成共享 workspace、独立 DSH 与 WorkBuddy adapters。DSH npm 包从暂存目录构建；WorkBuddy Connector 已实现本地 MCP、隔离数据目录、loopback 审阅服务及滑动空闲保活，并完成本机合成数据验收。Connector 市场提审和跨平台真实宿主验收仍未完成。真实 DSH 宿主验收状态以 [04 · DSH 集成契约](04-dsh-integration.md) 为准。
 
 ## 目标与约束
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createUserResolver } from '../server/user.js';
+import { createUserResolver } from '../adapters/dsh/server/user.js';
 
 const ctxWith = account => ({ get: name => name === 'deepseekAccount' ? account : undefined });
 

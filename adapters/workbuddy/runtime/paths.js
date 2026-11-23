@@ -1,9 +1,11 @@
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const OWNER_FILE = '.dsh-space-workbuddy-owner';
-const OWNER_VALUE = 'dsh-space-workbuddy:v1\n';
+const OWNER_FILE = '.cospace-workbuddy-owner';
+const OWNER_VALUE = 'cospace:workbuddy:v1\n';
+const LEGACY_OWNER_FILE = '.dsh-space-workbuddy-owner';
+const LEGACY_OWNER_VALUE = 'dsh-space-workbuddy:v1\n';
 
 function ensureDirectory(root, target) {
   const relative = path.relative(root, target);
@@ -23,6 +25,21 @@ function ensureDirectory(root, target) {
 
 function reserveOwner(home) {
   const marker = path.join(home, OWNER_FILE);
+  const legacyMarker = path.join(home, LEGACY_OWNER_FILE);
+  if (!existsSync(marker) && existsSync(legacyMarker)) {
+    const stat = lstatSync(legacyMarker);
+    if (stat.isSymbolicLink() || !stat.isFile() || readFileSync(legacyMarker, 'utf8') !== LEGACY_OWNER_VALUE) {
+      throw new Error('WorkBuddy data directory ownership check failed');
+    }
+    let fd;
+    try { fd = openSync(marker, 'wx', 0o600); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    if (fd !== undefined) {
+      try { writeFileSync(fd, OWNER_VALUE, 'utf8'); } finally { closeSync(fd); }
+    }
+    if (readFileSync(marker, 'utf8') !== OWNER_VALUE) throw new Error('WorkBuddy data directory ownership check failed');
+    unlinkSync(legacyMarker);
+  }
   if (existsSync(marker)) {
     const stat = lstatSync(marker);
     if (stat.isSymbolicLink() || !stat.isFile() || readFileSync(marker, 'utf8') !== OWNER_VALUE) {
@@ -32,7 +49,7 @@ function reserveOwner(home) {
   }
 
   const entries = readdirSync(home);
-  if (entries.some(name => name !== OWNER_FILE)) throw new Error('Refusing to open an unowned, non-empty WorkBuddy data directory');
+  if (entries.some(name => name !== OWNER_FILE && name !== LEGACY_OWNER_FILE)) throw new Error('Refusing to open an unowned, non-empty WorkBuddy data directory');
   let fd;
   try { fd = openSync(marker, 'wx', 0o600); }
   catch (error) {

@@ -165,7 +165,7 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
 test('plugin registers MCP and web route against the same home and disposes them', async () => {
  const {apply}=await import('../adapters/dsh/index.js'); const home=mkdtempSync(path.join(tmpdir(),'space-apply-')); const old=process.env.DSH_SPACE_HOME;process.env.DSH_SPACE_HOME=home;
  const regs=[],disposers=[];const ctx={get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>{disposers.push(fn());},mcpManager:{register:(name,config)=>{regs.push({name,config});return()=>{};}},webServer:{register:route=>{regs.push({route});return()=>{};}}};
- try {apply(ctx);assert.equal(regs[0].name,'space');assert.equal(regs[0].config.env.DSH_SPACE_HOME,home);assert.equal(regs[0].config.toolLoading,'eager');assert.match(regs[0].config.args[0],/server\/mcp-entry\.js$/);assert.equal(regs[1].route.path,'/dsh-space-api');}
+ try {apply(ctx);assert.equal(regs[0].name,'space');assert.equal(regs[0].config.env.DSH_SPACE_HOME,home);assert.equal(regs[0].config.toolLoading,'eager');assert.match(regs[0].config.args[0],/server\/mcp-entry\.js$/);assert.equal(regs[1].route.path,'/cospace-api');}
  finally {for(const d of disposers.reverse())d?.(); if(old===undefined)delete process.env.DSH_SPACE_HOME;else process.env.DSH_SPACE_HOME=old;rmSync(home,{recursive:true,force:true});}
 });
 

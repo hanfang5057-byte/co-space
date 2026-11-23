@@ -1,20 +1,22 @@
-# DSH Space
+# 智联文档空间（CoSpace）
 
-DSH Space 让用户在个人文档中审阅 Agent 提出的具体修改：用户可以在 Space 页面新建空白文档，Agent 也可以创建带完整初始正文的新文档；对已有文档的修改必须提出建议，只有用户接受才改变已接受正文。相邻修改可合并为一个审阅单位，实际重叠的提交会被拒绝。
+![CoSpace app icon](assets/cospace-icon.svg)
+
+CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户可以在 Space 页面新建空白文档，Agent 也可以创建带完整初始正文的新文档；对已有文档的修改必须提出建议，只有用户接受才改变已接受正文。相邻修改可合并为一个审阅单位，实际重叠的提交会被拒绝。
 
 ## 当前状态
 
-本仓库包含设计文档、审阅内核和 DSH 插件实现：Space 入口、新建文档、输入框多选、Agent 工具、审阅界面和评论主动发送。Agent 工具覆盖列出/读取文档、创建文档、提交建议和查询建议决策结果；评论卡显示当前登录的 DeepSeek 名称与头像（取不到时回退到通用作者）。评论采用选区气泡与 Word 式批注槽：选中文字后就地添加，保存后以气泡和连线关联正文；修改建议与评论共用同一批注槽，用不同色彩区分，已发送评论不再显示。内核以 Markdown 源文本和 SQLite 文本替换建议保存正文与审阅状态。Node 测试和模拟 DOM 的界面测试通过；已在 DSH `0.2.2-rc.5` 的本地构建中安装，确认插件页标题与描述、详情预览图、中英文界面、侧边栏 Space 入口、新建文档入口和空状态可以加载，并验证审阅页面在宿主主内容列内独立滚动、发送的文档引用显示为卡片、点击卡片在右侧边栏打开对应审阅面板。完整审阅闭环（真实对话中的多文件选择、逐条决策、评论发送与重启恢复）尚未逐项端到端验收，验收项见[交付与验收](docs/06-delivery.md)。
+本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享审阅 UI、通用传输层及宿主适配器。DSH 插件与 WorkBuddy Connector 提供独立的本机文档空间；两个宿主使用各自的数据目录，不共享文档。独立审阅页仍为规划项。
 
 正文以 Markdown 源文本保存和审阅。Agent 提交带版本和 UTF-16 源码区间的替换建议；段落、标题、列表、表格、链接等 Markdown 结构都通过普通文本替换修改。完整接口、坐标和安全限制见[审阅内核说明](docs/07-review-core.md)。
 
 ## 安装与启用
 
-- 在 DSH 的 **插件** > **添加插件** 选择本目录，或安装 npm 包 `dsh-plugin-space`（也可在配置了本仓库 `market/index.json` 的插件市场 Discover 中安装）。
+- DSH npm 包名为 `dsh-plugin-space`。根目录是私有 workspace，不直接安装或发布；构建发布包后安装 `dist/dsh-plugin/`，或运行 `npm pack ./dist/dsh-plugin` 生成 npm tarball。
 - 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/dsh-space/main/market/index.json`。
-- 可以把本目录安装为本地 `link:` bundle，便于修改后立即验证。
+- 本地开发时修改源码后运行 `npm run build:dsh`，再将生成的 `dist/dsh-plugin/` 安装到 DSH。
 - 插件声明 `engines.dsh = ^0.2.2-rc.5`；升级 DSH 大版本后需要重新核对兼容性。
-- 仓库内的 `client.js` 是已构建产物；修改 `client-src/` 后运行 `npm run build:client`，不要手工编辑 `client.js`。
+- `adapters/dsh/client.js` 是 DSH 客户端生成产物；修改 `packages/review-ui/src/` 或 `adapters/dsh/client/` 后运行 `npm run build:client`，不要手工编辑生成文件。
 - React 由宿主提供：构建保持 `react`、`react-dom`、`react/jsx-runtime` 外置，`npm run build:client` 会在发现 React 被打包进 `client.js` 时直接失败；插件不声明自己的 React 依赖。
 - 启用后，左侧栏出现 **Space** 入口；对话输入框的 **+** 菜单出现 **Space 文档**。
 
@@ -64,6 +66,7 @@ node scripts/seed-markdown-ui.mjs --only=comments
 - [导入与导出](docs/05-word-export.md)：Markdown 和可选 Word 导出。
 - [交付与验收](docs/06-delivery.md)：实现顺序、验收及风险。
 - [审阅内核与验证范围](docs/07-review-core.md)：已实现能力、运行方式和限制。
+- [多宿主适配器与 WorkBuddy Connector 架构方案](docs/09-host-adapters-architecture.md)：共享架构、独立分发和 WorkBuddy 后续工作的边界。
 
 ## 运行检查
 
@@ -71,7 +74,7 @@ node scripts/seed-markdown-ui.mjs --only=comments
 
 ```sh
 npm install
-npm run build:client
+npm run build:dsh
 npm run check
 ```
 

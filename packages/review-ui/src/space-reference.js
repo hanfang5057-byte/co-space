@@ -10,8 +10,8 @@
 /** Token prefix understood by the Space MCP tools. */
 export const SPACE_REFERENCE_PREFIX = 'space:';
 
-/** Right-Sidebar resource scheme owned by this plugin; the address persists in the saved layout. */
-export const SPACE_RESOURCE_PREFIX = 'dsh-resource://space/';
+/** Host-neutral review resource scheme used when an adapter has no native one. */
+export const SPACE_RESOURCE_PREFIX = 'cospace://document/';
 
 /** Sentence punctuation that may follow a reference without belonging to it. */
 const TRAILING_PUNCTUATION = /[)\]}>.,;:!?，。；：！？、"']+$/u;
@@ -52,7 +52,7 @@ export function documentIdFromReference(reference) {
 /**
  * Build the right-Sidebar resource address for a document.
  * @param {string} docId - stored document id.
- * @returns {string} `dsh-resource://space/<encoded id>`.
+ * @returns {string} `cospace://document/<encoded id>`.
  */
 export function spaceResourceFor(docId) {
   return `${SPACE_RESOURCE_PREFIX}${encodeURIComponent(String(docId))}`;
@@ -60,7 +60,7 @@ export function spaceResourceFor(docId) {
 
 /**
  * Decode the document id from a right-Sidebar resource address.
- * @param {string} address - a `dsh-resource://space/…` address.
+ * @param {string} address - a `cospace://document/…` address.
  * @returns {string | null} decoded id, or null for another resource.
  */
 export function documentIdFromResource(address) {

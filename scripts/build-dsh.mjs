@@ -1,0 +1,40 @@
+import { build } from 'esbuild';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const root = path.resolve(import.meta.dirname, '..');
+const adapter = path.join(root, 'adapters/dsh');
+const output = path.join(root, 'dist/dsh-plugin');
+
+await rm(output, { recursive: true, force: true });
+await mkdir(path.join(output, 'server'), { recursive: true });
+await build({
+  entryPoints: [
+    path.join(adapter, 'index.js'),
+    path.join(adapter, 'server/mcp-entry.js'),
+  ],
+  outdir: output,
+  outbase: adapter,
+  entryNames: '[dir]/[name]',
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'node24',
+  packages: 'external',
+  sourcemap: false,
+  logLevel: 'info',
+});
+
+const manifest = JSON.parse(await readFile(path.join(adapter, 'package.json'), 'utf8'));
+delete manifest.private;
+await writeFile(path.join(output, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+await Promise.all([
+  cp(path.join(adapter, 'cordis.patch.yml'), path.join(output, 'cordis.patch.yml')),
+  cp(path.join(root, 'assets/cospace-icon.svg'), path.join(output, 'icon.svg')),
+  cp(path.join(root, 'LICENSE'), path.join(output, 'LICENSE')),
+  cp(path.join(adapter, 'README.md'), path.join(output, 'README.md')),
+  cp(path.join(root, 'docs'), path.join(output, 'docs'), { recursive: true }),
+  cp(path.join(adapter, 'locale'), path.join(output, 'locale'), { recursive: true }),
+  cp(path.join(adapter, 'client.js'), path.join(output, 'client.js')),
+]);

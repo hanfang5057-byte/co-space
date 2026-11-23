@@ -82,7 +82,7 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
     const html = await fetch(page.reviewUrl);
     assert.equal(html.status, 200);
     assert.match(html.headers.get('content-security-policy'), /default-src 'self'/);
-    assert.match(await html.text(), /Space 文档审阅/);
+    assert.match(await html.text(), /智联文档空间（CoSpace）文档审阅/);
     const client = await fetch(new URL('/client.js', page.reviewUrl));
     assert.equal(client.status, 200);
     assert.match(client.headers.get('content-type'), /javascript/);

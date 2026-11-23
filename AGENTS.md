@@ -2,11 +2,11 @@
 
 ## Project Structure
 
-This repository implements DSH Space, a local document review plugin. `src/` contains the SQLite-backed review core, Space service, and comment storage. `server/` contains the MCP tools and host HTTP/session bridge. `client-src/` contains the browser entry, review interface, and styles; `scripts/build-client.mjs` generates `client.js`. `docs/` holds the current product and integration specifications. `test/` contains Node tests, MCP/host integration tests, and UI smoke-test support. `cordis.patch.yml`, `icon.svg`, and `package.json` provide plugin metadata and assets.
+This repository is a private npm workspace for CoSpace (智联文档空间). `assets/cospace-icon.svg` is the shared brand icon source copied into each adapter's package at build time. `packages/review-core/` contains the SQLite-backed review core and Space service; `packages/review-ui/` contains shared review components; `packages/transport-mcp/` and `packages/transport-http/` contain host-independent transports. `adapters/dsh/` contains the DSH plugin runtime, client shell, locale, and plugin metadata. `adapters/workbuddy/` contains the WorkBuddy MCP + Skill Connector; `apps/review-web/` is reserved for a future standalone browser app. `scripts/build-client.mjs` builds the DSH client bundle and `scripts/build-dsh.mjs` assembles the npm package under `dist/dsh-plugin/`. `docs/` holds product and integration specifications. `test/` contains Node tests and MCP/host integration tests; `scripts/test-ui.sh` provides the simulated DOM UI flow.
 
 ## Build and Development
 
-Use Node.js 24 or later. Run `npm install` to install dependencies and `npm run build:client` after changing browser sources. Run `npm run check` for the Node test suite. Run `sh scripts/test-ui.sh` for the simulated DOM UI flow; it installs its temporary test dependencies outside the repository. Do not edit generated `client.js` by hand.
+Use Node.js 24 or later. Run `npm install` to install workspace dependencies. Run `npm run build:dsh` to build the complete DSH package; `npm run build:client` only rebuilds the client bundle. Run `npm run check` for the Node test suite and `sh scripts/test-ui.sh` for the simulated DOM UI flow. Run `npm run verify:dsh-package` to assemble and inspect the npm tarball without publishing it. Do not edit generated `adapters/dsh/client.js` or anything under `dist/` by hand.
 
 ## Code and Test Conventions
 
@@ -16,7 +16,7 @@ Follow nearby JavaScript conventions: ES modules, two-space indentation, semicol
 
 Agent tools may create documents with initial content and propose changes to existing documents. Only user decisions accept or reject proposed changes. Preserve transactional persistence, overlap checks, and the distinction between accepted content and tracked suggestions. Treat comments as user-authored context and send them only after an explicit user action. Never log credentials or expose private document content unnecessarily.
 
-Do not modify `src/review-core.js` or change review-core behavior without the user’s prior explicit consent. First complete work that does not depend on such a change, then explain the concrete reason, proposed change, and impact and wait for consent. Keep unrelated existing worktree changes intact.
+Do not modify `packages/review-core/src/review-core.js` or change review-core behavior without the user’s prior explicit consent. Moving or packaging the file does not authorize behavior changes. First complete work that does not depend on such a change, then explain the concrete reason, proposed change, and impact and wait for consent. Keep unrelated existing worktree changes intact.
 
 ## Commits and Pull Requests
 

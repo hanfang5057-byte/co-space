@@ -20,9 +20,9 @@ const fallbackT = (key, vars) => translate(zh, key, vars);
  * @param {object} props - tab information hook, session id, optional creator, and locale seat.
  * @returns {React.ReactElement} the scrollable document review surface.
  */
-export function SpaceSidebarDocument({ useTabInfo, sessionId, sendTarget = null, t = fallbackT, api: requestApi = api }) {
+export function SpaceSidebarDocument({ useTabInfo, sessionId, sendTarget = null, t = fallbackT, api: requestApi = api, getDocumentIdFromResource = documentIdFromResource }) {
   const { tab } = useTabInfo();
-  const docId = documentIdFromResource(tab.contentId);
+  const docId = getDocumentIdFromResource(tab.contentId);
   const user = useCurrentUser(requestApi);
   const review = useSpaceReview(requestApi, docId, sessionId, t, sendTarget);
   useEffect(() => {
@@ -51,8 +51,8 @@ export function SpaceSidebarDocument({ useTabInfo, sessionId, sendTarget = null,
  * @param {object} props - tab information hook and locale seat.
  * @returns {React.ReactElement} the document title or the generic label.
  */
-export function SpaceSidebarTitle({ useTabInfo, t = fallbackT }) {
+export function SpaceSidebarTitle({ useTabInfo, t = fallbackT, getDocumentIdFromResource = documentIdFromResource }) {
   const { tab } = useTabInfo();
-  const title = useDocumentTitle(documentIdFromResource(tab.contentId));
+  const title = useDocumentTitle(getDocumentIdFromResource(tab.contentId));
   return <>{title || t('sidebar.title')}</>;
 }

@@ -2,9 +2,11 @@
 
 > 调研基准：2026-11-23。本文根据 WorkBuddy 开放平台官方 Connector 文档、开发者公约及当前仓库实现整理，并持续记录实施与宿主验收状态。平台字段和审核规则可能变化；提审前应以开放平台最新文档和 Connector Meta 工具导出结果为准。Connector 已完成本机实现和 macOS WorkBuddy 验收，尚未提审或上架。
 
+评论由用户复制短提示词、再由 Agent 通过工具读取和处理的跨宿主提案见[评论驱动修改方案](11-comment-driven-revision-plan.md)；本文中的评论能力边界描述当前实现。
+
 ## 结论
 
-DSH Space 应接入 WorkBuddy 的 **MCP + Skill Connector**，使用 `stdio` 启动本机 Node MCP Server。WorkBuddy 官方 v5.0.0 起可为 stdio MCP 托管 Node.js runtime，因此用户无需预装 Node。Connector 只调用本机 SQLite-backed Space 核心，不需要 WorkBuddy OpenAPI、OAuth、云端账号或上传用户文档。
+智联文档空间（CoSpace） 应接入 WorkBuddy 的 **MCP + Skill Connector**，使用 `stdio` 启动本机 Node MCP Server。WorkBuddy 官方 v5.0.0 起可为 stdio MCP 托管 Node.js runtime，因此用户无需预装 Node。Connector 只调用本机 SQLite-backed Space 核心，不需要 WorkBuddy OpenAPI、OAuth、云端账号或上传用户文档。
 
 审阅决策仍由用户在本机浏览器完成。WorkBuddy 会结束工具调用对应的 MCP stdio 进程，因此审阅网页由独立的 WorkBuddy 专属本机 sidecar 提供；MCP 工具按需启动或复用该服务并返回 URL。macOS 使用当前用户 GUI 会话中的临时 launchd job，Linux 使用 `systemd --user` transient service，Windows 使用当前交互用户的临时计划任务；均不设置登录自启。Linux 缺少可用 user systemd 时明确报告本机审阅服务不可用，不退回不可靠的 detached 进程。Sidecar 仅绑定 `127.0.0.1`、使用随机端口和独立随机 token 保护健康检查。每次浏览器请求和 connector MCP 文档服务调用都会刷新 30 分钟滑动空闲期限；连续 30 分钟无活动才关闭并卸载。
 
@@ -133,7 +135,7 @@ Skill 流程须明确：
 
 ## WorkBuddy 真实宿主验收记录
 
-- WorkBuddy 版本：5.11.3（macOS）；本地 MCP 配置 `dsh-space-review-local` 指向构建产物 `dist/workbuddy-connector/runtime-package/server.js`，包含本地 bundled Node runtime。
+- WorkBuddy 版本：5.11.3（macOS）；本地 MCP 配置 `cospace-review-local` 指向构建产物 `dist/workbuddy-connector/runtime-package/server.js`，包含本地 bundled Node runtime。
 - 宿主结束 MCP 进程后会清理 MCP 子进程树；仅 `detached` 子进程不足以保持审阅页在线。macOS 版本现用当前用户 GUI bootstrap domain 的临时 launchd job 托管 sidecar，不启用登录自启。Linux systemd 与 Windows Task Scheduler 分支已实现，但尚未在各自宿主平台实测。
 - WorkBuddy 工具调用返回 loopback URL；浏览器成功加载 `Space 文档审阅` 页面。用该页面接受 synthetic-only 建议后，WorkBuddy `space_document_read` 回读到文档 version 1、正文标记 `wb-connector-accepted`，`space_suggestion_list(status=all)` 回读到 suggestion 1 状态 `accepted`。
 - `npm run build --prefix adapters/workbuddy`、`npm run verify --prefix adapters/workbuddy` 通过；`WORKBUDDY_LOOPBACK_TEST=1 node --test adapters/workbuddy/test/runtime.test.js` 在 macOS GUI session 权限下通过（1/1）。30 分钟滑动续期逻辑已实现；真实等待回收、Linux/Windows 宿主验收与公开市场审核仍未完成。

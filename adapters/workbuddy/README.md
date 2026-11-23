@@ -1,4 +1,4 @@
-# DSH Space for WorkBuddy
+# 智联文档空间（CoSpace） for WorkBuddy
 
 WorkBuddy MCP + Skill Connector for local document review. The connector stores its data only under `~/.workbuddy/space` and serves the shared Space review UI from a loopback-only HTTP server. It does not read or import DSH data.
 
@@ -22,7 +22,7 @@ The local MCP process exposes document tools over stdio. When a review page is r
 
 ## Data isolation
 
-The connector always uses `~/.workbuddy/space`; there is no data-directory override or setup screen. It validates the path and an ownership marker before opening SQLite. It refuses symlinked roots or an unmarked pre-existing database. DSH's existing `DSH_SPACE_HOME` behavior is unchanged by this adapter; both default roots are separate and WorkBuddy never reads the DSH path or data. The review server binds only to loopback and uses a random port, so it does not claim DSH's fixed port or expose a LAN service.
+The connector always uses `~/.workbuddy/space`; there is no data-directory override or setup screen. It validates the path and an ownership marker before opening SQLite. It refuses symlinked roots or an unmarked pre-existing database. The DSH adapter's existing `DSH_SPACE_HOME` behavior is unchanged by this adapter; both default roots are separate and WorkBuddy never reads the DSH path or data. The review server binds only to loopback and uses a random port, so it does not claim DSH's fixed port or expose a LAN service.
 
 ## Included capabilities
 

@@ -5,7 +5,7 @@ const React=require('react');const {act}=React;const {createRoot}=require('react
 const calls=[];
 const comment={id:'c',docId:'d',quote:'hello',body:'quick note',anchor:{from:8,to:13,version:0},resolved:{from:8,to:13},status:'pending',stale:false};
 const api=async(method,args)=>{calls.push([method,args]);switch(method){case'getUser':return{signedIn:true,name:'Ada',avatarUrl:null};case'readDocument':return{id:'d',title:'Sidebar doc',version:0,content:'# Sidebar doc\n\nhello',suggestions:[]};case'listComments':return[comment];case'sendComments':return{status:'sent',sessionId:args.sessionId};default:throw Error(method)}};
-(async()=>{const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(SpaceSidebarDocument,{useTabInfo:()=>({tab:{contentId:'dsh-resource://space/d'}}),sessionId:'s',t:key=>key,api,sendTarget:{canCreate:true,openSession:()=>{}}})));
+(async()=>{const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(SpaceSidebarDocument,{useTabInfo:()=>({tab:{contentId:'cospace://document/d'}}),sessionId:'s',t:key=>key,api,sendTarget:{canCreate:true,openSession:()=>{}}})));
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,150))});
 if(!document.querySelector('.space-sidebar-toolbar'))throw Error('sidebar review toolbar missing');
 if(!document.querySelector('.space-sidebar-toolbar .space-send-compact'))throw Error('sidebar send action missing: '+document.body.textContent);

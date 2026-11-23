@@ -6,7 +6,7 @@ import {
   matchSpaceReference,
   spaceReferenceFor,
   spaceResourceFor,
-} from '../client-src/space-reference.js';
+} from '../packages/review-ui/src/space-reference.js';
 
 test('reference tokens keep the MCP spelling while escaping the document id',()=>{
   assert.equal(spaceReferenceFor('doc-1'),'space:doc-1');
@@ -33,9 +33,9 @@ test('the matcher finds a whole reference and stops at prose punctuation',()=>{
 });
 
 test('right-Sidebar resource addresses round-trip the document id',()=>{
-  assert.equal(spaceResourceFor('doc-1'),'dsh-resource://space/doc-1');
-  assert.equal(spaceResourceFor('one two'),'dsh-resource://space/one%20two');
-  assert.equal(documentIdFromResource('dsh-resource://space/one%20two'),'one two');
+  assert.equal(spaceResourceFor('doc-1'),'cospace://document/doc-1');
+  assert.equal(spaceResourceFor('one two'),'cospace://document/one%20two');
+  assert.equal(documentIdFromResource('cospace://document/one%20two'),'one two');
   assert.equal(documentIdFromResource('dsh-resource://file/session/s1/a.md'),null);
-  assert.equal(documentIdFromResource('dsh-resource://space/'),null);
+  assert.equal(documentIdFromResource('cospace://document/'),null);
 });

@@ -16,7 +16,7 @@ const INDEX = Buffer.from(`<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Space 文档审阅</title>
+  <title>智联文档空间（CoSpace）文档审阅</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/client.css">
 </head>
@@ -39,7 +39,7 @@ function route(req, res, apiHandler, authority, healthToken) {
   if (req.headers.host !== authority) return send(res, 403, 'Forbidden');
   if (req.method === 'GET' && req.url === '/health') {
     if (!healthToken || req.headers['x-workbuddy-review-token'] !== healthToken) return send(res, 403, 'Forbidden');
-    return send(res, 200, JSON.stringify({ service: 'workbuddy-space-review' }), 'application/json; charset=utf-8');
+    return send(res, 200, JSON.stringify({ service: 'cospace-workbuddy-review' }), 'application/json; charset=utf-8');
   }
   const origin = req.headers.origin;
   if (origin && origin !== `http://${authority}`) return send(res, 403, 'Forbidden');

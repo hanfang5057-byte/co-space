@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderMarkdown } from '../client-src/markdown.js';
+import { renderMarkdown } from '../packages/review-ui/src/markdown.js';
 
 function withoutReviewAnnotations(html) {
   return html

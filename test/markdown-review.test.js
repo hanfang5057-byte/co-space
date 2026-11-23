@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {ReviewStore} from '../src/review-core.js';
-import {SpaceService,documentFromMarkdown} from '../src/space-service.js';
-import {CommentStore} from '../src/comments.js';
-import {renderMarkdown} from '../client-src/markdown.js';
+import {ReviewStore} from '../packages/review-core/src/review-core.js';
+import {SpaceService,documentFromMarkdown} from '../packages/review-core/src/space-service.js';
+import {CommentStore} from '../packages/review-core/src/comments.js';
+import {renderMarkdown} from '../packages/review-ui/src/markdown.js';
 const err=code=>e=>e.code===code;
 
 test('Markdown source is persisted; independent suggestions map and apply in any order',()=>{
