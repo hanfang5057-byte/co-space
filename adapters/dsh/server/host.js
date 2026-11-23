@@ -53,7 +53,7 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
         // Only send the reference and explicit processing instruction. Comment
         // bodies remain in local storage and are read through space_document_read.
         const reference = `space:${encodeURIComponent(args.docId)}`;
-        const instruction = '请处理此文档中尚未处理的评论。调用 space_document_read 读取最新正文、版本和评论；按独立修改逐条调用 space_suggest 提交建议，再调用 space_comment_complete 记录每条已处理评论与相关建议的关联。意图不清、无法安全定位或无需修改时，请向我说明；需要澄清时先询问，并保持该评论未处理。建议待我审阅；不要直接修改正文，也不要替我接受或拒绝建议。';
+        const instruction = '请处理此文档中尚未处理的评论。调用 space_document_read 读取最新正文、版本和评论；按独立修改逐条调用 space_suggest 提交建议，然后对本次请求中的每条未处理评论调用 space_comment_complete：已处理的关联相关建议 ID，暂未处理的传空 suggestionIds，使评论回到待处理状态。意图不清、无法安全定位或无需修改时，请向我说明；需要澄清时先询问。建议待我审阅；不要直接修改正文，也不要替我接受或拒绝建议。';
         const text = `${reference}\n${instruction}`;
         try {
           const receipt = await prompt({ requestId: operationId, sessionId: target.sessionId, mode:'queue', content:[{type:'text',text}] });

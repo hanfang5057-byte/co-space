@@ -28,7 +28,7 @@ export function SpaceSidebarDocument({ useTabInfo, sessionId, sendTarget = null,
   useEffect(() => {
     if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title);
   }, [docId, review.doc?.title]);
-  const visibleComments = review.comments.filter(comment => comment.status !== 'processed');
+  const visibleComments = review.comments.filter(comment => !['sent', 'processed'].includes(comment.status));
   const refresh = () => { review.setMessage(''); review.reload(docId).catch(error => review.setMessage(errorText(error, t))); };
   return <div className="space-app space-sidebar-app">
     <main className="space-sidebar-main">

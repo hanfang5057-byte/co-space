@@ -128,7 +128,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
   });
   const send=()=>perform(async()=>{
-    const ids=comments.filter(item=>!['processed','sending','unknown'].includes(item.status)).map(item=>item.id);
+    const ids=comments.filter(item=>['pending','failed'].includes(item.status)).map(item=>item.id);
     if(!ids.length) throw Error(t('send.none'));
     if(sendTarget?.mode==='copy') {
       if(typeof navigator?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
@@ -232,7 +232,7 @@ function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef
 export function ReviewSendButton({ review, sessionId, sendTarget = null, t = defaultT, compact = false }) {
   const titleId=useId();
   const [confirming,setConfirming]=useState(false);
-  const sendable=review.comments.filter(item=>!['processed','sending','unknown'].includes(item.status));
+  const sendable=review.comments.filter(item=>['pending','failed'].includes(item.status));
   const copyMode=sendTarget?.mode==='copy';
   const canCreate=!sessionId && sendTarget?.canCreate === true;
   const disabled=review.busy || !sendable.length || (!copyMode && !sessionId && !canCreate);
@@ -296,7 +296,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   // Keep the annotated HTML stable across selection/card state so the browser
   // selection and its text nodes are never replaced by an equal re-render.
   const markdownHtml=useMemo(()=>doc?renderMarkdown(doc.content,doc.suggestions||[]):'',[doc?.content,doc?.suggestions]);
-  const visibleComments=useMemo(()=>comments.filter(comment=>comment.status!=='processed'),[comments]);
+  const visibleComments=useMemo(()=>comments.filter(comment=>!['sent','processed'].includes(comment.status)),[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
   const staleComments=useMemo(()=>visibleComments.filter(comment=>!commentRange(comment)),[visibleComments]);
   const hasAnnotations=suggestions.length>0 || visibleComments.length>0;
@@ -525,7 +525,7 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
-  const visibleComments=review.comments.filter(comment=>comment.status!=='processed');
+  const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const home=!docId;
