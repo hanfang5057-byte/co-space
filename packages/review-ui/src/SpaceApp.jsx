@@ -4,7 +4,7 @@ import { errorText, translate, zh } from './locale.js';
 import { renderMarkdown } from './markdown.js';
 import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
-import { createDocx, createPdfHtml, exportFileName } from './export.js';
+import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import './space.css';
 
@@ -549,35 +549,20 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
-  const exportDocument=async (format,popup=null)=>{
+  const exportDocument=async (format)=>{
     setExporting(true);setMessage('');
-    let stage='read';
     try {
       const snapshot=await call('readDocument',{docId});
       if(!snapshot || typeof snapshot.content!=='string') throw new Error('Document unavailable');
       const filename=exportFileName(snapshot.title,format);
-      stage=format==='pdf'?'preparePrintPage':'createFile';
       if(format==='md') {
         const blob=new Blob([snapshot.content],{type:'text/markdown;charset=utf-8'});
         const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
       } else if(format==='docx') {
         const blob=createDocx(snapshot.content),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
-      } else {
-        if(!popup||popup.closed) throw new Error('PRINT_WINDOW_UNAVAILABLE');
-        popup.onload=()=>{
-          stage='callPrint';
-          try {
-            popup.document.title=filename.replace(/\.pdf$/,'');
-            popup.focus();
-            if(typeof popup.print!=='function') throw new Error('PRINT_API_UNAVAILABLE');
-            popup.print();
-          } catch { setMessage(t('export.printFailed')); }
-        };
-        popup.document.open();popup.document.write(createPdfHtml(snapshot.title,snapshot.content));popup.document.close();
       }
-    } catch (error) {
-      try { popup?.close(); } catch { /* host window proxies may not expose close */ }
-      setMessage(error?.message==='PRINT_WINDOW_UNAVAILABLE' ? t('export.printUnavailable') : format==='pdf' ? t(stage==='read'?'export.readFailed':stage==='callPrint'?'export.printFailed':'export.preparePrintFailed') : t('export.failed'));
+    } catch {
+      setMessage(t('export.failed'));
     }
     finally { setExporting(false); }
   };
@@ -600,7 +585,7 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
       <header className="space-top space-preview-top"><button type="button" className="space-back" aria-label={t('home.back')} title={t('home.back')} onClick={()=>setDocId(null)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12"/></svg></button><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-            <div className="space-header-tools">{review.doc&&<div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>}{review.doc&&<details className="space-export-menu"><summary>{exporting?t('export.busy'):t('export.button')}</summary><div className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>exportDocument('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>exportDocument('docx')}>Word <span>.docx</span></button><button type="button" disabled={exporting} onClick={()=>{const popup=window.open('about:blank','_blank');if(!popup){setMessage(t('export.failed'));return;}void exportDocument('pdf',popup);}}>{t('export.pdf')}</button></div></details>}<button type="button" className="space-refresh" disabled={!docId||busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>{review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
+            <div className="space-header-tools">{review.doc&&<div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>}{review.doc&&<details className="space-export-menu"><summary>{exporting?t('export.busy'):t('export.button')}</summary><div className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>exportDocument('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>exportDocument('docx')}>Word <span>.docx</span></button></div></details>}<button type="button" className="space-refresh" disabled={!docId||busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>{review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}
