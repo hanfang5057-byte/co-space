@@ -187,14 +187,14 @@ function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avat
   </div>;
 }
 
-function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style }) {
+function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style, className = '', onPointerEnter }) {
   const visibleStatus=comment.status;
   const locked=busy || comment.status==='sending';
   const status=comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
   const authorName=author?.name || (author?.signedIn?t('comment.deepseekUser'):null);
-  return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onClick={()=>onActivate(comment.id)}>
+  return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''} ${className}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onPointerEnter={onPointerEnter} onPointerLeave={()=>{}} onClick={()=>onActivate(comment.id)}>
     <AnnotationIdentity name={authorName} avatarUrl={author?.avatarUrl} createdAt={comment.createdAt} fallback={t('comment.author')}/>
     {status && <div className="space-annotation-head"><span className={`space-comment-status is-${visibleStatus}`}>{status}</span></div>}
     <p className="space-comment-body">{comment.body}</p>
@@ -209,9 +209,9 @@ function CommentBalloon({ comment, author, active, busy, t, statusText, confirmi
 }
 
 /** Render a compact decision card linked to an inline preview difference. */
-function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style }) {
+function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style, className = '', onPointerEnter }) {
   const conflicted=item.status==='conflicted';
-  return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onClick={onActivate}>
+  return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''} ${className}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onPointerEnter={onPointerEnter} onClick={onActivate}>
     <div className="space-suggestion-head"><AnnotationIdentity name={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg></button><button type="button" className="is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}</div>
     <div className="space-suggestion-change">
       {item.expected && <p className="is-deleted"><strong>{t('suggestion.deletedLabel')}：</strong>{item.expected}</p>}
@@ -290,6 +290,9 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const [composerOpen,setComposerOpen]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(null);
   const [resizeTick,setResizeTick]=useState(0);
+  const [zoom,setZoom]=useState(1);
+  const [hoverPreview,setHoverPreview]=useState(null);
+  const hoverTimer=useRef(null);
   const [layout,setLayout]=useState({positions:{},lines:[],highlights:[],height:0,minHeight:0});
   const commentFieldId=useId(), commentTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null);
   const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment}=review;
@@ -359,6 +362,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     const stage=stageRef.current, paper=surface.current, rail=railRef.current;
     if(!stage||!paper||!rail) return;
     const stageRect=stage.getBoundingClientRect();
+    const scale=zoom;
     const paperRect=paper.getBoundingClientRect();
     const railRect=rail.getBoundingClientRect();
     const spans=readSourceSpans(paper);
@@ -371,10 +375,10 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       if(!range) continue;
       const mapped=sourceRangeToDom(spans,range.from,range.to);
       if(!mapped) continue;
-      let rects=rangeRects(mapped.range,stageRect);
+      let rects=rangeRects(mapped.range,stageRect).map(rect=>Object.fromEntries(Object.entries(rect).map(([key,value])=>[key,typeof value==='number'?value/scale:value])));
       if(!rects.length){
         const fallback=mapped.startSpan.element.getBoundingClientRect();
-        if(fallback&&(fallback.width||fallback.height)) rects=[{left:fallback.left-stageRect.left,top:fallback.top-stageRect.top,right:fallback.right-stageRect.left,bottom:fallback.bottom-stageRect.top,width:fallback.width,height:fallback.height}];
+        if(fallback&&(fallback.width||fallback.height)) rects=[{left:(fallback.left-stageRect.left)/scale,top:(fallback.top-stageRect.top)/scale,right:(fallback.right-stageRect.left)/scale,bottom:(fallback.bottom-stageRect.top)/scale,width:fallback.width/scale,height:fallback.height/scale}];
       }
       const first=rects[0];
       if(!first) continue;
@@ -404,9 +408,9 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       positions[annotation.key]=top;
       cursor=top+height+10;
       if(anchor){
-        const x1=anchor.right+3, y1=anchor.top+anchor.height/2;
-        const x2=railRect.left-stageRect.left-3, y2=top+18;
-        const paperRight=paperRect.right-stageRect.left;
+        const x1=anchor.right-1, y1=anchor.top+anchor.height/2;
+        const x2=(railRect.left-stageRect.left)/scale-3, y2=top+18;
+        const paperRight=(paperRect.right-stageRect.left)/scale;
         const lane=Math.max(x1+24,paperRight-8);
         if(lane<x2-10){
           // Slip below the quoted line, then use one continuous curve through
@@ -425,7 +429,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       if(JSON.stringify(previous.positions)===JSON.stringify(positions) && JSON.stringify(previous.lines)===JSON.stringify(lines) && JSON.stringify(previous.highlights||[])===JSON.stringify(mergedHighlights) && previous.height===cursor && previous.minHeight===minHeight) return previous;
       return {positions,lines,highlights:mergedHighlights,height:cursor,minHeight};
     });
-  },[hasAnnotations,items,suggestions,liveComments,doc?.content,resizeTick,active,activeComment,confirmDelete,cardRefs,commentRefs,t]);
+  },[hasAnnotations,items,suggestions,liveComments,doc?.content,resizeTick,active,activeComment,confirmDelete,cardRefs,commentRefs,t,zoom]);
   useEffect(()=>{ if(!selection) setComposerOpen(false); },[selection]);
   useEffect(()=>{setConfirmDelete(null)},[comments]);
   if (!doc) return <section className="space-paper-wrap"><p className="space-loading" role="status">{review.message || t('empty.loading')}</p></section>;
@@ -439,19 +443,32 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const activateFromAnchor=id=>{setActive(null);setActiveComment(id);commentRefs.current.get(id)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})};
   const activateFromBalloon=id=>{setActive(null);setActiveComment(id);scrollToAnchor(id)};
   const activateSuggestion=id=>{setActiveComment(null);setActive(id);chooseCard(id)};
+  const trackHover=event=>{
+    const node=event.target.closest?.('[data-src-from]');
+    if(!node) return;
+    const from=Number(node.getAttribute('data-src-from')), to=Number(node.getAttribute('data-src-to'));
+    const annotation=items.find(item=>{
+      const range=item.kind==='suggestion'?{from:item.item.from,to:item.item.to}:commentRange(item.item);
+      return range && from<=range.to && to>=range.from;
+    });
+    if(annotation) setHoverPreview({key:annotation.key,left:event.clientX,top:event.clientY});
+  };
+  const closeHover=()=>{hoverTimer.current=setTimeout(()=>setHoverPreview(null),180)};
+  const keepHover=()=>clearTimeout(hoverTimer.current);
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className="space-paper-wrap" aria-label={t('paper.aria')} ref={scrollRef}>
-    <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef}>
-      <div ref={surface} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
+    <div className="space-zoom-tools" role="group" aria-label="纸张缩放"><button type="button" aria-label="缩小纸张" title="缩小纸张" disabled={zoom<=.6} onClick={()=>setZoom(value=>Math.max(.6,Math.round((value-.1)*10)/10))}>−</button><span>{Math.round(zoom*100)}%</span><button type="button" aria-label="放大纸张" title="放大纸张" disabled={zoom>=1.5} onClick={()=>setZoom(value=>Math.min(1.5,Math.round((value+.1)*10)/10))}>＋</button></div>
+    <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
+      <div ref={surface} onPointerMove={trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         {!hasAnnotations && <div className="space-comment-empty"><CommentIcon size={22}/><strong>{t('annotations.emptyTitle')}</strong><p>{t('annotations.emptyHint')}</p></div>}
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
         <div className="space-comment-balloons is-positioned">
-          {suggestionItems.map(annotation=><SuggestionBalloon key={annotation.key} item={annotation.item} index={annotation.index} active={active===annotation.item.id} busy={busy} t={t} onActivate={()=>activateSuggestion(annotation.item.id)} onDecide={decision=>decide(annotation.item.id,decision)} setRef={(id,el)=>{if(el)cardRefs.current.set(id,el);else cardRefs.current.delete(id)}} style={{top:layout.positions[annotation.key],visibility:layout.positions[annotation.key]===undefined?'hidden':undefined}}/>)}
-          {liveComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={activateFromBalloon} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}} style={{top:layout.positions[`comment:${comment.id}`],visibility:layout.positions[`comment:${comment.id}`]===undefined?'hidden':undefined}}/>)}
+          {suggestionItems.map(annotation=><SuggestionBalloon key={annotation.key} item={annotation.item} index={annotation.index} active={active===annotation.item.id} busy={busy} t={t} onActivate={()=>activateSuggestion(annotation.item.id)} onDecide={decision=>decide(annotation.item.id,decision)} onPointerEnter={keepHover} setRef={(id,el)=>{if(el)cardRefs.current.set(id,el);else cardRefs.current.delete(id)}} style={{top:layout.positions[annotation.key],visibility:layout.positions[annotation.key]===undefined?'hidden':undefined,...(hoverPreview?.key===annotation.key?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===annotation.key?'is-hover-preview':''}/>) }
+          {liveComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={activateFromBalloon} onPointerEnter={keepHover} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}} style={{top:layout.positions[`comment:${comment.id}`],visibility:layout.positions[`comment:${comment.id}`]===undefined?'hidden':undefined,...(hoverPreview?.key===`comment:${comment.id}`?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===`comment:${comment.id}`?'is-hover-preview':''}/>) }
         </div>
         {staleComments.length>0 && <section className="space-comment-stale" aria-label={t('comment.staleGroup')}>
           <h3>{t('comment.staleGroup')}</h3><p className="space-muted">{t('comment.staleHint')}</p>

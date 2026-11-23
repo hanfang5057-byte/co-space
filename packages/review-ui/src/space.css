@@ -113,8 +113,8 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 
 /* ===== Paper Desk visual direction ===== */
 .space-app {
-  --font-ui: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-reading: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-reading: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --space-desk: #f1eee7;
   --space-paper: #fffdf8;
   --space-rail-surface: #f8f5ef;
@@ -143,6 +143,14 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
   color: var(--space-text);
   font-family: var(--font-ui);
 }
+.space-app { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.space-app .space-markdown,
+.space-app .space-markdown h1,
+.space-app .space-markdown h2,
+.space-app .space-markdown h3,
+.space-app .space-markdown h4,
+.space-app .space-markdown h5,
+.space-app .space-markdown h6 { font-family: var(--font-ui); }
 .space-app button { border-radius: 8px; }
 .space-app button:focus-visible, .space-app textarea:focus-visible, .space-app input:focus-visible,
 .space-comment-anchor:focus-visible { outline: 2px solid var(--space-comment); outline-offset: 2px; }
@@ -612,6 +620,64 @@ button.space-ref-card:focus-visible { outline:3px solid var(--dsw-alias-primary,
 .space-connector-dot.is-origin { fill: var(--space-card); stroke-width: 1.8; }
 .space-connector-dot.is-target { stroke: none; opacity: .42; }
 .space-comment-lines g.is-active .space-connector-dot { opacity: 1; }
+
+/* Word-like page: fixed A4 geometry; the canvas scrolls around it. */
+.space-app .space-paper-wrap { padding: 40px; }
+.space-app .space-doc-stage,
+.space-app .space-doc-stage.has-annotations {
+  display: grid;
+  grid-template-columns: 794px 280px;
+  align-items: start;
+  gap: 28px;
+  inline-size: max-content;
+  min-inline-size: 0;
+  max-inline-size: none;
+  margin-inline: auto;
+}
+.space-app .space-doc-stage:not(.has-annotations) { grid-template-columns: 794px; }
+.space-app .space-paper {
+  inline-size: 794px;
+  min-inline-size: 794px;
+  max-inline-size: 794px;
+  min-block-size: 1123px;
+  padding: 72px 68px;
+  box-sizing: border-box;
+  flex: none;
+}
+.space-app .space-paper.is-empty { min-block-size: 1123px; }
+.space-app .space-comment-rail { inline-size: 280px; }
+.space-app .space-comment-lines { overflow: visible; }
+.space-app .space-connector-line { stroke: color-mix(in srgb, var(--space-comment) 48%, var(--space-suggestion)); }
+.space-app .space-comment-lines g.is-active .space-connector-line { stroke: var(--space-comment); }
+.space-app .space-connector-dot.is-origin { opacity: .18; }
+.space-zoom-tools { position: sticky; inset-inline-start: 0; inset-block-start: 0; z-index: 8; display: flex; align-items: center; gap: 4px; width: max-content; margin: 0 auto 14px; padding: 4px; border: 1px solid var(--space-border); border-radius: 999px; background: color-mix(in srgb, var(--space-paper) 94%, transparent); box-shadow: 0 3px 12px rgba(40,34,24,.08); }
+.space-zoom-tools button { display: grid; place-items: center; inline-size: 30px; min-block-size: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 18px; }
+.space-zoom-tools button:hover:not(:disabled) { background: var(--space-border); }
+.space-zoom-tools span { min-inline-size: 44px; color: var(--space-muted); font-size: 11px; text-align: center; font-variant-numeric: tabular-nums; }
+@container space-app (max-width: 1180px) {
+  .space-app .space-doc-stage.has-annotations { margin-inline: 0; }
+}
+@container space-app (max-width: 760px) {
+  .space-app .space-paper-wrap { padding: 16px; }
+  .space-app .space-doc-stage,
+  .space-app .space-doc-stage.has-annotations { margin-inline: 0; }
+}
+@container space-app (max-width: 1101px) {
+  .space-app .space-comment-rail { visibility: hidden; pointer-events: none; }
+  .space-app .space-annotation-balloon.is-hover-preview {
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--hover-x, 50vw) !important;
+    top: var(--hover-y, 50vh) !important;
+    inline-size: min(300px, calc(100vw - 24px));
+    max-block-size: min(55vh, 420px);
+    overflow: auto;
+    transform: translate(-50%, -100%);
+    z-index: 100;
+    pointer-events: auto;
+    visibility: visible !important;
+  }
+}
 @media (pointer: coarse) {
   .space-app .space-comment-delete-icon { inline-size: 40px; block-size: 40px; min-block-size: 40px; inset-block-start: 8px; inset-inline-end: 8px; opacity: 1; pointer-events: auto; }
   .space-app .space-suggestion-actions button { inline-size: 40px; block-size: 40px; min-block-size: 40px; }
