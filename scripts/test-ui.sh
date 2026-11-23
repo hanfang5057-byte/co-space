@@ -7,7 +7,7 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 npm install --prefix "$test_dir" react@18.3.1 react-dom@18.3.1 jsdom@26 --no-save --no-package-lock
 esbuild="$project_dir/node_modules/.bin/esbuild"
 build_ui() {
-  "$esbuild" "$1" --bundle --platform=node --format=cjs --jsx=automatic --external:react --external:react/jsx-runtime --loader:.css=empty --outfile="$2"
+  "$esbuild" "$1" --bundle --platform=node --format=cjs --jsx=automatic --external:react --external:react/jsx-runtime --loader:.css=empty --loader:.svg=dataurl --outfile="$2"
 }
 build_ui "$project_dir/packages/review-ui/src/SpaceApp.jsx" "$test_dir/ui.cjs"
 build_ui "$project_dir/packages/review-ui/src/SpaceSidebar.jsx" "$test_dir/sidebar.cjs"

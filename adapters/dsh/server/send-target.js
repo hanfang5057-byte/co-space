@@ -67,10 +67,10 @@ async function assertSessionExists(sessionController, sessionId, signal) {
 }
 
 /** Create or reuse a blank Session already listed in the selected Workspace. */
-async function createSessionInWorkspace(sessionController, workspace, sessions) {
+async function createSessionInWorkspace(sessionController, workspace, sessions, excludeSessionId, forceNew) {
   const request = { workspaceId: workspaceIdOf(workspace) };
-  const blank = (sessions ?? []).find(session =>
-    session?.blank === true
+  const blank = !forceNew && (sessions ?? []).find(session =>
+    session?.blank === true && session.sessionId !== excludeSessionId
     && session.cwd === workspace.path
     && (workspace.sessionIds ?? []).includes(session.sessionId));
   if (blank) {
@@ -87,7 +87,7 @@ async function createSessionInWorkspace(sessionController, workspace, sessions) 
  * @param {AbortSignal} [signal] - caller lifetime.
  * @returns {Promise<{sessionId: string, created: boolean, workspace?: object}>} target identity.
  */
-export async function resolveSendTarget({ sessionId } = {}, services, signal) {
+export async function resolveSendTarget({ sessionId, excludeSessionId, forceNew } = {}, services, signal) {
   const sessionController = services?.sessionController;
   if (!sessionController) fail('SESSION_UNAVAILABLE', '当前对话服务不可用。');
 
@@ -105,7 +105,7 @@ export async function resolveSendTarget({ sessionId } = {}, services, signal) {
     workspaces = [];
   }
 
-  let workspace = mostRecentWorkspace(workspaces, sessions);
+  let workspace = (excludeSessionId && workspaces.find(item => (item.sessionIds ?? []).includes(excludeSessionId))) || mostRecentWorkspace(workspaces, sessions);
   if (!workspace && typeof services?.workspaceController?.initializeDefault === 'function') {
     try {
       const initialized = await services.workspaceController.initializeDefault(lifetime);
@@ -132,10 +132,11 @@ export async function resolveSendTarget({ sessionId } = {}, services, signal) {
 
   if (workspace) {
     try {
-      const created = await createSessionInWorkspace(sessionController, workspace, sessions);
+      const created = await createSessionInWorkspace(sessionController, workspace, sessions, excludeSessionId, forceNew);
       if (typeof created?.sessionId !== 'string' || created.sessionId === '') {
         fail('SESSION_UNAVAILABLE', '无法新建对话。');
       }
+      if (excludeSessionId && created.sessionId === excludeSessionId) fail('SESSION_UNAVAILABLE', '无法创建不同于当前对话的新对话。');
       return {
         sessionId: created.sessionId,
         created: true,
@@ -158,6 +159,7 @@ export async function resolveSendTarget({ sessionId } = {}, services, signal) {
     try {
       const created = await sessionController.create({ cwd });
       if (typeof created?.sessionId === 'string' && created.sessionId !== '') {
+        if (excludeSessionId && created.sessionId === excludeSessionId) fail('SESSION_UNAVAILABLE', '无法创建不同于当前对话的新对话。');
         return { sessionId: created.sessionId, created: true };
       }
     } catch (error) {

@@ -1,5 +1,6 @@
 const {JSDOM}=require('jsdom');const dom=new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',{url:'http://localhost'});
-Object.assign(globalThis,{window:dom.window,document:dom.window.document,Node:dom.window.Node,IS_REACT_ACT_ENVIRONMENT:true});
+Object.assign(globalThis,{window:dom.window,document:dom.window.document,Node:dom.window.Node,Element:dom.window.Element,HTMLElement:dom.window.HTMLElement,getComputedStyle:dom.window.getComputedStyle,IS_REACT_ACT_ENVIRONMENT:true});
+window.HTMLElement.prototype.scrollTo=function(){};
 Object.defineProperty(globalThis,'crypto',{value:require('node:crypto').webcrypto,configurable:true});
 const React=require('react');const {act}=React;const {createRoot}=require('react-dom/client');const {SpaceSidebarDocument}=require('./sidebar.cjs');
 const calls=[];
@@ -9,10 +10,18 @@ const api=async(method,args)=>{calls.push([method,args]);switch(method){case'get
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,150))});
 if(!document.querySelector('.space-sidebar-toolbar'))throw Error('sidebar review toolbar missing');
 if(!document.querySelector('.space-sidebar-toolbar .space-send-compact'))throw Error('sidebar send action missing: '+document.body.textContent);
-if(!document.querySelector('.space-sidebar-toolbar .space-refresh'))throw Error('sidebar refresh control missing');
+if(document.querySelector('.space-sidebar-toolbar .space-refresh, .space-sidebar-toolbar .space-header-counts'))throw Error('obsolete sidebar controls remain');
+
+if(!document.querySelector('.space-sidebar-toolbar .space-zoom-tools')||document.querySelector('.space-sidebar-main .space-zoom-tools'))throw Error('sidebar zoom must be in the header');
+await act(async()=>document.querySelector('[aria-label="zoom.in"]').dispatchEvent(new window.MouseEvent('click',{bubbles:true})));
+if(document.querySelector('.space-doc-stage').style.zoom!=='1.1')throw Error('sidebar header zoom failed');
+
 if(!document.querySelector('.space-comment-balloon .space-annotation-byline strong')?.textContent.includes('Ada'))throw Error('sidebar comment attribution missing');
-const send=[...document.querySelectorAll('.space-sidebar-toolbar button')].find(button=>button.textContent==='send.all');if(!send)throw Error('sidebar processing control has no label');
+const send=[...document.querySelectorAll('.space-sidebar-toolbar button')].find(button=>button.textContent==='send.action');if(!send)throw Error('sidebar processing control has no label');
 await act(async()=>send.dispatchEvent(new window.MouseEvent('click',{bubbles:true})));
+if(!document.querySelector('.space-send-dialog')?.open||calls.some(call=>call[0]==='sendComments'))throw Error('sidebar confirmation missing or sent early');
+const confirm=[...document.querySelectorAll('.space-send-dialog button')].find(button=>button.textContent==='send.confirm');
+await act(async()=>confirm.dispatchEvent(new window.MouseEvent('click',{bubbles:true})));
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,40))});
 if(!calls.some(call=>call[0]==='sendComments'&&call[1].sessionId==='s'))throw Error('sidebar processing request did not target the conversation');
 console.log('Sidebar review toolbar, account attribution, and send action rendered');await act(async()=>root.unmount());})().catch(error=>{console.error(error);process.exit(1)});

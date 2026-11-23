@@ -139,3 +139,32 @@ test('no usable sessions or workspaces fails with a clear code', async () => {
     error => error.code === 'SESSION_UNAVAILABLE' && /工作区/.test(error.message),
   );
 });
+
+test('a new conversation uses the current workspace and never reuses the current blank session', async () => {
+  const calls=[];
+  const target=await resolveSendTarget({excludeSessionId:'current'},services({
+    sessionController:{
+      list:async()=>({items:[{...session('current',1,'/workspace/current'),blank:true},session('recent',100)]}),
+      create:async request=>{calls.push(request);return {sessionId:'new'};},
+    },
+    workspaceRegistry:{list:()=>[workspace('current',{sessionIds:['current']}),workspace('other',{sessionIds:['recent']})]},
+  }));
+  assert.equal(target.sessionId,'new');
+  assert.deepEqual(calls,[{workspaceId:'current'}]);
+});
+
+test('new conversation resolution rejects the current session returned by the host', async () => {
+  await assert.rejects(resolveSendTarget({excludeSessionId:'current'},services({
+    sessionController:{create:async()=>({sessionId:'current'})},
+    workspaceRegistry:{list:()=>[workspace('current',{sessionIds:['current']})]},
+  })),error=>error.code==='SESSION_UNAVAILABLE');
+});
+
+test('explicitly creating a conversation does not reuse another blank session', async () => {
+  const calls=[];
+  await resolveSendTarget({forceNew:true},services({
+    sessionController:{list:async()=>({items:[{...session('blank',5,'/workspace/active'),blank:true}]}),create:async request=>{calls.push(request);return {sessionId:'new'};}},
+    workspaceRegistry:{list:()=>[workspace('active',{sessionIds:['blank']})]},
+  }));
+  assert.deepEqual(calls,[{workspaceId:'active'}]);
+});

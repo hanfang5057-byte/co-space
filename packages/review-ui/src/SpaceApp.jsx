@@ -1,11 +1,14 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { brandIcon as cospaceIcon } from '../../brand/brand.js';
+import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft } from 'lucide-react';
+import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { renderMarkdown } from './markdown.js';
 import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
 import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
+import { annotationConnector } from './annotation-connector.js';
 import './space.css';
 
 const h = createElement;
@@ -32,15 +35,46 @@ export function CospaceMark({ className = '' }) {
 function documentView(html) { return <div className="space-markdown" dangerouslySetInnerHTML={{__html:html}} />; }
 
 function TrashIcon({size=14}) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-}
-
-export function RefreshIcon({size=15}) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6M20 4v7h-7" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  return <Trash2 size={size} strokeWidth={1.8} aria-hidden="true"/>;
 }
 
 function CommentIcon({size=15}) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M21 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4.5 3v-4.2A7.5 7.5 0 0 1 1 11.5 7.5 7.5 0 0 1 8.5 4h5A7.5 7.5 0 0 1 21 11.5Z" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  return <MessageSquare size={size} strokeWidth={1.8} aria-hidden="true"/>;
+}
+
+function IconButton({ label, children, ...props }) {
+  return <button type="button" aria-label={label} title={label} {...props}>{children}</button>;
+}
+
+function ExportMenu({ exporting, onExport, t }) {
+  const [open,setOpen]=useState(false);
+  const rootRef=useRef(null), triggerRef=useRef(null), closeTimer=useRef(null);
+  const panelId=useId();
+  const cancelClose=()=>{clearTimeout(closeTimer.current);closeTimer.current=null;};
+  useEffect(()=>{
+    if(!open) return;
+    const dismiss=event=>{if(!rootRef.current?.contains(event.target)) setOpen(false);};
+    document.addEventListener('pointerdown',dismiss);
+    return ()=>document.removeEventListener('pointerdown',dismiss);
+  },[open]);
+  useEffect(()=>()=>clearTimeout(closeTimer.current),[]);
+  const leave=event=>{
+    if(event.pointerType==='touch') return;
+    cancelClose();
+    closeTimer.current=setTimeout(()=>{
+      closeTimer.current=null;
+      if(!rootRef.current?.contains(document.activeElement)) setOpen(false);
+    },180);
+  };
+  const select=format=>{cancelClose();setOpen(false);void onExport(format);};
+  return <div className="space-export-menu" ref={rootRef}
+    onPointerEnter={event=>{if(event.pointerType!=='touch'){cancelClose();setOpen(true);}}}
+    onPointerLeave={leave}
+    onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget)){cancelClose();setOpen(false);}}}
+    onKeyDown={event=>{if(event.key==='Escape' && open){event.preventDefault();event.stopPropagation();cancelClose();setOpen(false);triggerRef.current?.focus();}}}>
+    <button ref={triggerRef} type="button" className="space-export-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{cancelClose();setOpen(value=>!value);}}>{exporting?t('export.busy'):t('export.button')}</button>
+    {open && <div id={panelId} className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>select('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>select('docx')}>Word <span>.docx</span></button></div>}
+  </div>;
 }
 
 /** Shared native modal surface for workbench dialogs. */
@@ -81,6 +115,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
   const [activeComment,setActiveComment]=useState(null);
   const [draft,setDraft]=useState('');
   const [selection,setSelection]=useState(null);
+  const [zoom,setZoom]=useState(1);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const surface=useRef(null), cardRefs=useRef(new Map()), commentRefs=useRef(new Map()), loadSequence=useRef(0);
@@ -88,6 +123,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
   // Async callbacks may outlive a render; read the active locale at completion time.
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
+  useEffect(()=>{setZoom(1)},[docId]);
   const reload=useCallback(async id=>{
     const sequence=++loadSequence.current;
     const next=await call('readDocument',{docId:id});
@@ -134,10 +170,10 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     const created=await call('createComment',{docId,quote:selection.quote,body:draft.trim(),anchor:{from:selection.from,to:selection.to,version:selection.version}});
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
   });
-  const send=()=>perform(async()=>{
+  const send=(mode=sendTarget?.mode==='copy'?'copy':sessionId?'current':'new')=>perform(async()=>{
     const ids=comments.filter(item=>['pending','failed'].includes(item.status)).map(item=>item.id);
     if(!ids.length) throw Error(t('send.none'));
-    if(sendTarget?.mode==='copy') {
+    if(mode==='copy') {
       if(typeof navigator?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
       const text=`space:${encodeURIComponent(docId)}\n${t('send.processingPrompt')}`;
       await navigator.clipboard.writeText(text);
@@ -149,15 +185,26 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     // recent workspace (creating a default one when necessary), creates or
     // reuses a Session, and returns the exact identity it used. The client only
     // opens that identity, so creation and retry cannot disagree.
-    const targetSessionId=sessionId || undefined;
+    if(mode==='current' && !sessionId) throw Object.assign(new Error(t('send.noSession')),{code:'SESSION_UNAVAILABLE'});
+    if(mode==='new' && sendTarget?.canCreate!==true) throw Object.assign(new Error(t('send.createUnavailable')),{code:'SESSION_UNAVAILABLE'});
+    const targetSessionId=mode==='current'?sessionId:undefined;
     try {
-      const result=await call('sendComments',{docId,commentIds:ids,...targetSessionId?{sessionId:targetSessionId}:{},operationId:requestId()});
+      const result=await call('sendComments',{docId,commentIds:ids,...targetSessionId?{sessionId:targetSessionId}:{forceNew:true,...sessionId?{newSessionFrom:sessionId}:{}},operationId:requestId()});
       if(!targetSessionId && result?.createdSession && result.sessionId && typeof sendTarget?.openSession==='function') sendTarget.openSession(result.sessionId);
       return result;
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send};
+}
+
+export function ReviewZoomControls({ review, t = defaultT }) {
+  const {zoom,setZoom}=review;
+  return <div className="space-zoom-tools" role="group" aria-label={t('zoom.label')}>
+    <button type="button" aria-label={t('zoom.out')} title={t('zoom.out')} disabled={zoom<=.6} onClick={()=>setZoom(value=>Math.max(.6,Math.round((value-.1)*10)/10))}>−</button>
+    <span>{Math.round(zoom*100)}%</span>
+    <button type="button" aria-label={t('zoom.in')} title={t('zoom.in')} disabled={zoom>=1.5} onClick={()=>setZoom(value=>Math.min(1.5,Math.round((value+.1)*10)/10))}>＋</button>
+  </div>;
 }
 
 /**
@@ -194,19 +241,19 @@ function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avat
   </div>;
 }
 
-function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style, className = '', onPointerEnter }) {
+function CommentBalloon({ comment, author, active, busy, t, statusText, confirming, onAskDelete, onConfirmDelete, onCancelDelete, onActivate, setRef, style, className = '', onPointerEnter, onPointerLeave }) {
   const visibleStatus=comment.status;
   const locked=busy || comment.status==='sending';
   const status=comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
   const authorName=author?.name || (author?.signedIn?t('comment.deepseekUser'):null);
-  return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''} ${className}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onPointerEnter={onPointerEnter} onPointerLeave={()=>{}} onClick={()=>onActivate(comment.id)}>
+  return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''} ${className}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onClick={()=>onActivate(comment.id)}>
     <AnnotationIdentity name={authorName} avatarUrl={author?.avatarUrl} createdAt={comment.createdAt} fallback={t('comment.author')}/>
     {status && <div className="space-annotation-head"><span className={`space-comment-status is-${visibleStatus}`}>{status}</span></div>}
     <p className="space-comment-body">{comment.body}</p>
     {comment.processing?.suggestions?.length>0 && <div className="space-comment-processing-meta">{t('comment.relatedSuggestions',{states:comment.processing.suggestions.map(item=>suggestionStatusKeys[item.status]?t(suggestionStatusKeys[item.status]):item.status).join('、')})}</div>}
-    <button type="button" className="space-comment-delete-icon" disabled={locked} aria-label={t('comment.delete')} title={t('comment.delete')} onClick={event=>{event.stopPropagation();onAskDelete(comment.id)}}><TrashIcon/></button>
+    <button type="button" className="space-annotation-action space-comment-delete-icon" disabled={locked} aria-label={t('comment.delete')} title={t('comment.delete')} onClick={event=>{event.stopPropagation();onAskDelete(comment.id)}}><Trash2 size={18} strokeWidth={2} aria-hidden="true"/></button>
     {confirming && <div className="space-comment-footer is-confirming" onClick={event=>event.stopPropagation()}>
       <span className="space-comment-confirm-text">{t('comment.deleteConfirm')}</span>
       <button type="button" className="space-comment-delete is-danger" disabled={locked} onClick={()=>onConfirmDelete(comment.id)}>{t('comment.delete')}</button>
@@ -216,10 +263,10 @@ function CommentBalloon({ comment, author, active, busy, t, statusText, confirmi
 }
 
 /** Render a compact decision card linked to an inline preview difference. */
-function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style, className = '', onPointerEnter }) {
+function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style, className = '', onPointerEnter, onPointerLeave }) {
   const conflicted=item.status==='conflicted';
-  return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''} ${className}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onPointerEnter={onPointerEnter} onClick={onActivate}>
-    <div className="space-suggestion-head"><AnnotationIdentity name={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg></button><button type="button" className="is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}</div>
+  return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''} ${className}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onClick={onActivate}>
+    <div className="space-suggestion-head"><AnnotationIdentity name={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="space-annotation-action is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><Check size={18} strokeWidth={2} aria-hidden="true"/></button><button type="button" className="space-annotation-action is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><X size={18} strokeWidth={2} aria-hidden="true"/></button></div>}</div>
     <div className="space-suggestion-change">
       {item.expected && <p className="is-deleted"><strong>{t('suggestion.deletedLabel')}：</strong>{item.expected}</p>}
       {item.replacement && <p className="is-inserted"><strong>{t('suggestion.insertedLabel')}：</strong>{item.replacement}</p>}
@@ -237,23 +284,35 @@ function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef
  * @returns {React.ReactElement} the send button and its confirmation dialog.
  */
 export function ReviewSendButton({ review, sessionId, sendTarget = null, t = defaultT, compact = false }) {
-  const titleId=useId();
+  const titleId=useId(), groupId=useId();
   const [confirming,setConfirming]=useState(false);
+  const [mode,setMode]=useState('copy');
   const sendable=review.comments.filter(item=>['pending','failed'].includes(item.status));
   const copyMode=sendTarget?.mode==='copy';
-  const canCreate=!sessionId && sendTarget?.canCreate === true;
-  const disabled=review.busy || !sendable.length || (!copyMode && !sessionId && !canCreate);
-  const hint=copyMode?t('send.copyHint'):!sessionId ? (canCreate?t('send.newSessionHint'):t('send.hint')) : undefined;
-  const start=()=>{ if(copyMode) void review.send(); else if(canCreate) setConfirming(true); else void review.send(); };
+  const canCurrent=!copyMode && Boolean(sessionId);
+  const canCreate=!copyMode && sendTarget?.canCreate === true;
+  useEffect(()=>{setConfirming(false)},[review.doc?.id,sessionId,copyMode,sendable.length===0]);
+  const disabled=review.busy || !sendable.length;
+  const hint=copyMode?t('send.copyHint'):undefined;
+  let sessionLabel=null, workspaceLabel=null;
+  try { sessionLabel=sessionId && sendTarget?.getSessionLabel?.(sessionId); } catch { /* Use the session id when the catalog is unavailable. */ }
+  try { workspaceLabel=sessionId && sendTarget?.getWorkspaceLabel?.(sessionId); } catch { /* The workspace label is optional. */ }
+  const open=()=>{setMode(canCurrent?'current':canCreate?'new':'copy');setConfirming(true);};
+  const confirmKey=mode==='copy'?'send.copyConfirm':mode==='new'?'send.newSessionConfirm':'send.confirm';
   if(!sendable.length) return null;
   return <>
-    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={start}>{t('send.all',{count:sendable.length})}</button>
+    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={open}><MessageSquare size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
     <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} className="space-send-dialog">
-      <h2 id={titleId}>{t('send.newSessionTitle')}</h2>
-      <p>{t('send.newSessionDescription',{count:sendable.length})}</p>
+      <h2 id={titleId}>{t('send.chooseTitle')}</h2>
+      <p>{t('send.chooseDescription',{count:sendable.length})}</p>
+      <fieldset className="space-send-options"><legend>{t('send.destination')}</legend>
+        <label className="space-send-option"><input type="radio" name={groupId} value="current" checked={mode==='current'} disabled={!canCurrent} onChange={()=>setMode('current')}/><span><strong>{t('send.currentOption')}</strong><small className="space-send-conversation">{canCurrent && workspaceLabel && <span className="space-send-workspace">{workspaceLabel}</span>}{canCurrent ? (sessionLabel || t('send.sessionId',{id:sessionId})) : t('send.currentUnavailable')}</small></span></label>
+        <label className="space-send-option"><input type="radio" name={groupId} value="new" checked={mode==='new'} disabled={!canCreate} onChange={()=>setMode('new')}/><span><strong>{t('send.newOption')}</strong><small>{canCreate?t('send.newOptionHint'):t('send.newUnavailable')}</small></span></label>
+        <label className="space-send-option"><input type="radio" name={groupId} value="copy" checked={mode==='copy'} onChange={()=>setMode('copy')}/><span><strong>{t('send.copyOption')}</strong><small>{t('send.copyOptionHint')}</small></span></label>
+      </fieldset>
       <div className="space-comment-actions">
-        <button type="button" onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button>
-        <button type="button" className="is-primary" autoFocus onClick={()=>{setConfirming(false);void review.send();}}>{t('send.newSessionConfirm')}</button>
+        <button type="button" autoFocus onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button>
+        <button type="button" className="is-primary" disabled={review.busy || !sendable.length || (mode==='current'&&!canCurrent) || (mode==='new'&&!canCreate)} onClick={()=>{setConfirming(false);void review.send(mode);}}>{t(confirmKey)}</button>
       </div>
     </SpaceDialog>
   </>;
@@ -297,12 +356,12 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const [composerOpen,setComposerOpen]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(null);
   const [resizeTick,setResizeTick]=useState(0);
-  const [zoom,setZoom]=useState(1);
   const [hoverPreview,setHoverPreview]=useState(null);
   const hoverTimer=useRef(null);
   const [layout,setLayout]=useState({positions:{},lines:[],highlights:[],height:0,minHeight:0});
-  const commentFieldId=useId(), commentTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null);
-  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment}=review;
+  const commentFieldId=useId(), commentTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null), fabRef=useRef(null);
+  const [fabPosition,setFabPosition]=useState(null);
+  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment}=review;
   // Keep the annotated HTML stable across selection/card state so the browser
   // selection and its text nodes are never replaced by an equal re-render.
   const markdownHtml=useMemo(()=>doc?renderMarkdown(doc.content,doc.suggestions||[]):'',[doc?.content,doc?.suggestions]);
@@ -389,7 +448,8 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       }
       const first=rects[0];
       if(!first) continue;
-      anchorRects.set(annotation.key,{left:first.left,right:first.right,top:first.top,bottom:first.bottom,height:first.height});
+      const last=rects[rects.length-1];
+      anchorRects.set(annotation.key,{left:first.left,right:first.right,top:first.top,bottom:first.bottom,height:first.height,end:last});
       const isActive=annotation.key===activeKey;
       if(annotation.kind==='comment' && range.from===range.to){
         highlights.push({key:`${annotation.key}:caret`,kind:annotation.kind,active:isActive,left:Math.max(0,first.left-1),top:first.top,width:2,height:Math.max(first.height,18),caret:true});
@@ -415,20 +475,8 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       positions[annotation.key]=top;
       cursor=top+height+10;
       if(anchor){
-        const x1=anchor.right-1, y1=anchor.top+anchor.height/2;
-        const x2=(railRect.left-stageRect.left)/scale-3, y2=top+18;
-        const paperRight=(paperRect.right-stageRect.left)/scale;
-        const lane=Math.max(x1+24,paperRight-8);
-        if(lane<x2-10){
-          // Slip below the quoted line, then use one continuous curve through
-          // the gutter so the connector reads as a link rather than a route.
-          const under=anchor.bottom+4;
-          const d=`M ${x1} ${y1} C ${x1+3} ${y1}, ${x1+6} ${under}, ${x1+14} ${under} C ${lane-18} ${under}, ${lane-8} ${y2}, ${lane} ${y2} H ${x2}`;
-          lines.push({key:annotation.key,kind:annotation.kind,active:annotation.key===activeKey,x1,y1,x2,y2,d});
-        } else {
-          const reach=Math.max(12,Math.min(48,(x2-x1)*0.42));
-          lines.push({key:annotation.key,kind:annotation.kind,active:annotation.key===activeKey,x1,y1,x2,y2,d:`M ${x1} ${y1} C ${x1+reach} ${y1}, ${x2-reach} ${y2}, ${x2} ${y2}`});
-        }
+        const geometry=annotationConnector(anchor.end,(railRect.left-stageRect.left)/scale,top,height,(paperRect.right-stageRect.left)/scale);
+        lines.push({key:annotation.key,kind:annotation.kind,active:annotation.key===activeKey,...geometry});
       }
     }
     const minHeight=Math.max(paper.offsetHeight,cursor);
@@ -439,6 +487,23 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   },[hasAnnotations,items,suggestions,liveComments,doc?.content,resizeTick,active,activeComment,confirmDelete,cardRefs,commentRefs,t,zoom]);
   useEffect(()=>{ if(!selection) setComposerOpen(false); },[selection]);
   useEffect(()=>{setConfirmDelete(null)},[comments]);
+  useEffect(()=>{
+    setHoverPreview(null);
+    return ()=>{clearTimeout(hoverTimer.current);hoverTimer.current=null;};
+  },[doc?.id]);
+  useLayoutEffect(()=>{
+    const button=fabRef.current, paper=surface.current;
+    if(!selection || composerOpen || busy || !button || !paper) return;
+    const virtual={contextElement:paper,getBoundingClientRect(){
+      const mapped=sourceRangeToDom(readSourceSpans(paper),selection.from,selection.to);
+      return mapped?.range.getBoundingClientRect?.() || paper.getBoundingClientRect();
+    }};
+    let alive=true;
+    const update=()=>computePosition(virtual,button,{placement:'top',middleware:[offset(10),flip(),shift({padding:8})]})
+      .then(({x,y})=>{if(alive)setFabPosition({left:x,top:y});}).catch(()=>{});
+    const cleanup=autoUpdate(virtual,button,update);
+    return ()=>{alive=false;cleanup();};
+  },[selection,composerOpen,busy,surface,resizeTick,zoom]);
   if (!doc) return <section className="space-paper-wrap"><p className="space-loading" role="status">{review.message || t('empty.loading')}</p></section>;
 
   const openComposer=()=>{setMessage('');setComposerOpen(true)};
@@ -450,31 +515,45 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const activateFromAnchor=id=>{setActive(null);setActiveComment(id);commentRefs.current.get(id)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})};
   const activateFromBalloon=id=>{setActive(null);setActiveComment(id);scrollToAnchor(id)};
   const activateSuggestion=id=>{setActiveComment(null);setActive(id);chooseCard(id)};
+  const keepHover=()=>{clearTimeout(hoverTimer.current);hoverTimer.current=null;};
+  const closeHover=()=>{
+    if(hoverTimer.current!==null) return;
+    hoverTimer.current=setTimeout(()=>{hoverTimer.current=null;setHoverPreview(null);},180);
+  };
   const trackHover=event=>{
     const node=event.target.closest?.('[data-src-from]');
-    if(!node) return;
+    if(!node) {closeHover();return;}
     const from=Number(node.getAttribute('data-src-from')), to=Number(node.getAttribute('data-src-to'));
+    const spans=readSourceSpans(surface.current);
     const annotation=items.find(item=>{
       const range=item.kind==='suggestion'?{from:item.item.from,to:item.item.to}:commentRange(item.item);
-      return range && from<=range.to && to>=range.from;
+      const overlaps=range && (range.from===range.to
+        ? from<=range.from && to>=range.to
+        : from<range.to && to>range.from);
+      if(!overlaps) return false;
+      const mapped=sourceRangeToDom(spans,range.from,range.to);
+      const rects=mapped ? rangeRects(mapped.range,{left:0,top:0}) : [];
+      if(!rects.length) return true;
+      return rects.some(rect=>event.clientX>=rect.left-3 && event.clientX<=rect.right+3 && event.clientY>=rect.top-3 && event.clientY<=rect.bottom+3);
     });
-    if(annotation) setHoverPreview({key:annotation.key,left:event.clientX,top:event.clientY});
+    if(annotation) {
+      keepHover();
+      setHoverPreview(previous=>previous?.key===annotation.key ? previous : {key:annotation.key,left:event.clientX,top:event.clientY});
+    }
+    else closeHover();
   };
-  const closeHover=()=>{hoverTimer.current=setTimeout(()=>setHoverPreview(null),180)};
-  const keepHover=()=>clearTimeout(hoverTimer.current);
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className="space-paper-wrap" aria-label={t('paper.aria')} ref={scrollRef}>
-    <div className="space-zoom-tools" role="group" aria-label="纸张缩放"><button type="button" aria-label="缩小纸张" title="缩小纸张" disabled={zoom<=.6} onClick={()=>setZoom(value=>Math.max(.6,Math.round((value-.1)*10)/10))}>−</button><span>{Math.round(zoom*100)}%</span><button type="button" aria-label="放大纸张" title="放大纸张" disabled={zoom>=1.5} onClick={()=>setZoom(value=>Math.min(1.5,Math.round((value+.1)*10)/10))}>＋</button></div>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
       <div ref={surface} onPointerMove={trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
         <div className="space-comment-balloons is-positioned">
-          {suggestionItems.map(annotation=><SuggestionBalloon key={annotation.key} item={annotation.item} index={annotation.index} active={active===annotation.item.id} busy={busy} t={t} onActivate={()=>activateSuggestion(annotation.item.id)} onDecide={decision=>decide(annotation.item.id,decision)} onPointerEnter={keepHover} setRef={(id,el)=>{if(el)cardRefs.current.set(id,el);else cardRefs.current.delete(id)}} style={{top:layout.positions[annotation.key],visibility:layout.positions[annotation.key]===undefined?'hidden':undefined,...(hoverPreview?.key===annotation.key?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===annotation.key?'is-hover-preview':''}/>) }
-          {liveComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={activateFromBalloon} onPointerEnter={keepHover} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}} style={{top:layout.positions[`comment:${comment.id}`],visibility:layout.positions[`comment:${comment.id}`]===undefined?'hidden':undefined,...(hoverPreview?.key===`comment:${comment.id}`?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===`comment:${comment.id}`?'is-hover-preview':''}/>) }
+          {suggestionItems.map(annotation=><SuggestionBalloon key={annotation.key} item={annotation.item} index={annotation.index} active={active===annotation.item.id} busy={busy} t={t} onActivate={()=>activateSuggestion(annotation.item.id)} onDecide={decision=>decide(annotation.item.id,decision)} onPointerEnter={keepHover} onPointerLeave={closeHover} setRef={(id,el)=>{if(el)cardRefs.current.set(id,el);else cardRefs.current.delete(id)}} style={{top:layout.positions[annotation.key],visibility:layout.positions[annotation.key]===undefined?'hidden':undefined,...(hoverPreview?.key===annotation.key?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===annotation.key?'is-hover-preview':''}/>) }
+          {liveComments.map(comment=><CommentBalloon key={comment.id} comment={comment} author={user} active={activeComment===comment.id} busy={busy} t={t} statusText={statusText} confirming={confirmDelete===comment.id} onAskDelete={askDelete} onConfirmDelete={doDelete} onCancelDelete={()=>setConfirmDelete(null)} onActivate={activateFromBalloon} onPointerEnter={keepHover} onPointerLeave={closeHover} setRef={(id,el)=>{if(el)commentRefs.current.set(id,el);else commentRefs.current.delete(id)}} style={{top:layout.positions[`comment:${comment.id}`],visibility:layout.positions[`comment:${comment.id}`]===undefined?'hidden':undefined,...(hoverPreview?.key===`comment:${comment.id}`?{'--hover-x':`${hoverPreview.left}px`,'--hover-y':`${hoverPreview.top}px`}: {})}} className={hoverPreview?.key===`comment:${comment.id}`?'is-hover-preview':''}/>) }
         </div>
         {staleComments.length>0 && <section className="space-comment-stale" aria-label={t('comment.staleGroup')}>
           <h3>{t('comment.staleGroup')}</h3><p className="space-muted">{t('comment.staleHint')}</p>
@@ -483,12 +562,12 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       </aside>}
       {layout.lines.length>0 && <svg className="space-comment-lines" aria-hidden="true">{layout.lines.map(line=><g key={line.key} className={line.active?'is-active':undefined}>
         <path pathLength="1" className={`space-connector-line ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} d={line.d}/>
-        <circle className={`space-connector-dot is-origin ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x1} cy={line.y1} r="3"/>
-        <circle className={`space-connector-dot is-target ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x2} cy={line.y2} r="2.5"/>
+        <circle className={`space-connector-dot is-origin ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x1} cy={line.y1} r="2"/>
+        <circle className={`space-connector-dot is-target ${line.kind==='suggestion'?'is-suggestion':'is-comment'}`} cx={line.x2} cy={line.y2} r="4"/>
       </g>)}</svg>}
     </div>
     <div className="space-comment-layer">
-      {selection && !composerOpen && !busy && <button type="button" className={`space-comment-fab${fabBelow?' is-below':''}`} style={{left:fabLeft,top:fabBelow?(anchor?.bottom||0)+10:(anchor?.top||0)-10}} onMouseDown={event=>event.preventDefault()} onClick={openComposer} aria-haspopup="dialog" aria-label={t('comment.bubble')}><CommentIcon/><span>{t('comment.bubble')}</span></button>}
+      {selection && !composerOpen && !busy && <button ref={fabRef} type="button" className={`space-comment-fab${!fabPosition && fabBelow?' is-below':''}${fabPosition?' is-positioned':''}`} style={fabPosition || {left:fabLeft,top:fabBelow?(anchor?.bottom||0)+10:(anchor?.top||0)-10}} onMouseDown={event=>event.preventDefault()} onClick={openComposer} aria-haspopup="dialog" aria-label={t('comment.bubble')}><CommentIcon/><span>{t('comment.bubble')}</span></button>}
       <SpaceDialog open={Boolean(selection && composerOpen)} onClose={()=>{setComposerOpen(false);setMessage('')}} labelledBy={commentTitleId} className="space-comment-dialog">
         {selection && <>
           <h2 id={commentTitleId}>{t('comment.addTitle')}</h2>
@@ -506,6 +585,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
 
 export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = null }) {
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
+  const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [exporting,setExporting]=useState(false);
   const deleteTitleId=useId();
@@ -543,12 +623,6 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
     } catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
-  const refreshAll=async()=>{
-    setBusy(true);setMessage('');
-    try { await reloadDocs(); await review.reload(docId); }
-    catch (e) { setMessage(errorText(e,translateNow.current)); }
-    finally { setBusy(false); }
-  };
   const exportDocument=async (format)=>{
     setExporting(true);setMessage('');
     try {
@@ -569,23 +643,30 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
+  const shownDocuments=useMemo(()=>{
+    const needle=query.trim().toLocaleLowerCase();
+    const time=item=>{const value=Date.parse(item.updatedAt || item.createdAt || '');return Number.isFinite(value)?value:0;};
+    return documents.filter(item=>(!needle || (item.title || item.id || '').toLocaleLowerCase().includes(needle)) && (filter!=='pending' || item.pending>0))
+      .sort((a,b)=>sort==='title' ? (a.title||a.id||'').localeCompare(b.title||b.id||'',undefined,{numeric:true}) : time(b)-time(a));
+  },[documents,query,filter,sort]);
   const home=!docId;
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
-      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span><small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></header>
+      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span><small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
-        {documents.length ? <div className="space-home-grid">{documents.map((item,index)=><article className="space-home-card" key={item.id}>
+        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><label><span className="space-visually-hidden">{t('home.filter')}</span><select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">{t('home.filterAll')}</option><option value="pending">{t('home.filterPending')}</option></select></label><label><span className="space-visually-hidden">{t('home.sort')}</span><select value={sort} onChange={event=>setSort(event.target.value)}><option value="recent">{t('home.sortRecent')}</option><option value="title">{t('home.sortTitle')}</option></select></label></div>}
+        {shownDocuments.length ? <div className="space-home-grid">{shownDocuments.map((item,index)=><article className="space-home-card" key={item.id}>
           <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>setDocId(item.id)}>
-            <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">SPACE</span></span>
+            <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">{BRAND.name.en.toUpperCase()}</span></span>
             <span className="space-home-card-copy"><strong title={item.title||item.id}>{item.title||item.id}</strong><span className="space-home-card-meta">{documentCardTime(item,t)}</span></span>
             <span className="space-home-card-footer">{item.pending>0?<span className="space-home-pending"><i aria-hidden="true"/>{t('annotations.suggestions',{count:item.pending})}</span>:<span className="space-home-clear">{t('home.noPending')}</span>}<span className="space-home-open-icon" aria-hidden="true">↗</span></span>
           </button><button type="button" className="space-home-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title||item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><TrashIcon size={15}/></button>
-        </article>)}</div> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><span aria-hidden="true">＋</span>{t('nav.newDocument')}</button></div>}
+        </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
-      <header className="space-top space-preview-top"><button type="button" className="space-back" aria-label={t('home.back')} title={t('home.back')} onClick={()=>setDocId(null)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12"/></svg></button><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-            <div className="space-header-tools">{review.doc&&<div className="space-header-counts" role="group" aria-label={t('annotations.title')}><span className="is-suggestion"><i aria-hidden="true"/>{t('annotations.suggestions',{count:review.suggestions.length})}</span><span className="is-comment"><i aria-hidden="true"/>{t('annotations.comments',{count:visibleComments.length})}</span></div>}{review.doc&&<details className="space-export-menu"><summary>{exporting?t('export.busy'):t('export.button')}</summary><div className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>exportDocument('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>exportDocument('docx')}>Word <span>.docx</span></button></div></details>}<button type="button" className="space-refresh" disabled={!docId||busy} aria-label={t('review.refresh')} title={t('review.refresh')} onClick={refreshAll}><RefreshIcon/></button>{review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
+      <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} onClick={()=>setDocId(null)}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
+            <div className="space-header-tools">{review.doc&&<ReviewZoomControls review={review} t={t}/>} {review.doc&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}

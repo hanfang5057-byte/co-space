@@ -1,7 +1,7 @@
 html,body,#root { min-block-size:100%; block-size:100%; margin:0; }
 body { min-inline-size:320px; background:#f5f4f1; }
 .space-app.space-web-review { block-size:100%; min-block-size:100%; overflow:auto; }
-.space-web-header { position:sticky; inset-block-start:0; z-index:10; display:flex; align-items:center; gap:18px; min-block-size:68px; padding:10px clamp(16px,4vw,56px); border-block-end:1px solid var(--space-border); background:color-mix(in srgb,var(--space-surface) 92%,transparent); backdrop-filter:blur(10px); }
+.space-web-header { position:sticky; inset-block-start:0; z-index:10; display:flex; flex-wrap:wrap; align-items:center; gap:18px; min-block-size:68px; padding:10px clamp(16px,4vw,56px); border-block-end:1px solid var(--space-border); background:color-mix(in srgb,var(--space-surface) 92%,transparent); backdrop-filter:blur(10px); }
 .space-web-brand { display:flex; align-items:center; gap:9px; flex:none; color:#173c36; font-size:.78rem; font-weight:750; letter-spacing:.12em; text-decoration:none; }
 .space-web-brand .space-brand-icon { display:block; inline-size:30px; block-size:30px; flex:none; border-radius:8px; }
 .space-web-brand .space-brand-names { gap:2px; }

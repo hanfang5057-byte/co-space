@@ -63,7 +63,7 @@ test('client bundle registers Space panel, picker action, and reference serializ
  const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value}}},document:{createElement:()=>({}),head:{append:()=>{}}},console};
  vm.runInNewContext(bundle,context);
- const react={createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
+ const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
  const plugin=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
  const registrations=[],sources=[],commands=[],rules=[],tabTypes=[],opened=[];
  const ctx={uiSession:{adapter:{current:{}}},sidebarRight:{openResource:address=>{opened.push(address)}},sidebarRightTabs:{register:definition=>{tabTypes.push(definition);return ()=>{}}},uiConversation:{userText:{register:rule=>{rules.push(rule);return ()=>{}}}},slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{registrations.push({options,component});return ()=>{}}},inputTriggers:{registerSource:source=>{sources.push(source);return ()=>{}}},commandUi:{register:command=>{commands.push(command);return ()=>{}}},locale:{bind:()=>key=>key,register:()=>()=>{}},sessions:{},conversation:{},get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>fn()};
@@ -108,7 +108,7 @@ test('document picker inserts the checked documents into the bound conversation'
  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
    fetch:async()=>({ok:true,json:async()=>({result:[{id:'doc-1',title:'Selected document'}]})})};
  vm.runInNewContext(bundle,context);
- const react={createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
+ const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
  const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
  const binding={ctx:{sessionId:'session-1'}};let inserted;let focused=false;
  // DSH's live SessionInput facade inserts a batch through addFiles(references, attachmentIds).
@@ -147,7 +147,7 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
   const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
     fetch:async()=>({ok:true,json:async()=>({result:[{id:'doc-1',title:'Selected document'}]})})};
   vm.runInNewContext(bundle,context);
-  const react={createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
+  const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
   const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
   const binding={ctx:{sessionId:'session-1'}};
   // A facade without the batch reference method must surface the failure note,
@@ -257,4 +257,18 @@ test('unsupported unmarked databases fail closed without dropping legacy tables'
     try { assert.equal(verify.prepare('SELECT content FROM review_documents WHERE id=?').get('legacy')?.content, 'keep me'); }
     finally { verify.close(); }
   } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test('new conversation choice resolves a different target and preserves it on replay', async () => {
+  const home=mkdtempSync(path.join(tmpdir(),'space-new-target-'));const resolved=[],sent=[];
+  const host=createHostApi({home,resolveTarget:async request=>{resolved.push(request);return {sessionId:'new',created:true};},prompt:async request=>{sent.push(request);return {accepted:true};}});
+  try {
+    const service=new SpaceService(home);service.createDocument({id:'d',content:'# D\n\nhello',operationId:'create'});service.close();
+    const comment=await host.dispatch('createComment',{docId:'d',quote:'hello',body:'review',anchor:{from:5,to:10,version:0}});
+    const payload={docId:'d',commentIds:[comment.id],newSessionFrom:'current',forceNew:true,operationId:'new-send'};
+    const result=await host.dispatch('sendComments',payload);
+    assert.equal(result.sessionId,'new');assert.equal(sent[0].sessionId,'new');
+    assert.deepEqual(resolved,[{operationId:'new-send',forceNew:true,excludeSessionId:'current'}]);
+    await host.dispatch('sendComments',payload);assert.equal(resolved.length,1);assert.equal(sent.length,1);
+  } finally {host.close();rmSync(home,{recursive:true,force:true});}
 });

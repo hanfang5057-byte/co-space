@@ -39,13 +39,13 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
         // A retry of the same operation must reuse the conversation recorded by
         // the first attempt, not resolve a different recent conversation.
         const prior = space.findSend(operationId);
-        const requestedSessionId = typeof args.sessionId === 'string' && args.sessionId !== '' ? args.sessionId : prior?.sessionId;
+        const requestedSessionId = prior?.sessionId || (typeof args.sessionId === 'string' && args.sessionId !== '' ? args.sessionId : undefined);
         let target;
         if (requestedSessionId) {
           target = { sessionId: requestedSessionId, created: false };
         } else {
           if (typeof resolveTarget !== 'function') throw Object.assign(new Error('当前对话发送能力不可用'), {code:'SESSION_UNAVAILABLE'});
-          target = await resolveTarget({ operationId });
+          target = await resolveTarget({ operationId, ...(args.forceNew === true ? { forceNew: true } : {}), ...(args.newSessionFrom ? { excludeSessionId: args.newSessionFrom } : {}) });
           if (!target?.sessionId) throw Object.assign(new Error('无法确定发送对话'), {code:'SESSION_UNAVAILABLE'});
         }
         const prepared = space.prepareSend({ ...args, sessionId: target.sessionId, operationId });

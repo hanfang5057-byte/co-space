@@ -41,7 +41,7 @@ await build({
   logLevel: 'info',
 });
 
-await build({
+const webBuild = await build({
   entryPoints: [path.join(adapterDir, 'web/index.jsx')],
   outfile: path.join(publicDir, 'client.js'),
   bundle: true,
@@ -52,10 +52,19 @@ await build({
   loader: { '.svg': 'dataurl' },
   define: { __COSPACE_BUILD_VERSION__: JSON.stringify(localBuildVersion) },
   nodePaths: [path.join(adapterDir, 'node_modules')],
+  alias: {
+    react: path.join(adapterDir, 'node_modules/react'),
+    'react-dom': path.join(adapterDir, 'node_modules/react-dom'),
+  },
+  metafile: true,
   sourcemap: false,
   minify: true,
   logLevel: 'info',
 });
+const reactRoots = new Set(Object.keys(webBuild.metafile.inputs)
+  .map(input => input.match(/^(.*(?:^|\/)node_modules\/react)\//)?.[1])
+  .filter(Boolean));
+if (reactRoots.size !== 1) throw new Error(`WorkBuddy must bundle exactly one React installation; found: ${[...reactRoots].join(', ')}`);
 
 const marketConfig = JSON.parse(await readFile(path.join(adapterDir, 'connector/mcp.json'), 'utf8'));
 for (const server of Object.values(marketConfig.mcpServers)) {

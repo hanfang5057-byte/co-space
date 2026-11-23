@@ -7,6 +7,8 @@ import { NS, en, errorText, zh } from '../../../packages/review-ui/src/locale.js
 import { documentIdFromReference, matchSpaceReference, spaceReferenceFor } from '../../../packages/review-ui/src/space-reference.js';
 import { documentTitle } from '../../../packages/review-ui/src/document-titles.js';
 import { documentIdFromDshResource, dshSpaceResourceFor } from './resource-reference.js';
+import { workspaceNameForSession } from './workspace-name.js';
+import { BRAND } from '../../../packages/brand/brand.js';
 
 export const name = 'dsh-space-client';
 /** Client services: slots, the current Session, copy, conversation text, and the right Sidebar. */
@@ -39,6 +41,14 @@ function createSendBridge(ctx) {
   const service = name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined) ?? ctx[name];
   return {
     canCreate: true,
+    getSessionLabel(sessionId) {
+      const row=service('sessions')?.list?.getSnapshot?.()?.byId?.[sessionId];
+      return row?.title || row?.displayTitle || null;
+    },
+    getWorkspaceLabel(sessionId) {
+      const items=service('workspaces')?.list?.getSnapshot?.()?.items;
+      return workspaceNameForSession(items,sessionId);
+    },
     openSession(sessionId) {
       try { service('uiWorkspace')?.openSession(sessionId); } catch { /* navigation is best effort */ }
     },
@@ -125,7 +135,7 @@ export function apply(ctx) {
     const state=useSyncExternalStore(current?.subscribe || (()=>()=>{}),current?.getSnapshot || (()=>null),()=>null);
     return <SpaceApp api={api} sessionId={state?.key || null} t={translate} sendTarget={sendBridge}/>;
   }));
-  ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'spaces',order:20,label:()=> 'Space'},SpaceIcon));
+  ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'spaces',order:20,label:()=> BRAND.name.en},SpaceIcon));
 
   // Sent references stay protocol text; this rule turns each complete token into
   // one document card instead of leaving `space:<docId>` in the bubble.
