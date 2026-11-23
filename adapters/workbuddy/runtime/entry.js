@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { SpaceService } from '../../../packages/review-core/src/space-service.js';
-import { createMcpServer } from '../../../packages/transport-mcp/server.js';
+import { createMcpServer, resolveSpaceRef } from '../../../packages/transport-mcp/server.js';
 import { ensureReviewDaemon, runReviewDaemon, touchReviewDaemon } from './review-daemon.js';
 import { resolveWorkBuddySpaceHome } from './paths.js';
 
@@ -32,12 +32,13 @@ export async function startWorkBuddyConnector({ transport = new StdioServerTrans
   try {
     server = createMcpServer(activityService);
     server.registerTool('space_review_open', {
-      description: 'Return the local Space review page URL. Pass a document id to open that document; omit it to open the document home.',
-      inputSchema: { docId: z.string().min(1).max(200).optional() },
+      description: 'Open the local Space review page. Pass the user-provided space:<docId> reference or its decoded document ID to open that document; omit docId to open the document home. This tool does not enumerate documents or return a document selected on the page to the conversation.',
+      inputSchema: { docId: z.string().min(1).max(200).optional().describe('Optional user-provided space:<docId> reference or decoded document ID. Omit to open the home page.') },
     }, withToolErrors(async ({ docId }) => {
-      if (docId) service.readDocument(docId);
+      const resolvedDocId = docId ? resolveSpaceRef(docId) : undefined;
+      if (resolvedDocId) service.readDocument(resolvedDocId);
       const baseUrl = await ensureReviewDaemon(home, fileURLToPath(import.meta.url));
-      return { name: 'Space', available: true, storage: 'local-only', reviewUrl: docId ? `${baseUrl}/document/${encodeURIComponent(docId)}` : baseUrl };
+      return { name: 'Space', available: true, storage: 'local-only', reviewUrl: resolvedDocId ? `${baseUrl}/document/${encodeURIComponent(resolvedDocId)}` : baseUrl };
     }));
     await server.connect(transport);
     return { server, service };

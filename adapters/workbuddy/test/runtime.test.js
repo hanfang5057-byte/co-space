@@ -114,8 +114,9 @@ test('bundled WorkBuddy MCP and review web complete the local review loop', { sk
     writeFileSync(stateFile, `${JSON.stringify({ port, token, pid: reviewDaemonPid })}\n`, { mode: 0o600 });
     await waitForHealth(port, token);
 
-    const page = await callTool('space_review_open', { docId: created.id });
+    const page = await callTool('space_review_open', { docId: created.reference });
     assert.match(page.reviewUrl, /^http:\/\/127\.0\.0\.1:\d+\/document\//);
+    assert.ok(page.reviewUrl.endsWith(`/document/${encodeURIComponent(created.id)}`));
     reviewDaemonPid = JSON.parse(readFileSync(path.join(temporaryHome, '.workbuddy/space/.review-http.json'), 'utf8')).pid;
     assert.equal(Number.isInteger(reviewDaemonPid), true);
     const html = await fetch(page.reviewUrl);
