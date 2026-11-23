@@ -11,6 +11,7 @@ DSH Space 让用户在个人文档中审阅 Agent 提出的具体修改：用户
 ## 安装与启用
 
 - 在 DSH 的 **插件** > **添加插件** 选择本目录，或安装 npm 包 `dsh-plugin-space`（也可在配置了本仓库 `market/index.json` 的插件市场 Discover 中安装）。
+- 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/dsh-space/main/market/index.json`。
 - 可以把本目录安装为本地 `link:` bundle，便于修改后立即验证。
 - 插件声明 `engines.dsh = ^0.2.2-rc.5`；升级 DSH 大版本后需要重新核对兼容性。
 - 仓库内的 `client.js` 是已构建产物；修改 `client-src/` 后运行 `npm run build:client`，不要手工编辑 `client.js`。
