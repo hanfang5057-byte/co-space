@@ -19,8 +19,19 @@ for (const file of ['index.js', 'client.js', 'server/mcp-entry.js', 'cordis.patc
 for (const [locale, language] of [['zh', 'zh'], ['en', 'en']]) {
   const data = JSON.parse(await readFile(path.join(packageRoot, 'locale', `${locale}.json`), 'utf8'));
   assert.equal(data.meta.title, brand.name[language]);
-  assert.equal(data.meta.description, brand.description[language]);
+  assert.equal(data.meta.description, brand.description[language], 'the detail page must show the brand description');
 }
+
+const market = JSON.parse(await readFile(path.join(root, 'market/index.json'), 'utf8'));
+const marketPlugin = market.plugins?.find(plugin => plugin.name === manifest.name);
+assert.ok(marketPlugin, 'the market index must list the DSH plugin');
+assert.deepEqual(marketPlugin.title, brand.name, 'the market title must come from the brand metadata');
+assert.deepEqual(marketPlugin.description, brand.description, 'the market description must come from the brand metadata');
+const [marketIcon, brandIcon] = await Promise.all([
+  readFile(path.join(root, 'market', marketPlugin.icon)),
+  readFile(path.join(root, brand.icon)),
+]);
+assert.deepEqual(marketIcon, brandIcon, 'the market icon must match the brand icon');
 
 const bundledEntries = await Promise.all(['index.js', 'server/mcp-entry.js'].map(file => readFile(path.join(packageRoot, file), 'utf8')));
 for (const source of bundledEntries) {

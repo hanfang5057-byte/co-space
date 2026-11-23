@@ -1,18 +1,18 @@
 ---
 name: space-review
-description: Create local Space documents, read explicitly referenced documents, propose reviewable edits, process comments when asked, and open the review page.
+description: Create local CoSpace documents, read explicitly referenced documents, propose reviewable edits, process comments when asked, and open the review page.
 version: 0.1.0
 author: CoSpace
 ---
 
 # 智联文档空间（CoSpace）文档审阅
 
-使用 `space_*` 工具管理 WorkBuddy 本机的 Space 文档。数据与 DSH 插件隔离。
+使用 `space_*` 工具管理 WorkBuddy 本机的 CoSpace 文档。数据与 DSH 插件隔离。
 
 ## 指定文档与新建文档
 
 - 对已有文档执行读取、修改建议或查询时，要求用户提供 `space:<docId>` 引用；不得枚举、搜索或自行挑选文档。工具可接收完整引用或解析后的文档 ID。
-- 缺少已有文档引用时，请用户在对话中提供 `space:<docId>`。可以用 `space_review_open` 打开 Space 首页供用户自行查看，但页面上的选择不会自动传回对话；不要据此推断用户选中了哪个文档。
+- 缺少已有文档引用时，请用户在对话中提供 `space:<docId>`。可以用 `space_review_open` 打开 CoSpace 首页供用户自行查看，但页面上的选择不会自动传回对话；不要据此推断用户选中了哪个文档。
 - 只有用户明确要求新建文档时才调用 `space_document_create`。新建不需要已有文档引用；传入完整 Markdown 正文，若需要标题就在正文中包含标题。每次新操作生成唯一 `operationId`（UUID 即可）；仅重试同一操作时复用原 ID。新建工具不能覆盖已有文档。
 
 ## 修改与审阅
@@ -32,17 +32,17 @@ author: CoSpace
 ## 边界
 
 - 不要直接修改文件、SQLite 数据库或已接受正文；不要代替用户接受或拒绝建议。
-- Space MCP 不提供文档枚举工具。不要把审阅页上用户自行浏览或选择文档，视为已向对话传递了文档 ID。
+- CoSpace MCP 不提供文档枚举工具。不要把审阅页上用户自行浏览或选择文档，视为已向对话传递了文档 ID。
 - WorkBuddy 审阅服务离线时，按工具返回的信息如实说明，并提示用户重新打开 WorkBuddy 后重试；不要把旧页面状态说成最新状态。
 
 ## English
 
-Use the `space_*` tools to manage local WorkBuddy Space documents. WorkBuddy data is isolated from the DSH plugin.
+Use the `space_*` tools to manage local WorkBuddy CoSpace documents. WorkBuddy data is isolated from the DSH plugin.
 
 ### Identify or create a document
 
 - For operations on an existing document, require the user to provide a `space:<docId>` reference. Never enumerate, search for, or choose a document. Tools accept either the full reference or the decoded document ID.
-- If the reference is missing, ask the user to provide it in the conversation. You may open the Space home page with `space_review_open` for the user to browse, but a selection on that page is not sent back to the conversation; do not infer which document they selected.
+- If the reference is missing, ask the user to provide it in the conversation. You may open the CoSpace home page with `space_review_open` for the user to browse, but a selection on that page is not sent back to the conversation; do not infer which document they selected.
 - Call `space_document_create` only when the user explicitly asks to create a document. Creation does not require an existing-document reference. Provide complete Markdown content and include a heading if a title is wanted. Generate a unique `operationId` for each new operation (a UUID is suitable); reuse it only when retrying that same operation. Creation cannot overwrite an existing document.
 
 ### Propose and review edits
@@ -62,5 +62,5 @@ Use the `space_*` tools to manage local WorkBuddy Space documents. WorkBuddy dat
 ### Boundaries
 
 - Never directly edit files, the SQLite database, or accepted document content. Never accept or reject suggestions for the user.
-- The Space MCP server does not enumerate documents. Do not treat a document the user browses to or selects on the review page as identified in the conversation.
+- The CoSpace MCP server does not enumerate documents. Do not treat a document the user browses to or selects on the review page as identified in the conversation.
 - If the WorkBuddy review service is offline, report the tool result accurately and ask the user to reopen WorkBuddy before retrying. Do not present stale page state as current.

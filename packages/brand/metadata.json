@@ -4,8 +4,8 @@
     "en": "CoSpace"
   },
   "description": {
-    "zh": "本机文档管理与 AI 修改审阅。",
-    "en": "Manage local documents and review AI edits."
+    "zh": "跟你的 Agent 一起写文档：它提修改建议，你逐条决定。",
+    "en": "Write documents with your agent: it proposes edits, and you decide each one."
   },
   "icon": "assets/cospace-icon.svg"
 }

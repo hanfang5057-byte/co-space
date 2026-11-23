@@ -17,7 +17,7 @@
 - 用户已核实：WorkBuddy 个人主体可上传 Connector，但不能开发应用。因此本方案不依赖 WorkBuddy OpenAPI，不要求 OAuth 应用、client secret 或 WorkBuddy 会话 API。
 - WorkBuddy 未发现可供本项目使用的插件式 UI 扩展或对话 API。WorkBuddy 中的自然语言任务由 Connector 工具完成；审阅、决策和文档管理由独立本机网页完成。
 - WorkBuddy Connector 官方规范支持 MCP + Skill、`stdio` 和托管 Node runtime。第一版采用此分发方式；Connector 市场审核、本机进程生命周期及审阅链接行为仍须实测确认。
-- 不开发原生客户端，不要求用户安装 Node.js、手动编辑 MCP 配置、选择 Space 名称或设置本机数据目录。Space 名称固定为“Space”，本机数据目录自动采用宿主默认值。WorkBuddy 数据目录固定在 WorkBuddy 专属命名空间中，不提供指向 DSH 或其他宿主目录的覆盖入口。
+- 不开发原生客户端，不要求用户安装 Node.js、手动编辑 MCP 配置、选择 CoSpace 名称或设置本机数据目录。显示名称固定为品牌名「智联文档空间 / CoSpace」，本机数据目录自动采用宿主默认值。WorkBuddy 数据目录固定在 WorkBuddy 专属命名空间中，不提供指向 DSH 或其他宿主目录的覆盖入口。
 - 一个仓库、两套构建产物。共享核心源码不作为第三个独立 npm 包发布，而是分别纳入 DSH 与 WorkBuddy 分发物。
 - 同设备同时安装 DSH 与 WorkBuddy Connector 是支持的场景，但必须完全隔离：两者使用不同宿主入口、固定独立数据目录和独立 HTTP 接入点；WorkBuddy 不读取、导入或访问 DSH 的 Space 数据，不提供共享数据库配置。
 - 不改写 `packages/review-core/src/review-core.js` 的审阅语义，除非另行获得用户明确同意。架构迁移优先通过新的服务与宿主适配边界完成。
@@ -30,7 +30,7 @@
 
 1. 用户从 WorkBuddy Connector 市场安装 Space Connector。
 2. 用户在 WorkBuddy 中提出首次文档任务，WorkBuddy 自动启动 Connector。
-3. MCP Server 自动创建默认 Space（名称“Space”）及本机数据目录，无需设置向导。
+3. MCP Server 自动创建默认 CoSpace（显示名称取品牌配置）及本机数据目录，无需设置向导。
 4. MCP Server 按需启动或复用 WorkBuddy 专属本机审阅服务；工具响应返回可点击的本机审阅页链接。
 5. 用户在浏览器直接审阅文档和建议。页面显示 Space 名称、连接状态和数据目录信息，但不要求用户确认或设置。
 
@@ -57,7 +57,7 @@ flowchart TB
     UI["packages/review-ui<br/>审阅组件"]
     DSH_ADAPTER["adapters/dsh<br/>Cordis、会话、侧栏、引用"]
     WB_ADAPTER["adapters/workbuddy<br/>占位，未实现"]
-    DSH_UI["DSH 插件界面<br/>Space 入口与审阅面板"]
+    DSH_UI["DSH 插件界面<br/>CoSpace 入口与审阅面板"]
     WB_UI["apps/review-web<br/>占位，未实现"]
     DSH_ADAPTER --> CORE
     DSH_ADAPTER --> MCP
@@ -82,7 +82,7 @@ flowchart TB
 | WorkBuddy 适配器 | Connector MCP 工具、Skill、本机 HTTP 服务生命周期、连接状态、审阅链接 | WorkBuddy 内嵌 UI、WorkBuddy OpenAPI、DSH 会话目标解析 |
 | 共享审阅 UI 组件 | 文档呈现、建议差异、接受/拒绝交互、评论展示 | 宿主插件注册和会话导航 |
 | DSH UI 外壳 | DSH 主入口、会话选择、引用卡片、右侧面板 | 复制共享审阅业务组件 |
-| WorkBuddy UI 外壳 | 自动初始化状态、连接状态、Space 首页、待审收件箱、独立浏览器审阅 | DSH 侧栏和对话输入框操作 |
+| WorkBuddy UI 外壳 | 自动初始化状态、连接状态、CoSpace 首页、待审收件箱、独立浏览器审阅 | DSH 侧栏和对话输入框操作 |
 
 工作流 API 按稳定的领域能力划分；宿主可选能力通过适配器声明，不在共享核心中散布 `if (host === ...)`。例如 DSH 的评论处理触发可使用当前会话；WorkBuddy 不注入会话，仅向剪贴板复制提示词供用户手动粘贴。
 
@@ -193,12 +193,12 @@ WorkBuddy MCP 工具应与当前 Space 工具语义保持兼容，必要时新�
 
 ### DSH 宿主扩展
 
-DSH 适配器继续通过既有宿主能力注册 MCP 和 HTTP API，保留左侧 Space 入口、会话引用、右侧审阅面板、评论处理请求和账号作者信息。评论正文由 Agent 经 `space_document_read` 获取，不拼入会话消息。DSH 专用会话目标解析、工作区选择与账号读取不进入共享领域 API。
+DSH 适配器继续通过既有宿主能力注册 MCP 和 HTTP API，保留左侧 CoSpace 入口、会话引用、右侧审阅面板、评论处理请求和账号作者信息。评论正文由 Agent 经 `space_document_read` 获取，不拼入会话消息。DSH 专用会话目标解析、工作区选择与账号读取不进入共享领域 API。
 
 ## 数据与迁移
 
 - SQLite schema、事务、幂等 ID、冲突和恢复逻辑维持为单一事实源，遵守 [01](01-domain-model.md)、[07](07-review-core.md) 及已实现行为。
-- WorkBuddy 首次使用时自动创建固定名称“Space”及平台默认本机目录，无设置向导。默认目录与 DSH 隔离：DSH 使用 `resolveHome()`（默认 `$DSH_HOME/space`，通常为 `~/.dsh/space`），WorkBuddy 使用 WorkBuddy 专属应用数据目录下 `space/`（macOS/Linux 建议 `~/.workbuddy/space`）。仅 DSH 保留既有 `DSH_SPACE_HOME` 覆盖；WorkBuddy 不提供 `WORKBUDDY_SPACE_HOME`、目录选择或其他改变数据库位置的入口。页面可展示 WorkBuddy 实际路径，不提供设置流程。
+- WorkBuddy 首次使用时自动创建固定品牌名称「智联文档空间 / CoSpace」及平台默认本机目录，无设置向导。默认目录与 DSH 隔离：DSH 使用 `resolveHome()`（默认 `$DSH_HOME/space`，通常为 `~/.dsh/space`），WorkBuddy 使用 WorkBuddy 专属应用数据目录下 `space/`（macOS/Linux 建议 `~/.workbuddy/space`）。仅 DSH 保留既有 `DSH_SPACE_HOME` 覆盖；WorkBuddy 不提供 `WORKBUDDY_SPACE_HOME`、目录选择或其他改变数据库位置的入口。页面可展示 WorkBuddy 实际路径，不提供设置流程。
 - WorkBuddy runtime 只能打开其专属目录下的数据库。启动时规范化路径并拒绝符号链接逃逸、与 DSH 默认目录重合或数据库文件别名；不得扫描 DSH 目录、读取 DSH 环境变量、自动发现/导入 DSH 数据，也不得提供共享数据库或跨宿主数据迁移功能。两边即使文档 ID 相同，也属于不同数据库且互不可见。
 - 同设备安装两个宿主时，MCP 与 HTTP 入口分别访问各自数据库，数据永不自动合并。独立服务端口/路由各自管理；WorkBuddy 使用系统分配的 loopback 端口，不假设固定端口，也不占用 DSH 插件服务器路由。
 - SQLite 启用 WAL、`synchronous=FULL`、`busy_timeout=5000`，写事务使用 `BEGIN IMMEDIATE`。这些机制只服务单个宿主数据库内部的事务与恢复，不用于跨宿主共享。WorkBuddy 不得将 DSH 数据库作为迁移源或目标；未知/不兼容 schema 必须安全失败，不能自动重建或覆盖数据。

@@ -9,7 +9,7 @@ const WATCH_PREFIXES = ['packages', 'adapters/dsh', 'assets', 'docs'];
 const IGNORED_SEGMENTS = new Set(['node_modules', 'dist', '.git']);
 const GENERATED_FILES = new Set(['adapters/dsh/client.js']);
 const SOURCE_EXTENSIONS = /\.(?:js|mjs|cjs|jsx|ts|tsx|css|json|yml|yaml|md|svg|png|webp|jpe?g)$/i;
-const BUILD_STEPS = ['scripts/build-client.mjs', 'scripts/build-dsh.mjs'];
+const BUILD_STEPS = ['scripts/build-client.mjs', 'scripts/build-dsh.mjs', 'scripts/build-market.mjs'];
 const BUILD_STAMP = /\d+\.\d+\.\d+\+local\.[0-9A-Z]+/;
 const DEBOUNCE_MS = 120;
 

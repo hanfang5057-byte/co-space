@@ -2,7 +2,7 @@
 
 ![CoSpace app icon](assets/cospace-icon.svg)
 
-CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户可以在 Space 页面新建空白文档，Agent 也可以创建带完整初始正文的新文档；对已有文档的修改必须提出建议，只有用户接受才改变已接受正文。相邻修改可合并为一个审阅单位，实际重叠的提交会被拒绝。
+CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户可以在 CoSpace 页面新建空白文档，Agent 也可以创建带完整初始正文的新文档；对已有文档的修改必须提出建议，只有用户接受才改变已接受正文。相邻修改可合并为一个审阅单位，实际重叠的提交会被拒绝。
 
 ## 当前状态
 
@@ -13,18 +13,18 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 ## 安装与启用
 
 - DSH npm 包名为 `dsh-plugin-space`。根目录是私有 workspace，不直接安装或发布；构建发布包后安装 `dist/dsh-plugin/`，或运行 `npm pack ./dist/dsh-plugin` 生成 npm tarball。
-- 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`。
+- 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`；该文件由 `npm run build:market` 从品牌元数据生成，发布新版本时需手动把版本追加到其中的 `versions`。
 - 本地开发时修改源码后，按下方「打包」中的命令构建，再将生成的目录安装到对应宿主。
 - 插件声明 `engines.dsh = ^0.2.2-rc.5`；升级 DSH 大版本后需要重新核对兼容性。
 - `adapters/dsh/client.js` 是 DSH 客户端生成产物；修改 `packages/review-ui/src/` 或 `adapters/dsh/client/` 后运行 `npm run build:client`，不要手工编辑生成文件。
 - React 由宿主提供：构建保持 `react`、`react-dom`、`react/jsx-runtime` 外置，`npm run build:client` 会在发现 React 被打包进 `client.js` 时直接失败；插件不声明自己的 React 依赖。
-- 启用后，左侧栏出现 **Space** 入口；对话输入框的 **+** 菜单出现 **Space 文档**。
+- 启用后，左侧栏出现 **CoSpace** 入口；对话输入框的 **+** 菜单出现 **CoSpace 文档**。
 
 ## 使用入口
 
-- **左侧 Space**：浏览个人文档，阅读正文和待处理建议，逐条接受或拒绝；在渲染正文中选中文字会就地出现「评论」按钮，保存后评论显示在正文右侧批注槽，可删除；修改建议也以另一种颜色的气泡出现在同一批注槽中，正文保持固定最小宽度，窗口不足时横向滚动。
+- **左侧 CoSpace**：浏览个人文档，阅读正文和待处理建议，逐条接受或拒绝；在渲染正文中选中文字会就地出现「评论」按钮，保存后评论显示在正文右侧批注槽，可删除；修改建议也以另一种颜色的气泡出现在同一批注槽中，正文保持固定最小宽度，窗口不足时横向滚动。
 - **新建文档**：左侧文档栏的 **新建文档** 按钮创建默认标题为「未命名文档」、正文为空的文档；标题和正文的后续修改仍由 Agent 提建议完成。
-- **输入框 +**：选择一个或多个 Space 文档加入当前对话，引用格式为 `space:<docId>`。
+- **输入框 +**：选择一个或多个 CoSpace 文档加入当前对话，引用格式为 `space:<docId>`。
 - **对话文档卡片**：发送后的引用显示为一张文档卡片，点击会展开右侧边栏并打开该文档的审阅面板；标签页按文档地址恢复，刷新后仍是同一篇文档。
 - **评论驱动修改**：在文档里选中文字，点击选区旁的 **评论**，填写并保存；点击 **让 Agent 处理评论** 后，DSH 向当前对话只发送文档引用和处理指令，Agent 再通过 `space_document_read` 读取评论、提交建议，并以 `space_comment_complete` 记录每条评论的处理结果。WorkBuddy 提供复制短提示词，用户手动粘贴发送；评论正文不进入提示词。评论及建议关联状态保留在审阅页，刷新可查看结果。
 
@@ -44,7 +44,7 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 
 ## 界面验收数据
 
-`scripts/seed-markdown-ui.mjs` 通过 Space MCP 写入一套 Markdown 审阅测试文档。默认会先清空此前由该脚本创建的 `md-ui-*` 文档（含建议、评论、发送记录和操作记录），再写入一整套新数据；普通文档不受影响：
+`scripts/seed-markdown-ui.mjs` 通过 CoSpace MCP 写入一套 Markdown 审阅测试文档。默认会先清空此前由该脚本创建的 `md-ui-*` 文档（含建议、评论、发送记录和操作记录），再写入一整套新数据；普通文档不受影响：
 
 ```sh
 node scripts/seed-markdown-ui.mjs              # 清空旧测试数据并重建
@@ -93,9 +93,9 @@ npm install                 # 首次安装依赖或依赖变更后
 npm run build:dsh
 ```
 
-`build:dsh` 会先运行 `build:client`，将 `adapters/dsh/client/index.jsx` 和共享审阅 UI 编译为生成文件 `adapters/dsh/client.js`，再组装完整插件到 `dist/dsh-plugin/`。不要手工修改 `client.js` 或 `dist/` 中的生成文件。只运行 `build:client` 不会更新 `dist/dsh-plugin/`，因此不会影响已安装的插件。
+`build:dsh` 会先运行 `build:client`，将 `adapters/dsh/client/index.jsx` 和共享审阅 UI 编译为生成文件 `adapters/dsh/client.js`，再组装完整插件到 `dist/dsh-plugin/`，最后刷新 `market/index.json` 和其中的图标。不要手工修改 `client.js` 或 `dist/` 中的生成文件。只运行 `build:client` 不会更新 `dist/dsh-plugin/`，因此不会影响已安装的插件。
 
-品牌名称和中英文简介的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包和 WorkBuddy Connector 构建均从这里读取。图标源文件由该配置的 `icon` 指定。修改这些品牌字段后，分别运行 `npm run build:dsh` 和 `npm run build:workbuddy` 生成宿主包元数据。
+品牌名称、简介和图标源文件的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包、市场索引和 WorkBuddy Connector 构建均从这里读取。`description` 同时用于插件详情页、npm 包和 market 索引的简介，图标由 `icon` 指定。修改这些品牌字段后，分别运行 `npm run build:dsh`（同时刷新 `market/index.json` 和图标）和 `npm run build:workbuddy` 生成宿主包元数据。
 
 已把本地插件以 `link:` 方式安装到 DSH profile 时，用监听模式开发：
 
@@ -111,7 +111,7 @@ npm run dev:dsh
 npm run verify:dsh-package
 ```
 
-该命令会重新构建 DSH 包、检查包内容和入口，并执行 `npm pack --dry-run`。如需生成 npm tarball：
+该命令会重新构建 DSH 包、刷新市场索引、检查包内容、品牌字段和市场索引一致性，并执行 `npm pack --dry-run`。如需生成 npm tarball：
 
 ```sh
 npm run pack:dsh

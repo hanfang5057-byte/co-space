@@ -26,7 +26,7 @@
 
 ### 能力边界
 
-Connector 负责向 Agent 暴露受控的 Space 文档工具。它不是 WorkBuddy 内的面板插件，也不会读取或操作 WorkBuddy 对话数据库、账号资料、会话文件或 UI。WorkBuddy 的“连接器”是宿主加载 MCP 工具的产品能力；用户看到的市场 Connector 元数据与其底层 MCP Server 是两个不同层次。
+Connector 负责向 Agent 暴露受控的 CoSpace 文档工具。它不是 WorkBuddy 内的面板插件，也不会读取或操作 WorkBuddy 对话数据库、账号资料、会话文件或 UI。WorkBuddy 的“连接器”是宿主加载 MCP 工具的产品能力；用户看到的市场 Connector 元数据与其底层 MCP Server 是两个不同层次。
 
 当前实现提供文档、建议和评论处理工作流。评论保存在本机；`space_document_read` 对用户指定文档默认返回评论。用户点击审阅页的处理按钮后，WorkBuddy 只复制包含文档引用的短提示词，用户手动粘贴到对话；Agent 通过工具读取评论、提交建议并调用 `space_comment_complete` 记录结果。没有受支持的会话注入、会话引用卡片或 WorkBuddy 身份资料 API。用户仍在审阅 UI 接受/拒绝建议，Agent 不能直接覆盖已有正文。
 
@@ -90,7 +90,7 @@ Skill 流程须明确：
 ## 文件数据、安装与卸载
 
 - **同设备安装 DSH 插件与 WorkBuddy Connector 是支持的场景，但数据必须完全隔离。** DSH 通过 `adapters/dsh/index.js` 的 `resolveHome()` 解析 `DSH_SPACE_HOME`、宿主 `dshHomePath('space')` 或 `$DSH_HOME/space`（通常为 `~/.dsh/space`）；WorkBuddy 固定使用独立的平台应用数据目录下的 `space/`（macOS/Linux 建议 `~/.workbuddy/space`）。WorkBuddy 不提供 `WORKBUDDY_SPACE_HOME`、目录选择或指向其他宿主的配置入口。DSH 保留既有 `DSH_SPACE_HOME`，但适配器必须拒绝把它解析到 WorkBuddy 保留目录。
-- Space 名称固定为“Space”。数据目录自动采用 WorkBuddy 专属默认路径；实现时验证各平台目录约定。页面可展示目录，不提供设置向导。
+- 显示名称固定为品牌名「智联文档空间 / CoSpace」。数据目录自动采用 WorkBuddy 专属默认路径；实现时验证各平台目录约定。页面可展示目录，不提供设置向导。
 - 不支持共享目录、共享数据库、跨宿主导入/迁移或自动发现另一宿主数据。WorkBuddy 不读取 DSH 环境变量、不扫描 DSH 目录；两边即使文档 ID 相同，也属于独立数据库且互不可见。
 - WorkBuddy runtime 仅能访问自己的固定数据根。初始化时解析真实路径并拒绝符号链接逃逸、与 DSH 保留路径相同或数据库文件别名；建议使用宿主标记文件/目录所有者标识，拒绝打开带有另一宿主标记的目录。DSH adapter 对 `DSH_SPACE_HOME` 做同等所有权检查，防止把 DSH 写入 WorkBuddy 专属目录。不得通过“只是高级设置”保留共享路径入口。
 - 两边默认 SQLite 文件不同，因此文档、建议、评论和 operation ID 完全隔离。WorkBuddy loopback 服务使用系统分配端口，不占用 DSH 插件服务器路由。SQLite 的 WAL、`synchronous=FULL`、5 秒 `busy_timeout` 和 `BEGIN IMMEDIATE` 仅在各自数据库内部生效，不构成跨宿主共享的支持理由。
@@ -137,7 +137,7 @@ Skill 流程须明确：
 
 - WorkBuddy 版本：5.11.3（macOS）；本地 MCP 配置 `cospace-review-local` 指向构建产物 `dist/workbuddy-connector/runtime-package/server.js`，包含本地 bundled Node runtime。
 - 宿主结束 MCP 进程后会清理 MCP 子进程树；仅 `detached` 子进程不足以保持审阅页在线。macOS 版本现用当前用户 GUI bootstrap domain 的临时 launchd job 托管 sidecar，不启用登录自启。Linux systemd 与 Windows Task Scheduler 分支已实现，但尚未在各自宿主平台实测。
-- WorkBuddy 工具调用返回 loopback URL；浏览器成功加载 `Space 文档审阅` 页面。用该页面接受 synthetic-only 建议后，WorkBuddy `space_document_read` 回读到文档 version 1、正文标记 `wb-connector-accepted`，`space_suggestion_list(status=all)` 回读到 suggestion 1 状态 `accepted`。
+- WorkBuddy 工具调用返回 loopback URL；浏览器成功加载 `CoSpace 文档审阅` 页面。用该页面接受 synthetic-only 建议后，WorkBuddy `space_document_read` 回读到文档 version 1、正文标记 `wb-connector-accepted`，`space_suggestion_list(status=all)` 回读到 suggestion 1 状态 `accepted`。
 - `npm run build --prefix adapters/workbuddy`、`npm run verify --prefix adapters/workbuddy` 通过；`WORKBUDDY_LOOPBACK_TEST=1 node --test adapters/workbuddy/test/runtime.test.js` 在 macOS GUI session 权限下通过（1/1）。30 分钟滑动续期逻辑已实现；真实等待回收、Linux/Windows 宿主验收与公开市场审核仍未完成。
 
 ### 阶段 3：发布准备
