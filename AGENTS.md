@@ -21,3 +21,7 @@ Do not modify `packages/review-core/src/review-core.js` or change review-core be
 ## Commits and Pull Requests
 
 Recent history uses short, imperative commit subjects, often with a scope such as `docs:` or `feat:`. Follow that style when preparing commits. Pull requests should summarize user-visible behavior, list relevant checks (`npm run build:client`, `npm run check`, and UI smoke test when applicable), identify unverified host integration, and include screenshots for visual changes when available.
+
+## Releases
+
+For a release that publishes npm packages, create and push an annotated Git tag named `vX.Y.Z` after all packages have published successfully. The tag must point to the commit containing the release, and `X.Y.Z` must match `release/npm-version.json` and every published package version. Do not create release tags for ordinary commits or failed/partial releases; resolve a partial release before tagging.
