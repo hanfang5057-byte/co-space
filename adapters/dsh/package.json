@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-space",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Review agent-proposed edits to personal documents: create documents, accept or reject each suggestion, and send comments to the current conversation.",
   "type": "module",
