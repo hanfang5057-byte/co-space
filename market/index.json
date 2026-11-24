@@ -143,6 +143,16 @@
           "engines": {
             "dsh": "^0.2.2-rc.5"
           }
+        },
+        {
+          "version": "0.1.7",
+          "publishTimestamp": 1795518351,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": "^0.2.2-rc.5"
+          }
         }
       ]
     }
