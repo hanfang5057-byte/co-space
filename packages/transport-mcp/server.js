@@ -11,6 +11,7 @@ const wrap = fn => async args => {
 const id = z.string().min(1).max(200);
 export const resolveSpaceRef = value => { if (!value.startsWith('space:')) return value; try { return decodeURIComponent(value.slice(6)); } catch { throw Object.assign(new Error('Invalid Space reference'), {code:'INVALID_INPUT'}); } };
 const referenceFor = value => `space:${encodeURIComponent(value)}`;
+const agentComment = ({ id, docId, quote, body, anchor, resolved, status, stale }) => ({ id, docId, quote, body, anchor, resolved, status, stale });
 const generatedId = operationId => `doc-${createHash('sha256').update(operationId).digest('hex').slice(0, 24)}`;
 const opId = id.describe('Generate a unique operation ID for each new operation (a UUID is suitable). Reuse that exact ID only when retrying the same operation.');
 const status = z.enum(['all', 'pending', 'accepted', 'rejected', 'conflicted']).optional().describe('Decision status to return; omit or use "all" for the complete history.');
@@ -36,16 +37,13 @@ export function createMcpServer(service, collaboration = null) {
     return { ...result, reference: referenceFor(result.id) };
   }));
   server.registerTool('space_document_read', {
-    description: 'Read the specified document only: accepted Markdown source, current version, pending suggestions, and its comments with anchors and processing status. This does not authorize processing comments. Offsets are UTF-16 code units into markdown. Use space_suggestion_list for decided suggestions.',
+    description: 'Read the specified document only: accepted Markdown source, current version, pending suggestions, and concise comments with their quoted text, body, anchor, and status. This does not authorize processing comments. Offsets are UTF-16 code units into markdown. Use space_suggestion_list for decided suggestions.',
     inputSchema: { id: id.describe('The user-provided space:<docId> reference or its decoded document ID.') },
   }, wrap(({ id }) => {
-    const docId = resolveSpaceRef(id);
-    const document = service.readDocument(docId);
-    const preferences = collaboration?.readInstructions(docId);
-    return {
-      ...document,
-      ...(preferences ? { collaboration: { instructions: [preferences.global?.content, preferences.document?.content].filter(Boolean).join('\n\n') } } : {}),
-    };
+    const document = service.readDocument(resolveSpaceRef(id));
+    const docId=resolveSpaceRef(id);
+    const preferences=collaboration?.readInstructions(docId);
+    return { ...document, comments: document.comments.map(agentComment), collaboration:preferences?{instructions:[preferences.global?.content,preferences.document?.content].filter(Boolean).join('\n\n')}:null };
   }));
   server.registerTool('space_suggest', {
     description: 'Propose exactly one replacement of expected Markdown source text in the given UTF-16 range. Use empty expected text for insertion and empty replacement for deletion. Submit independent changes as separate suggestions, each read against the current version. This does not change accepted content until the user accepts.',

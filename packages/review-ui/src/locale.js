@@ -5,7 +5,7 @@ export const NS = 'space';
 
 export const zh = {
   'dialog.close':'关闭弹窗',
-  'collab.open':'风格偏好', 'collab.globalOpen':'全局风格偏好', 'collab.title':'风格偏好', 'collab.globalTitle':'全局风格偏好', 'collab.documentTitle':'本文档风格偏好', 'collab.close':'关闭风格偏好', 'collab.placeholder':'例如：面向谁写作、语气、术语、格式和表达习惯', 'collab.save':'保存', 'collab.saving':'正在保存…', 'collab.saved':'已保存', 'collab.saveError':'保存失败', 'collab.loading':'正在读取风格偏好…', 'collab.backendOutdated':'协作服务尚未加载。请在 DSH 中重新加载 CoSpace 插件后重试。',
+  'collab.open':'风格偏好', 'collab.globalOpen':'全局风格偏好', 'collab.title':'风格偏好', 'collab.globalTitle':'全局风格偏好', 'collab.documentTitle':'本文档风格偏好', 'collab.close':'关闭风格偏好', 'collab.placeholder':'例如：面向谁写作、语气、术语、格式和表达习惯', 'collab.save':'保存', 'collab.saving':'正在保存…', 'collab.saved':'已保存', 'collab.saveError':'保存失败', 'collab.loading':'正在读取风格偏好…', 'collab.backendOutdated':'协作服务尚未加载。请在宿主应用中重新加载 CoSpace 插件后重试。',
   'brand.name': BRAND.name.zh,
   'brand.nameEnglish': BRAND.name.en,
   'header.eyebrow': `${BRAND.name.en.toUpperCase()} / 文档审阅`,
@@ -201,7 +201,7 @@ export const zh = {
 
 export const en = {
   'dialog.close':'Close dialog',
-  'collab.open':'Style preferences', 'collab.globalOpen':'Global style preferences', 'collab.title':'Style preferences', 'collab.globalTitle':'Global style preferences', 'collab.documentTitle':'Document style preferences', 'collab.close':'Close style preferences', 'collab.placeholder':'For example: audience, tone, terminology, formatting, and expression preferences', 'collab.save':'Save', 'collab.saving':'Saving…', 'collab.saved':'Saved', 'collab.saveError':'Could not save', 'collab.loading':'Loading style preferences…', 'collab.backendOutdated':'The collaboration service is not loaded. Reload the CoSpace plugin in DSH and try again.',
+  'collab.open':'Style preferences', 'collab.globalOpen':'Global style preferences', 'collab.title':'Style preferences', 'collab.globalTitle':'Global style preferences', 'collab.documentTitle':'Document style preferences', 'collab.close':'Close style preferences', 'collab.placeholder':'For example: audience, tone, terminology, formatting, and expression preferences', 'collab.save':'Save', 'collab.saving':'Saving…', 'collab.saved':'Saved', 'collab.saveError':'Could not save', 'collab.loading':'Loading style preferences…', 'collab.backendOutdated':'The collaboration service is not loaded. Reload the CoSpace plugin in the host app and try again.',
   'brand.name': BRAND.name.zh,
   'brand.nameEnglish': BRAND.name.en,
   'header.eyebrow': `${BRAND.name.en.toUpperCase()} / Document review`,

@@ -91,7 +91,10 @@ test('the Space MCP server scopes tools to named documents and processes comment
     assert.equal(completionReplay.replay, true);
     const withProcessing = await call(client, 'space_document_read', { id: created.id });
     assert.equal(withProcessing.comments[0].status, 'processed');
-    assert.deepEqual(withProcessing.comments[0].processing.suggestionIds, [proposed.suggestion.id]);
+    assert.equal(withProcessing.comments[0].body, 'Clarify the ending');
+    assert.equal(withProcessing.comments[0].quote, 'world');
+    assert.equal('processing' in withProcessing.comments[0], false);
+    assert.equal('requestId' in withProcessing.comments[0], false);
 
     const pending = await call(client, 'space_suggestion_list', { docId: created.id, status: 'pending' });
     assert.equal(pending.suggestions.length, 1);
@@ -110,7 +113,7 @@ test('the Space MCP server scopes tools to named documents and processes comment
     const accepted = await call(client, 'space_document_read', { id: created.id });
     assert.equal(accepted.content, '# Agent document\n\nHello Space');
     assert.equal(accepted.comments[0].status, 'processed');
-    assert.equal(accepted.comments[0].processing.suggestions[0].status, 'accepted');
+    assert.equal('processing' in accepted.comments[0], false);
   } finally {
     await client.close().catch(() => {});
     rmSync(home, { recursive: true, force: true });
