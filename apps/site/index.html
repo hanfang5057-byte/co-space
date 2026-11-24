@@ -5,17 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f8fc">
   <meta name="description" content="CoSpace 让 Agent 提出文档修改建议，由你逐条审阅并决定是否接受。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hanfang5057-byte.github.io/co-space/">
+  <meta property="og:title" content="CoSpace — 和 AI 一起写，把决定权留给自己">
+  <meta property="og:description" content="CoSpace 让 Agent 提出文档修改建议，由你逐条审阅并决定是否接受。">
+  <meta property="og:image" content="https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/assets/preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://hanfang5057-byte.github.io/co-space/">
   <title>CoSpace — 和 AI 一起写，把决定权留给自己</title>
-  <link rel="icon" href="/assets/cospace-icon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/cospace-icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/site.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="site.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#top" aria-label="CoSpace 首页"><img src="/assets/cospace-icon.svg" alt=""><span>CoSpace</span></a>
+    <a class="brand" href="#top" aria-label="CoSpace 首页"><img src="assets/cospace-icon.svg" alt=""><span>CoSpace</span></a>
     <nav aria-label="主导航"><a href="#workflow">工作方式</a><a href="#install">安装</a><a class="github" href="https://github.com/hanfang5057-byte/co-space" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a></nav>
     <a class="nav-cta" href="#install">开始使用 <span aria-hidden="true">↗</span></a>
   </header>
@@ -46,11 +53,11 @@
     <section class="install section shell" id="install">
       <div class="section-heading install-heading"><div><div class="eyebrow">安装</div><h2>选择你的工作环境。</h2></div></div>
       <div class="install-cards">
-        <article class="install-card dsh-card"><div class="card-top"><div class="host-icon dsh-icon">D</div><span class="host-label">PLUGIN</span></div><h3>DSH</h3><p>通过 DSH 官方插件安装 CoSpace。</p><div class="install-details"><ol><li>打开 DSH 的「插件」页面。</li><li>搜索 <code>dsh-plugin-space</code> 并点击安装。</li><li>从侧边栏进入 Space。</li></ol><p class="requirements">需要 DSH <code>^0.2.2-rc.5</code> · Node.js 24+</p><a class="details-link" href="https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json" target="_blank" rel="noreferrer">查看插件索引 ↗</a></div></article>
+        <article class="install-card dsh-card"><div class="card-top"><div class="host-icon dsh-icon">D</div><span class="host-label">PLUGIN</span></div><h3>DSH</h3><p>在 DSH 插件页安装 CoSpace，或从命令行添加。</p><div class="install-details"><ol><li>打开 DSH 左侧 <b>Plugins</b>，点 <b>Add plugin</b>。</li><li>输入 <code>dsh-plugin-space</code> 并确认安装，然后启用。</li><li>从左侧栏进入 <b>CoSpace</b>。</li></ol><div class="command"><code>dsh plugin add dsh-plugin-space</code><button class="copy-command" type="button" data-copy="dsh plugin add dsh-plugin-space">复制</button></div><p class="requirements">需要 DSH <code>^0.2.2-rc.5</code> · Node.js 24+</p><p class="requirements">想逛市场：在 <b>Experimental plugins</b> 开启 <b>Custom plugin indexes</b>，再添加<a href="https://hanfang5057-byte.github.io/co-space/market/index.json" target="_blank" rel="noreferrer">索引源 ↗</a>。</p><p class="requirements"><a href="https://github.com/hanfang5057-byte/co-space/releases" target="_blank" rel="noreferrer">离线安装包 ↗</a></p></div></article>
       </div>
       <p class="data-note">文档保存在本机。</p>
     </section>
   </main>
-  <footer class="footer"><div class="shell footer-inner"><a class="brand" href="#top"><img src="/assets/cospace-icon.svg" alt=""><span>CoSpace</span></a><span class="footer-note">把文档，留在自己的掌控中。</span><div class="footer-links"><a href="https://github.com/hanfang5057-byte/co-space" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://github.com/hanfang5057-byte/co-space/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a></div></div></footer>
+  <footer class="footer"><div class="shell footer-inner"><a class="brand" href="#top"><img src="assets/cospace-icon.svg" alt=""><span>CoSpace</span></a><span class="footer-note">把文档，留在自己的掌控中。</span><div class="footer-links"><a href="https://github.com/hanfang5057-byte/co-space" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://github.com/hanfang5057-byte/co-space/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a></div></div></footer>
 </body>
 </html>

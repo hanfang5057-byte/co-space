@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible problem with CoSpace in DSH.
+title: "[Bug] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please remove credentials and private document text before submitting.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: CoSpace version
+      description: The plugin version shown on the DSH Plugins page.
+      placeholder: "0.1.7"
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version
+      description: The DSH version shown in the app, or the CLI output of `dsh --version`.
+      placeholder: "0.2.2-rc.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options:
+        - DSH Desktop
+        - DSH Web
+        - Other DSH client
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15.2 (arm64)"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact document action and, when relevant, the agent instruction.
+      placeholder: |
+        1. Open CoSpace and create a document.
+        2. Ask the agent to ...
+        3. Accept the first suggestion.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the visible error code, such as VERSION_CONFLICT or OVERLAPPING_SUGGESTION.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Paste sanitized logs or attach screenshots. Do not include tokens, private document text, or account identifiers.
+      render: text
+    validations:
+      required: false

@@ -2,6 +2,8 @@
 
 ![CoSpace app icon](assets/cospace-icon.svg)
 
+[English](README.en.md) | 中文
+
 CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户可以在 CoSpace 页面新建空白文档，Agent 也可以创建带完整初始正文的新文档；对已有文档的修改必须提出建议，只有用户接受才改变已接受正文。相邻修改可合并为一个审阅单位，实际重叠的提交会被拒绝。
 
 ## 当前状态
@@ -12,10 +14,14 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 
 ## 安装与启用
 
-- DSH npm 包名为 `dsh-plugin-space`。根目录是私有 workspace，不直接安装或发布；构建发布包后安装 `dist/dsh-plugin/`，或运行 `npm pack ./dist/dsh-plugin` 生成 npm tarball。
-- 插件市场索引：`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`；该文件由 `npm run build:market` 从品牌元数据生成，发布新版本时需手动把版本追加到其中的 `versions`。
+DSH 插件包名为 `dsh-plugin-space`，已发布到 npm。
+
+- **DSH Desktop / Web**：打开左侧 **Plugins**，点 **Add plugin**，输入 `dsh-plugin-space` 并确认安装；安装后启用，左侧栏出现 **CoSpace** 入口。
+- **命令行**：`dsh plugin add dsh-plugin-space`。命令安装到当前 profile；Desktop 用户优先用界面安装，避免装进另一个 profile。
+- **从插件市场发现**：在 **Plugins → Experimental plugins** 开启 **Custom plugin indexes**，再到 **Discover → Add index source** 添加 `https://hanfang5057-byte.github.io/co-space/market/index.json`，搜索 CoSpace 安装。
+- **离线 / 内网**：从 [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases) 下载 `dsh-plugin-space-<version>.tgz`，运行 `dsh plugin add ./dsh-plugin-space-<version>.tgz`。
+- 插件声明 `engines.dsh = ^0.2.2-rc.5`、Node.js ≥ 24；DSH 升级大版本后需要重新核对兼容性。
 - 本地开发时修改源码后，按下方「打包」中的命令构建，再将生成的目录安装到对应宿主。
-- 插件声明 `engines.dsh = ^0.2.2-rc.5`；升级 DSH 大版本后需要重新核对兼容性。
 - `adapters/dsh/client.js` 是 DSH 客户端生成产物；修改 `packages/review-ui/src/` 或 `adapters/dsh/client/` 后运行 `npm run build:client`，不要手工编辑生成文件。
 - React 由宿主提供：构建保持 `react`、`react-dom`、`react/jsx-runtime` 外置，`npm run build:client` 会在发现 React 被打包进 `client.js` 时直接失败；插件不声明自己的 React 依赖。
 - 启用后，左侧栏出现 **CoSpace** 入口；对话输入框的 **+** 菜单出现 **CoSpace 文档**。
@@ -98,6 +104,8 @@ npm run build:dsh
 
 品牌名称、简介和图标源文件的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包和市场索引均从这里读取。`description` 同时用于插件详情页、npm 包和 market 索引的简介，图标由 `icon` 指定。修改这些品牌字段后运行 `npm run build:dsh`，刷新 DSH 包、市场索引和图标。
 
+市场索引的版本列表不再手工维护。发布前运行 `node scripts/sync-market.mjs`，它从 npm registry 拉取已发布版本、发布时间和 `engines.dsh`，并写入周下载量与 GitHub 星标排序键；`node scripts/sync-market.mjs --check` 只校验现有索引。索引通过 GitHub Pages 发布到 `https://hanfang5057-byte.github.io/co-space/market/index.json`，落地页由同一次 Pages 部署发布。
+
 已把本地插件以 `link:` 方式安装到 DSH profile 时，用监听模式开发：
 
 ```sh
@@ -112,13 +120,21 @@ npm run dev:dsh
 npm run verify:dsh-package
 ```
 
-该命令会重新构建 DSH 包、刷新市场索引、检查包内容、品牌字段和市场索引一致性，并执行 `npm pack --dry-run`。如需生成 npm tarball：
+该命令会重新构建 DSH 包、刷新市场索引、校验索引格式与品牌字段、检查包内容，并执行 `npm pack --dry-run`。如需生成 npm tarball：
 
 ```sh
 npm run pack:dsh
 ```
 
-`npm run pack:dsh` 产出 DSH tarball到 `dist/npm-packages/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`。
+`npm run pack:dsh` 产出 DSH tarball 到 `dist/npm-packages/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`。
+
+### 发布新版本
+
+1. 更新 `release/npm-version.json` 和 `adapters/dsh/package.json` 的版本号。
+2. 运行 `npm run pack:dsh` 构建并校验发布包。
+3. 发布到 npm：`npm publish ./dist/dsh-plugin`。
+4. 运行 `node scripts/sync-market.mjs`，提交刷新后的 `market/index.json`。
+5. 创建并推送 `vX.Y.Z` 标签，再在 GitHub Release 中附上 `dist/npm-packages/dsh-plugin-space-X.Y.Z.tgz`。
 
 ## 许可证
 

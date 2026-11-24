@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -65,5 +66,7 @@ try {
   else process.env.DSH_SPACE_HOME = previousHome;
   await rm(home, { recursive: true, force: true });
 }
+
+execFileSync(process.execPath, ['scripts/sync-market.mjs', '--check'], { cwd: root, stdio: 'inherit' });
 
 console.log(`Verified ${manifest.name}@${manifest.version}: staged files, bundled source boundaries, plugin entry, MCP entry, and HTTP registration.`);

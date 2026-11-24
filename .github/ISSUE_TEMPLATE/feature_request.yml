@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a capability or workflow for CoSpace.
+title: "[Feature] "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and where does the current review flow fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the user-visible behavior. Note whether accepted text should still change only after an explicit user decision.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version
+      placeholder: "0.2.2-rc.5"
+    validations:
+      required: false

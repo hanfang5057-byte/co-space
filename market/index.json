@@ -30,6 +30,22 @@
           "zh": "评论"
         }
       }
+    },
+    "sortKeys": {
+      "npm_weekly_downloads": {
+        "title": {
+          "en": "Weekly downloads",
+          "zh": "周下载量"
+        },
+        "order": "desc"
+      },
+      "github_stars": {
+        "title": {
+          "en": "GitHub stars",
+          "zh": "GitHub 星标"
+        },
+        "order": "desc"
+      }
     }
   },
   "plugins": [
@@ -45,7 +61,7 @@
       },
       "icon": "icons/cospace.svg",
       "author": "hanfang",
-      "homepage": "https://github.com/hanfang5057-byte/co-space",
+      "homepage": "https://hanfang5057-byte.github.io/co-space/",
       "repository": {
         "url": "https://github.com/hanfang5057-byte/co-space"
       },
@@ -61,7 +77,11 @@
           "suggestions",
           "comments",
           "markdown"
-        ]
+        ],
+        "sortKeys": {
+          "npm_weekly_downloads": 1173,
+          "github_stars": 0
+        }
       },
       "versions": [
         {

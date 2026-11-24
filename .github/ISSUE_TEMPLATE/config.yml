@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/hanfang5057-byte/co-space/security/advisories/new
+    about: Report a vulnerability privately instead of opening an issue.
+  - name: DeepSeek Harness discussions
+    url: https://github.com/deepseek-ai/deepseek-harness/discussions
+    about: Ask about DSH itself or compare setup with other users.
