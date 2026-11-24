@@ -6,7 +6,7 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 
 ## 当前状态
 
-本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享审阅 UI、通用传输层及宿主适配器。DSH 插件与 WorkBuddy Connector 提供独立的本机文档空间和审阅界面；两个宿主使用各自的数据目录，不共享文档。
+本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享审阅 UI、适配器契约、通用传输层和 DSH 适配器。适配器负责将核心能力接入宿主；核心不依赖任何宿主。适配器能力契约和新增流程见[适配器接入规范](docs/14-adapter-integration.md)。
 
 正文以 Markdown 源文本保存和审阅。Agent 提交带版本和 UTF-16 源码区间的替换建议；段落、标题、列表、表格、链接等 Markdown 结构都通过普通文本替换修改。完整接口、坐标和安全限制见[审阅内核说明](docs/07-review-core.md)。
 
@@ -26,12 +26,12 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 - **新建文档**：左侧文档栏的 **新建文档** 按钮创建默认标题为「未命名文档」、正文为空的文档；标题和正文的后续修改仍由 Agent 提建议完成。
 - **输入框 +**：选择一个或多个 CoSpace 文档加入当前对话，引用格式为 `space:<docId>`。
 - **对话文档卡片**：发送后的引用显示为一张文档卡片，点击会展开右侧边栏并打开该文档的审阅面板；标签页按文档地址恢复，刷新后仍是同一篇文档。
-- **评论驱动修改**：在文档里选中文字，点击选区旁的 **评论**，填写并保存；点击 **让 Agent 处理评论** 后，DSH 向当前对话只发送文档引用和处理指令，Agent 再通过 `space_document_read` 读取评论、提交建议，并以 `space_comment_complete` 记录每条评论的处理结果。WorkBuddy 提供复制短提示词，用户手动粘贴发送；评论正文不进入提示词。评论及建议关联状态保留在审阅页，刷新可查看结果。
+- **评论驱动修改**：在文档里选中文字，点击选区旁的 **评论**，填写并保存；点击 **让 Agent 处理评论** 后，DSH 向当前对话只发送文档引用和处理指令，Agent 再通过 `space_document_read` 读取评论、提交建议，并以 `space_comment_complete` 记录每条评论的处理结果。评论正文不进入提示词。评论及建议关联状态保留在审阅页，刷新可查看结果。
 
 ## 数据与隐私
 
-- 文档、建议、评论、评论处理结果和 DSH 对话请求记录保存在本机 SQLite；DSH 可用 `DSH_SPACE_HOME` 指定目录，WorkBuddy 使用独立的 `~/.workbuddy/space`。
-- 评论处理时，DSH 通过宿主 `sessionController.prompt` 发送引用和简短指令，不发送评论正文；WorkBuddy 的提示词只通过用户剪贴板操作交接。评论作者信息只读取 DSH 宿主账号服务已暴露的名称和头像，不读取或记录令牌、手机号、邮箱等凭据。
+- 文档、建议、评论、评论处理结果和 DSH 对话请求记录保存在本机 SQLite；DSH 可用 `DSH_SPACE_HOME` 指定目录。
+- 评论处理时，DSH 通过宿主 `sessionController.prompt` 发送引用和简短指令，不发送评论正文。评论作者信息只读取 DSH 宿主账号服务已暴露的名称和头像，不读取或记录令牌、手机号、邮箱等凭据。
 - MCP Agent 工具只支持创建和读取明确指定的文档、提交建议、查询建议状态和记录评论处理结果；不提供文档枚举。已有文档正文只能由用户接受建议后改变。
 
 ## 限制
@@ -66,7 +66,8 @@ node scripts/seed-markdown-ui.mjs --only=comments
 - [导入与导出](docs/05-word-export.md)：Markdown 和可选 Word 导出。
 - [交付与验收](docs/06-delivery.md)：实现顺序、验收及风险。
 - [审阅内核与验证范围](docs/07-review-core.md)：已实现能力、运行方式和限制。
-- [多宿主适配器与 WorkBuddy Connector 架构方案](docs/09-host-adapters-architecture.md)：共享架构、独立分发和 WorkBuddy 后续工作的边界。
+- [适配器接入规范](docs/14-adapter-integration.md)：核心与适配器单向依赖、能力声明/协商、降级规则和新增步骤。
+- [系统架构记录](docs/09-host-adapters-architecture.md)：当前架构和迁移边界。
 
 ## 运行检查
 
@@ -82,7 +83,7 @@ npm run check
 
 ## 打包
 
-根目录是私有 npm workspace，不直接发布。DSH 插件和 WorkBuddy Connector 分别构建、校验和交付；修改共享审阅 UI 后，需要分别构建两个适配器。两个公开 npm 包共用 [`release/npm-version.json`](release/npm-version.json) 中的版本。发布前运行 `npm run pack:npm`，它会同步两边的包清单、lockfile 和 Connector 元数据，构建校验后把两个 tarball 放进 `dist/npm-packages/`。
+根目录是私有 npm workspace，不直接发布。当前仅发布 DSH 插件。发布前运行 `npm run pack:npm`（与 `npm run pack:dsh` 等价），构建、校验 DSH 包并将 tarball 放进 `dist/npm-packages/`。
 
 ### DSH 插件
 
@@ -95,7 +96,7 @@ npm run build:dsh
 
 `build:dsh` 会先运行 `build:client`，将 `adapters/dsh/client/index.jsx` 和共享审阅 UI 编译为生成文件 `adapters/dsh/client.js`，再组装完整插件到 `dist/dsh-plugin/`，最后刷新 `market/index.json` 和其中的图标。不要手工修改 `client.js` 或 `dist/` 中的生成文件。只运行 `build:client` 不会更新 `dist/dsh-plugin/`，因此不会影响已安装的插件。
 
-品牌名称、简介和图标源文件的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包、市场索引和 WorkBuddy Connector 构建均从这里读取。`description` 同时用于插件详情页、npm 包和 market 索引的简介，图标由 `icon` 指定。修改这些品牌字段后，分别运行 `npm run build:dsh`（同时刷新 `market/index.json` 和图标）和 `npm run build:workbuddy` 生成宿主包元数据。
+品牌名称、简介和图标源文件的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包和市场索引均从这里读取。`description` 同时用于插件详情页、npm 包和 market 索引的简介，图标由 `icon` 指定。修改这些品牌字段后运行 `npm run build:dsh`，刷新 DSH 包、市场索引和图标。
 
 已把本地插件以 `link:` 方式安装到 DSH profile 时，用监听模式开发：
 
@@ -117,32 +118,7 @@ npm run verify:dsh-package
 npm run pack:dsh
 ```
 
-`npm run pack:dsh` 会调用统一打包脚本并只产出 DSH tarball。完整发布优先使用 `npm run pack:npm`；tarball 输出到 `dist/npm-packages/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`。
-
-### WorkBuddy Connector
-
-在仓库根目录执行：
-
-```sh
-npm install --prefix adapters/workbuddy   # 首次安装依赖或依赖变更后
-node adapters/workbuddy/build.mjs
-```
-
-构建结果位于 `dist/workbuddy-connector/`：
-
-- `market/`：市场上传所需的 Connector 元数据、MCP 配置、图标和 Skill。
-- `runtime-package/`：Connector 运行时包，包含 MCP 服务端和审阅页面资源。
-- `mcp.local.json`：本机 WorkBuddy 验证用配置，不用于市场上传。
-
-校验构建结果：
-
-```sh
-node adapters/workbuddy/verify.mjs
-```
-
-WorkBuddy 构建会直接从共享源码生成自己的审阅页面，不依赖 DSH 的 `adapters/dsh/client.js`；因此共享 UI 改动后，两个适配器都要各自重新构建。
-
-`npm run pack:workbuddy` 也调用统一打包脚本，只产出 WorkBuddy tarball；两个包的版本仍会同步。
+`npm run pack:dsh` 产出 DSH tarball到 `dist/npm-packages/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`。
 
 ## 许可证
 

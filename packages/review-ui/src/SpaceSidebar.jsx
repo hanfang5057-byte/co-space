@@ -1,6 +1,5 @@
 /** Right-Sidebar tab body and chip title for one Space document. */
 import { useEffect } from 'react';
-import { api } from './api.js';
 import { useCurrentUser } from './current-user.js';
 import { rememberDocumentTitle, useDocumentTitle } from './document-titles.js';
 import { translate, zh } from './locale.js';
@@ -20,19 +19,21 @@ const fallbackT = (key, vars) => translate(zh, key, vars);
  * @param {object} props - tab information hook, session id, optional creator, and locale seat.
  * @returns {React.ReactElement} the scrollable document review surface.
  */
-export function SpaceSidebarDocument({ useTabInfo, sessionId, sendTarget = null, t = fallbackT, api: requestApi = api, getDocumentIdFromResource = documentIdFromResource }) {
+export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT }) {
   const { tab } = useTabInfo();
-  const docId = getDocumentIdFromResource(tab.contentId);
-  const user = useCurrentUser(requestApi);
-  const review = useSpaceReview(requestApi, docId, sessionId, t, sendTarget);
+  const docId = (adapter.navigation?.parseDocumentLink || documentIdFromResource)(tab.contentId);
+  const sessionId=adapter.conversation?.current?.id || null;
+  const requestApi=adapter.core.request;
+  const user = useCurrentUser(adapter.identity?.getCurrentUser);
+  const review = useSpaceReview(requestApi, docId, sessionId, t, adapter);
   useEffect(() => {
-    if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title);
-  }, [docId, review.doc?.title]);
+    if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title, requestApi);
+  }, [docId, review.doc?.title, requestApi]);
   const visibleComments = review.comments.filter(comment => !['sent', 'processed'].includes(comment.status));
   return <div className="space-app space-sidebar-app">
       <header className="space-sidebar-toolbar">
         {review.doc && <ReviewZoomControls review={review} t={t}/>}
-        {visibleComments.length > 0 && <ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t} compact/>}
+        {visibleComments.length > 0 && <ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t} compact/>}
       </header>
     <main className="space-sidebar-main">
       <SpaceReviewSurface review={review} user={user} t={t}/>
@@ -46,8 +47,9 @@ export function SpaceSidebarDocument({ useTabInfo, sessionId, sendTarget = null,
  * @param {object} props - tab information hook and locale seat.
  * @returns {React.ReactElement} the document title or the generic label.
  */
-export function SpaceSidebarTitle({ useTabInfo, t = fallbackT, getDocumentIdFromResource = documentIdFromResource }) {
+export function SpaceSidebarTitle({ useTabInfo, adapter, t = fallbackT }) {
   const { tab } = useTabInfo();
-  const title = useDocumentTitle(getDocumentIdFromResource(tab.contentId));
+  const docId=(adapter.navigation?.parseDocumentLink || documentIdFromResource)(tab.contentId);
+  const title = useDocumentTitle(docId, adapter?.core?.request);
   return <>{title || t('sidebar.title')}</>;
 }

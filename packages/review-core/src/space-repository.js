@@ -14,6 +14,7 @@ export class SpaceRepository {
   readDocument(id) { return this.store.readDocument(id); }
   propose(input) { return this.store.propose(input); }
   decide(input) { return this.store.decide(input); }
+  updateContent(input) { return this.store.updateContent(input); }
   createComment(input) { return this.comments.create(input); }
   deleteComment(input) { return this.comments.delete(input); }
   listComments(docId) { return this.comments.list(docId); }

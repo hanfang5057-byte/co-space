@@ -2,7 +2,7 @@
 
 ## 入口和职责
 
-评论正文由文档工具读取的跨宿主流程已接入 DSH 与 WorkBuddy；完整契约见[评论驱动修改方案](11-comment-driven-revision-plan.md)。
+评论正文由文档工具读取的流程已接入 DSH；完整领域流程见[评论驱动修改方案](11-comment-driven-revision-plan.md)。宿主能力由[适配器接入规范](14-adapter-integration.md)定义，DSH 只声明并启用其当前宿主可提供的能力。
 
 - 左侧 CoSpace 总入口负责浏览个人文档和打开审阅界面。
 - 任意 DSH 对话输入框的加号可选择一个或多个 CoSpace 文件，引用格式为 `space:<docId>`。该入口已在 DSH `0.2.2-rc.5` 中接入（见下）；真实对话内的插入、引用解析和跨会话行为仍待端到端验收，不把入口可用等同于插件接入已验证。

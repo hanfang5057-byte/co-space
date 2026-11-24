@@ -130,6 +130,6 @@ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30))});await c
 if(!document.querySelector('.space-send-dialog')?.open||copied||!document.querySelector('.space-send-dialog input[value=copy]')?.checked)throw Error('copy confirmation missing or clipboard written early');
 await click([...document.querySelectorAll('.space-send-dialog button')].find(x=>x.textContent==='取消'));if(copied)throw Error('cancelling copied the prompt');
 await click(copyButton);await click([...document.querySelectorAll('.space-send-dialog button')].find(x=>x.textContent==='复制提示词'));await act(async()=>{await new Promise(resolve=>setTimeout(resolve,40))});
-if(!copied.startsWith('space:d\n'))throw Error('WorkBuddy copied prompt is missing the named document reference');if(copied.includes('来自预览选区的评论'))throw Error('WorkBuddy copied comment text instead of keeping it in Space tools');
+if(!copied.startsWith('space:d\n'))throw Error('Copied prompt is missing the named document reference');if(copied.includes('来自预览选区的评论'))throw Error('Copied prompt leaked the comment body instead of keeping it in Space tools');
 await act(async()=>thirdRoot.unmount());
-console.log('Inline suggestions, comment processing prompt, account attribution, DSH send, and WorkBuddy copy flow rendered');})().catch(error=>{console.error(error);process.exit(1)});
+console.log('Inline suggestions, comment processing prompt, account attribution, DSH send, and clipboard fallback rendered');})().catch(error=>{console.error(error);process.exit(1)});

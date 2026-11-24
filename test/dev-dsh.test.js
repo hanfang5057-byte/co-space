@@ -16,7 +16,6 @@ test('dev watcher ignores generated output, dependencies and unrelated paths', (
   assert.equal(shouldRebuild('adapters/dsh/client.js'), false);
   assert.equal(shouldRebuild('dist/dsh-plugin/client.js'), false);
   assert.equal(shouldRebuild('packages/review-ui/node_modules/react/index.js'), false);
-  assert.equal(shouldRebuild('adapters/workbuddy/build.mjs'), false);
   assert.equal(shouldRebuild('package.json'), false);
   assert.equal(shouldRebuild('scripts/build-client.mjs'), false);
   assert.equal(shouldRebuild('packages/review-ui/.DS_Store'), false);

@@ -1,0 +1,11 @@
+{
+  "name": "@cospace/adapter-contract",
+  "version": "0.0.0",
+  "types": "./src/index.d.ts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./index.d.ts": "./src/index.d.ts"
+  }
+}

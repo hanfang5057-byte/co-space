@@ -1,0 +1,19 @@
+{
+  "id": "dsh",
+  "version": "0.1.5",
+  "contractVersion": 1,
+  "capabilities": [
+    "conversation.current.read",
+    "conversation.create",
+    "conversation.open",
+    "conversation.send",
+    "conversation.references.insert",
+    "conversation.references.render",
+    "workspace.list",
+    "identity.current.read",
+    "files.export.save",
+    "clipboard.write",
+    "navigation.document.open",
+    "navigation.deepLink.register"
+  ]
+}

@@ -49,6 +49,10 @@ await Promise.all([
   cp(path.join(root, brand.icon), path.join(output, 'icon.svg')),
   cp(path.join(root, 'LICENSE'), path.join(output, 'LICENSE')),
   cp(path.join(adapter, 'README.md'), path.join(output, 'README.md')),
-  cp(path.join(root, 'docs'), path.join(output, 'docs'), { recursive: true }),
+  cp(path.join(root, 'docs'), path.join(output, 'docs'), {
+    recursive: true,
+    filter: source => !/^docs\/(?:10-workbuddy-connector-development-plan|11-comment-driven-revision-plan)\.md$/.test(path.relative(root, source)),
+  }),
   cp(path.join(adapter, 'client.js'), path.join(output, 'client.js')),
+  cp(path.join(adapter, 'adapter.json'), path.join(output, 'adapter.json')),
 ]);

@@ -1,0 +1,20 @@
+.space-app {
+  --cospace-border: var(--dsw-alias-border, #d5d7dc);
+  --cospace-surface: var(--dsw-alias-surface, #fff);
+  --cospace-text: var(--dsw-alias-text, #25262b);
+  --cospace-muted: var(--dsw-alias-text-secondary, #656b77);
+  --cospace-accent: var(--dsw-alias-primary, #315acb);
+  --cospace-warning: var(--dsw-alias-warning, #a16207);
+  --cospace-link: var(--dsw-alias-link, #0f766e);
+  --cospace-background: var(--dsw-alias-background, #f4f5f8);
+  --cospace-danger: var(--dsw-alias-danger, #b91c1c);
+}
+
+.space-picker-dialog {
+  --cospace-border: var(--dsw-alias-border, #d5d7dc);
+  --cospace-surface: var(--dsw-alias-surface, #fff);
+  --cospace-text: var(--dsw-alias-text, #25262b);
+  --cospace-muted: var(--dsw-alias-text-secondary, #656b77);
+  --cospace-accent: var(--dsw-alias-primary, #315acb);
+  --cospace-background: var(--dsw-alias-background, #f4f5f8);
+}

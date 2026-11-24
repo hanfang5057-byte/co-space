@@ -1,3 +1,7 @@
+# Historical implementation record — multi-adapter version
+
+本文保留 DSH 与 WorkBuddy 并行时期的流程设计和验收记录。涉及 WorkBuddy 的范围已移除，不代表当前产品支持。当前适配器扩展方式见[适配器接入规范](14-adapter-integration.md)。
+
 # 11 · 基于评论的文档修改方案
 
 > 状态：核心实现与本机验证已完成；真实 DSH / WorkBuddy 宿主内的会话及市场验收仍待完成。范围包括 DSH 与 WorkBuddy Connector；不改变“Agent 提建议、用户决定是否接受”的文档权限边界。

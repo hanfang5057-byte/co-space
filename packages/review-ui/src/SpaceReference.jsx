@@ -20,8 +20,8 @@ function DocumentGlyph() {
  * @param {object} props - UserText node, raw token, interaction policy, locale seat, and navigation face.
  * @returns {React.ReactElement} an inline card.
  */
-export function SpaceDocumentReference({ node, raw, interactive = false, t = fallbackT, openDocument }) {
-  const title = useDocumentTitle(node.data.docId);
+export function SpaceDocumentReference({ node, raw, interactive = false, t = fallbackT, adapter }) {
+  const title = useDocumentTitle(node.data.docId, adapter?.core?.request);
   const label = title || node.data.docId;
   const contents = <>
     <DocumentGlyph />
@@ -30,6 +30,7 @@ export function SpaceDocumentReference({ node, raw, interactive = false, t = fal
       <span className="space-ref-card-meta">{t('reference.card')}</span>
     </span>
   </>;
+  const openDocument=adapter?.navigation?.openDocument;
   if (!interactive || typeof openDocument !== 'function') {
     return <span className="space-ref-card" data-space-reference={node.data.docId} title={raw}>{contents}</span>;
   }

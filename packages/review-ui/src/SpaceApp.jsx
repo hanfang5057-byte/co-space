@@ -3,16 +3,26 @@ import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/d
 import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
-import { renderMarkdown } from './markdown.js';
-import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceRangeToDom } from './markdown-dom.js';
+import { MarkdownEditor } from './markdown-editor.jsx';
+import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceOffsetAtDomPoint, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
 import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
+import { supportsCapability } from '../../adapter-contract/src/index.js';
 import './space.css';
 
 const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
+function scrollToSourceOffset(surface, offset, markdownSource) {
+  if (!surface) return false;
+  if (scrollSourceRange(surface, offset, offset, markdownSource)) return true;
+  const wrap=surface.closest('.space-paper-wrap');
+  if(!wrap) return false;
+  const ratio=markdownSource.length?Math.max(0,Math.min(1,offset/markdownSource.length)):0;
+  wrap.scrollTo({top:Math.max(0,surface.offsetTop+surface.offsetHeight*ratio-wrap.clientHeight*.3),behavior:'auto'});
+  return true;
+}
 const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown', processed:'status.processed'};
 const suggestionStatusKeys = {pending:'suggestion.pendingStatus', accepted:'suggestion.acceptedStatus', rejected:'suggestion.rejectedStatus', conflicted:'suggestion.conflictedStatus'};
 const safeUrl = value => typeof value === 'string' && /^(https?:|mailto:)/i.test(value) ? value : null;
@@ -30,9 +40,6 @@ const localBuildVersion = typeof __COSPACE_BUILD_VERSION__ === 'undefined' ? 'de
 export function CospaceMark({ className = '' }) {
   return <img className={className} src={cospaceIcon} alt="" aria-hidden="true"/>;
 }
-
-/** Render Markdown as annotated, escaped HTML; raw HTML stays disabled. */
-function documentView(html) { return <div className="space-markdown" dangerouslySetInnerHTML={{__html:html}} />; }
 
 function TrashIcon({size=14}) {
   return <Trash2 size={size} strokeWidth={1.8} aria-hidden="true"/>;
@@ -108,7 +115,8 @@ function SpaceDialog({ open, onClose, labelledBy, className = '', children }) {
  * @param {{mode?: 'copy', canCreate?: boolean, openSession?: (sessionId: string) => void} | null} sendTarget - optional comment processing action mode.
  * @returns {object} review state and the actions that change it.
  */
-export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget = null) {
+export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = null) {
+  const sendTarget=adapter?.conversation || null;
   const [doc,setDoc]=useState(null);
   const [comments,setComments]=useState([]);
   const [active,setActive]=useState(null);
@@ -118,7 +126,12 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
   const [zoom,setZoom]=useState(1);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
+  const [editing,setEditing]=useState(false);
+  const [editSaveError,setEditSaveError]=useState('');
+  const [editBaseVersion,setEditBaseVersion]=useState(null);
+  const [editDirty,setEditDirty]=useState(false);
   const surface=useRef(null), cardRefs=useRef(new Map()), commentRefs=useRef(new Map()), loadSequence=useRef(0);
+  const editorRef=useRef(null);
   const snapshot=useRef(null), busyRef=useRef(false);
   // Async callbacks may outlive a render; read the active locale at completion time.
   const translateNow=useRef(t); translateNow.current=t;
@@ -134,9 +147,10 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
     if(snapshot.current?.signature!==signature){setDoc(next);setComments(nextComments)}
     snapshot.current={signature,content:next?.content,version:next?.version};
     if(contentChanged) setSelection(null);
-    if (next?.title) rememberDocumentTitle(id,next.title);
+    if (next?.title) rememberDocumentTitle(id,next.title,api);
   },[call]);
   useEffect(()=>{
+    setEditing(false);setEditBaseVersion(null);setEditDirty(false);editorRef.current=null;
     if (!docId) {
       loadSequence.current++;
       snapshot.current=null;
@@ -160,42 +174,73 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, sendTarget =
 
   // Suggestion ids follow submission order; review cards follow document order.
   const suggestions=useMemo(()=>[...(doc?.suggestions || [])].sort((left,right)=>(left.from ?? 0)-(right.from ?? 0)),[doc]);
+  // The annotation rows are the source of truth for the UI affordance. `editable`
+  // is a cached convenience flag from the host and may be stale during reloads.
+  const canEdit=Boolean(doc)
+    && !suggestions.some(item=>['pending','conflicted'].includes(item.status))
+    && !comments.some(item=>['pending','sending','failed','unknown'].includes(item.status));
   const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
-  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollSourceRange(surface.current,item.from,item.to))setMessage(t('suggestion.unavailable'));};
+  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollToSourceOffset(surface.current,item.from,doc?.content?.length||0))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
   const decide=(suggestionId,decision)=>perform(async()=>{await call('decide',{docId,suggestionId,decision,operationId:requestId()});await reload(docId)});
+  const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}setMessage('');setEditSaveError('');setSelection(null);setEditBaseVersion(doc.version);setEditDirty(false);setEditing(true)};
+  const switchToReview=()=>perform(async()=>{
+    if(editBaseVersion===null) throw Object.assign(new Error(t('edit.unavailable')),{code:'EDIT_REQUIRES_UNANNOTATED_DOCUMENT'});
+    const content=editorRef.current?.getMarkdown();
+    const changed=editDirty&&typeof content==='string'&&content!==doc?.content;
+    if(changed) {
+      try { await call('updateDocument',{docId,baseVersion:editBaseVersion,content,operationId:requestId()}); }
+      catch(error) { setEditSaveError(errorText(error,translateNow.current)); throw error; }
+    }
+    setEditing(false);setEditBaseVersion(null);setEditDirty(false);editorRef.current=null;
+    setEditSaveError('');
+    if(changed) await reload(docId);
+    return true;
+  });
+  const dismissEditSaveError=()=>{setEditSaveError('');setMessage('')};
   const addComment=()=>perform(async()=>{
     if(!selection || !draft.trim()) throw Error(t('comment.required'));
     const created=await call('createComment',{docId,quote:selection.quote,body:draft.trim(),anchor:{from:selection.from,to:selection.to,version:selection.version}});
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
   });
-  const send=(mode=sendTarget?.mode==='copy'?'copy':sessionId?'current':'new')=>perform(async()=>{
+  const canCopy=supportsCapability(adapter?.capabilities,'clipboard.write') && typeof adapter?.clipboard?.writeText==='function';
+  const canSend=supportsCapability(adapter?.capabilities,'conversation.send');
+  const canCreate=supportsCapability(adapter?.capabilities,'conversation.create') && sendTarget?.canCreate===true;
+  const send=(mode=sessionId&&canSend?'current':canCreate?'new':canCopy?'copy':'unavailable')=>perform(async()=>{
     const ids=comments.filter(item=>['pending','failed'].includes(item.status)).map(item=>item.id);
     if(!ids.length) throw Error(t('send.none'));
     if(mode==='copy') {
-      if(typeof navigator?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
+      if(!canCopy) throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
+      if(typeof adapter?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
       const text=`space:${encodeURIComponent(docId)}\n${t('send.processingPrompt')}`;
-      await navigator.clipboard.writeText(text);
+      await adapter.clipboard.writeText(text);
       setMessage(t('send.copied'));
       setActiveComment(null);
       return {copied:true};
     }
+    if(mode!=='current' && mode!=='new') throw Object.assign(new Error(t('send.createUnavailable')),{code:'SESSION_UNAVAILABLE'});
+    if(!canSend) throw Object.assign(new Error(t('send.createUnavailable')),{code:'SESSION_UNAVAILABLE'});
     // The current conversation wins. Without one, the Host resolves the most
     // recent workspace (creating a default one when necessary), creates or
     // reuses a Session, and returns the exact identity it used. The client only
     // opens that identity, so creation and retry cannot disagree.
     if(mode==='current' && !sessionId) throw Object.assign(new Error(t('send.noSession')),{code:'SESSION_UNAVAILABLE'});
-    if(mode==='new' && sendTarget?.canCreate!==true) throw Object.assign(new Error(t('send.createUnavailable')),{code:'SESSION_UNAVAILABLE'});
+    if(mode==='new' && !canCreate) throw Object.assign(new Error(t('send.createUnavailable')),{code:'SESSION_UNAVAILABLE'});
     const targetSessionId=mode==='current'?sessionId:undefined;
     try {
-      const result=await call('sendComments',{docId,commentIds:ids,...targetSessionId?{sessionId:targetSessionId}:{forceNew:true,...sessionId?{newSessionFrom:sessionId}:{}},operationId:requestId()});
-      if(!targetSessionId && result?.createdSession && result.sessionId && typeof sendTarget?.openSession==='function') sendTarget.openSession(result.sessionId);
+      if(typeof sendTarget?.send!=='function') throw Object.assign(new Error(t('send.createUnavailable')),{code:'SESSION_UNAVAILABLE'});
+      const result=await sendTarget.send({
+        intent:'process-comments',documentId:docId,commentIds:ids,
+        ...(targetSessionId?{conversationId:targetSessionId}:{createConversation:true,...sessionId?{excludeConversationId:sessionId}:{}}),
+        requestId:requestId(),
+      });
+      if(!targetSessionId && result?.createdConversation && result.conversationId && typeof sendTarget?.open==='function') sendTarget.open(result.conversationId);
       return result;
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,editSaveError,dismissEditSaveError,editorRef,startEditing,switchToReview,markEditDirty:()=>setEditDirty(true)};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -247,7 +292,7 @@ function CommentBalloon({ comment, author, active, busy, t, statusText, confirmi
   const status=comment.status==='pending'
     ? (comment.stale?t('comment.staleStatus'):null)
     : `${statusText(comment)}${comment.stale?t('comment.stale'):''}`;
-  const authorName=author?.name || (author?.signedIn?t('comment.deepseekUser'):null);
+  const authorName=author?.name || (author?.signedIn?t('comment.accountUser'):null);
   return <article className={`space-annotation-balloon space-comment-balloon${active?' is-active':''}${comment.stale?' is-stale':''}${confirming?' is-confirming':''} ${className}`} data-comment-id={comment.id} ref={el=>setRef(comment.id,el)} style={style} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onClick={()=>onActivate(comment.id)}>
     <AnnotationIdentity name={authorName} avatarUrl={author?.avatarUrl} createdAt={comment.createdAt} fallback={t('comment.author')}/>
     {status && <div className="space-annotation-head"><span className={`space-comment-status is-${visibleStatus}`}>{status}</span></div>}
@@ -283,23 +328,24 @@ function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef
  * @param {object} props - review controller, current conversation, optional creator, and translator.
  * @returns {React.ReactElement} the send button and its confirmation dialog.
  */
-export function ReviewSendButton({ review, sessionId, sendTarget = null, t = defaultT, compact = false }) {
+export function ReviewSendButton({ review, sessionId, adapter = null, t = defaultT, compact = false }) {
   const titleId=useId(), groupId=useId();
   const [confirming,setConfirming]=useState(false);
   const [mode,setMode]=useState('copy');
   const sendable=review.comments.filter(item=>['pending','failed'].includes(item.status));
-  const copyMode=sendTarget?.mode==='copy';
-  const canCurrent=!copyMode && Boolean(sessionId);
-  const canCreate=!copyMode && sendTarget?.canCreate === true;
-  useEffect(()=>{setConfirming(false)},[review.doc?.id,sessionId,copyMode,sendable.length===0]);
+  const sendTarget=adapter?.conversation || null;
+  const canCurrent=review.canSend && Boolean(sessionId);
+  const canCreate=review.canCreate;
+  const canCopy=review.canCopy;
+  useEffect(()=>{setConfirming(false)},[review.doc?.id,sessionId,canCopy,canCreate,sendable.length===0]);
   const disabled=review.busy || !sendable.length;
-  const hint=copyMode?t('send.copyHint'):undefined;
+  const hint=!canCurrent&&!canCreate&&canCopy?t('send.copyHint'):undefined;
   let sessionLabel=null, workspaceLabel=null;
-  try { sessionLabel=sessionId && sendTarget?.getSessionLabel?.(sessionId); } catch { /* Use the session id when the catalog is unavailable. */ }
+  try { sessionLabel=sessionId && sendTarget?.getConversationLabel?.(sessionId); } catch { /* Use the session id when the catalog is unavailable. */ }
   try { workspaceLabel=sessionId && sendTarget?.getWorkspaceLabel?.(sessionId); } catch { /* The workspace label is optional. */ }
-  const open=()=>{setMode(canCurrent?'current':canCreate?'new':'copy');setConfirming(true);};
+  const open=()=>{setMode(canCurrent?'current':canCreate?'new':canCopy?'copy':'unavailable');setConfirming(true);};
   const confirmKey=mode==='copy'?'send.copyConfirm':mode==='new'?'send.newSessionConfirm':'send.confirm';
-  if(!sendable.length) return null;
+  if(!sendable.length || (!canCurrent&&!canCreate&&!canCopy)) return null;
   return <>
     <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={open}><MessageSquare size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
     <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} className="space-send-dialog">
@@ -308,7 +354,7 @@ export function ReviewSendButton({ review, sessionId, sendTarget = null, t = def
       <fieldset className="space-send-options"><legend>{t('send.destination')}</legend>
         <label className="space-send-option"><input type="radio" name={groupId} value="current" checked={mode==='current'} disabled={!canCurrent} onChange={()=>setMode('current')}/><span><strong>{t('send.currentOption')}</strong><small className="space-send-conversation">{canCurrent && workspaceLabel && <span className="space-send-workspace">{workspaceLabel}</span>}{canCurrent ? (sessionLabel || t('send.sessionId',{id:sessionId})) : t('send.currentUnavailable')}</small></span></label>
         <label className="space-send-option"><input type="radio" name={groupId} value="new" checked={mode==='new'} disabled={!canCreate} onChange={()=>setMode('new')}/><span><strong>{t('send.newOption')}</strong><small>{canCreate?t('send.newOptionHint'):t('send.newUnavailable')}</small></span></label>
-        <label className="space-send-option"><input type="radio" name={groupId} value="copy" checked={mode==='copy'} onChange={()=>setMode('copy')}/><span><strong>{t('send.copyOption')}</strong><small>{t('send.copyOptionHint')}</small></span></label>
+        {canCopy&&<label className="space-send-option"><input type="radio" name={groupId} value="copy" checked={mode==='copy'} onChange={()=>setMode('copy')}/><span><strong>{t('send.copyOption')}</strong><small>{t('send.copyOptionHint')}</small></span></label>}
       </fieldset>
       <div className="space-comment-actions">
         <button type="button" autoFocus onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button>
@@ -326,7 +372,8 @@ export function ReviewSendButton({ review, sessionId, sendTarget = null, t = def
  */
 export function mergeCommentHighlights(highlights) {
   const carets=highlights.filter(item=>item.caret);
-  const rectangles=highlights.filter(item=>!item.caret).sort((a,b)=>a.top-b.top||a.height-b.height||a.left-b.left);
+  const passthrough=highlights.filter(item=>!item.caret&&item.kind!=='comment');
+  const rectangles=highlights.filter(item=>!item.caret&&item.kind==='comment').sort((a,b)=>a.top-b.top||a.height-b.height||a.left-b.left);
   const merged=[];
   for(const item of rectangles){
     const previous=merged.at(-1);
@@ -342,7 +389,7 @@ export function mergeCommentHighlights(highlights) {
   }
   const fills=merged.map(item=>({key:`comment-fill:${item.keys.join('|')}`,kind:'comment',active:false,left:item.left,top:item.top,width:item.width,height:item.height,caret:false}));
   const outlines=merged.flatMap(item=>item.activeRects.map(rect=>({...rect,key:`${rect.key}:active-outline`,active:true,outline:true})));
-  return [...fills,...carets,...outlines];
+  return [...fills,...passthrough,...carets,...outlines];
 }
 
 /**
@@ -359,12 +406,9 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const [hoverPreview,setHoverPreview]=useState(null);
   const hoverTimer=useRef(null);
   const [layout,setLayout]=useState({positions:{},lines:[],highlights:[],height:0,minHeight:0});
-  const commentFieldId=useId(), commentTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null), fabRef=useRef(null);
+  const commentFieldId=useId(), commentTitleId=useId(), editSaveErrorTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null), fabRef=useRef(null);
   const [fabPosition,setFabPosition]=useState(null);
-  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment}=review;
-  // Keep the annotated HTML stable across selection/card state so the browser
-  // selection and its text nodes are never replaced by an equal re-render.
-  const markdownHtml=useMemo(()=>doc?renderMarkdown(doc.content,doc.suggestions||[]):'',[doc?.content,doc?.suggestions]);
+  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,editing,editorRef,markEditDirty}=review;
   const visibleComments=useMemo(()=>comments.filter(comment=>!['sent','processed'].includes(comment.status)),[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
   const staleComments=useMemo(()=>visibleComments.filter(comment=>!commentRange(comment)),[visibleComments]);
@@ -393,7 +437,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   // Comments are anchored to rendered Markdown text; source editing is not exposed.
   useEffect(()=>{
     const element=surface.current;
-    if(!element||!doc) return;
+    if(!element||!doc||editing) return;
     const raf=typeof requestAnimationFrame==='function'?requestAnimationFrame:callback=>setTimeout(callback,0);
     const caf=typeof cancelAnimationFrame==='function'?cancelAnimationFrame:clearTimeout;
     let frame=0;
@@ -414,7 +458,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     const schedule=()=>{if(!frame)frame=raf(capture)};
     document.addEventListener('selectionchange',schedule);
     return ()=>{document.removeEventListener('selectionchange',schedule);if(frame)caf(frame)};
-  },[composerOpen,doc,setSelection,surface]);
+  },[composerOpen,doc,editing,setSelection,surface]);
 
   // Balloons are absolutely placed in the gutter, aligned to their anchor's
   // first line. The same DOM ranges drive the text highlights, connector dots
@@ -431,7 +475,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     const scale=zoom;
     const paperRect=paper.getBoundingClientRect();
     const railRect=rail.getBoundingClientRect();
-    const spans=readSourceSpans(paper);
+    const spans=readSourceSpans(paper,doc.content);
     const activeKey=active!=null?`suggestion:${active}`:activeComment!=null?`comment:${activeComment}`:null;
     const anchorRects=new Map(), highlights=[];
     for(const annotation of items){
@@ -451,10 +495,10 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       const last=rects[rects.length-1];
       anchorRects.set(annotation.key,{left:first.left,right:first.right,top:first.top,bottom:first.bottom,height:first.height,end:last});
       const isActive=annotation.key===activeKey;
-      if(annotation.kind==='comment' && range.from===range.to){
+      if(range.from===range.to){
         highlights.push({key:`${annotation.key}:caret`,kind:annotation.kind,active:isActive,left:Math.max(0,first.left-1),top:first.top,width:2,height:Math.max(first.height,18),caret:true});
-      } else if(annotation.kind==='comment') {
-        rects.forEach((rect,index)=>{if(rect.width>0&&rect.height>0)highlights.push({key:`${annotation.key}:${index}`,kind:annotation.kind,active:isActive,left:rect.left,top:rect.top,width:rect.width,height:rect.height,caret:false});});
+      } else {
+        rects.forEach((rect,index)=>{if(rect.width>0&&rect.height>0)highlights.push({key:`${annotation.key}:${index}`,kind:annotation.kind,deleted:annotation.kind==='suggestion'&&Boolean(annotation.item.expected),active:isActive,left:rect.left,top:rect.top,width:rect.width,height:rect.height,caret:false});});
       }
     }
     const mergedHighlights=mergeCommentHighlights(highlights);
@@ -495,15 +539,18 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     const button=fabRef.current, paper=surface.current;
     if(!selection || composerOpen || busy || !button || !paper) return;
     const virtual={contextElement:paper,getBoundingClientRect(){
-      const mapped=sourceRangeToDom(readSourceSpans(paper),selection.from,selection.to);
-      return mapped?.range.getBoundingClientRect?.() || paper.getBoundingClientRect();
+      const mapped=sourceRangeToDom(readSourceSpans(paper,doc?.content),selection.from,selection.to);
+      if(mapped) return mapped.range.getBoundingClientRect?.() || paper.getBoundingClientRect();
+      const wrap=paper.closest('.space-paper-wrap'), rect=wrap?.getBoundingClientRect(), anchor=selection.anchor;
+      if(rect&&anchor){const left=rect.left+anchor.x-wrap.scrollLeft,top=rect.top+anchor.top-wrap.scrollTop;return{x:left,y:top,left,right:left,top,bottom:rect.top+anchor.bottom-wrap.scrollTop,width:1,height:Math.max(1,anchor.bottom-anchor.top)}}
+      return paper.getBoundingClientRect();
     }};
     let alive=true;
     const update=()=>computePosition(virtual,button,{placement:'top',middleware:[offset(10),flip(),shift({padding:8})]})
       .then(({x,y})=>{if(alive)setFabPosition({left:x,top:y});}).catch(()=>{});
     const cleanup=autoUpdate(virtual,button,update);
     return ()=>{alive=false;cleanup();};
-  },[selection,composerOpen,busy,surface,resizeTick,zoom]);
+  },[selection,composerOpen,busy,surface,resizeTick,zoom,doc?.content]);
   if (!doc) return <section className="space-paper-wrap"><p className="space-loading" role="status">{review.message || t('empty.loading')}</p></section>;
 
   const openComposer=()=>{setMessage('');setComposerOpen(true)};
@@ -511,7 +558,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const saveComment=async()=>{const created=await addComment();if(created){setComposerOpen(false);setMessage('');setSelection(null)}};
   const askDelete=id=>setConfirmDelete(id);
   const doDelete=async id=>{await deleteComment(id);setConfirmDelete(null)};
-  const scrollToAnchor=id=>{const comment=liveComments.find(item=>item.id===id);if(comment){const range=commentRange(comment);scrollSourceRange(surface.current,range.from,range.to);}};
+  const scrollToAnchor=id=>{const comment=liveComments.find(item=>item.id===id);if(comment){const range=commentRange(comment);scrollToSourceOffset(surface.current,range.from,doc.content);}};
   const activateFromAnchor=id=>{setActive(null);setActiveComment(id);commentRefs.current.get(id)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})};
   const activateFromBalloon=id=>{setActive(null);setActiveComment(id);scrollToAnchor(id)};
   const activateSuggestion=id=>{setActiveComment(null);setActive(id);chooseCard(id)};
@@ -521,20 +568,16 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     hoverTimer.current=setTimeout(()=>{hoverTimer.current=null;setHoverPreview(null);},180);
   };
   const trackHover=event=>{
-    const node=event.target.closest?.('[data-src-from]');
-    if(!node) {closeHover();return;}
-    const from=Number(node.getAttribute('data-src-from')), to=Number(node.getAttribute('data-src-to'));
-    const spans=readSourceSpans(surface.current);
+    const range=document.caretRangeFromPoint?.(event.clientX,event.clientY);
+    const point=range
+      ? {node:range.startContainer,offset:range.startOffset}
+      : document.caretPositionFromPoint?.(event.clientX,event.clientY);
+    if(!point) {closeHover();return;}
+    const sourceOffset=sourceOffsetAtDomPoint(surface.current,point.node||point.offsetNode,point.offset,doc.content);
+    if(!Number.isInteger(sourceOffset)) {closeHover();return;}
     const annotation=items.find(item=>{
       const range=item.kind==='suggestion'?{from:item.item.from,to:item.item.to}:commentRange(item.item);
-      const overlaps=range && (range.from===range.to
-        ? from<=range.from && to>=range.to
-        : from<range.to && to>range.from);
-      if(!overlaps) return false;
-      const mapped=sourceRangeToDom(spans,range.from,range.to);
-      const rects=mapped ? rangeRects(mapped.range,{left:0,top:0}) : [];
-      if(!rects.length) return true;
-      return rects.some(rect=>event.clientX>=rect.left-3 && event.clientX<=rect.right+3 && event.clientY>=rect.top-3 && event.clientY<=rect.bottom+3);
+      return range && (range.from===range.to ? sourceOffset===range.from : sourceOffset>=range.from&&sourceOffset<=range.to);
     });
     if(annotation) {
       keepHover();
@@ -545,10 +588,10 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
-  return <section className="space-paper-wrap" aria-label={t('paper.aria')} ref={scrollRef}>
+  return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
-      <div ref={surface} onPointerMove={trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}>{documentView(markdownHtml)}</div>
-      <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
+      <div ref={surface} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} t={t} readOnly={!editing}/></div>
+      <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.deleted?' is-deleted':''}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
         <div className="space-comment-balloons is-positioned">
@@ -578,19 +621,28 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
           <div className="space-comment-actions"><button type="button" onClick={closeComposer}>{t('comment.cancel')}</button><button type="button" disabled={busy || !draft.trim()} onClick={saveComment}>{t('comment.save')}</button></div>
         </>}
       </SpaceDialog>
+      <SpaceDialog open={Boolean(review.editSaveError)} onClose={review.dismissEditSaveError} labelledBy={editSaveErrorTitleId} className="space-comment-dialog">
+        <h2 id={editSaveErrorTitleId}>{t('edit.saveErrorTitle')}</h2>
+        <p role="alert">{review.editSaveError}</p>
+        <p className="space-muted">{t('edit.saveErrorKeepEditing')}</p>
+        <div className="space-comment-actions"><button type="button" autoFocus onClick={review.dismissEditSaveError}>{t('edit.keepEditing')}</button></div>
+      </SpaceDialog>
       {composerOpen && selection?.rects?.map((rect,index)=><span key={index} className="space-selection-hint" style={{left:rect.left,top:rect.top,width:rect.width,height:rect.height}}/>)}
     </div>
   </section>;
 }
 
-export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = null }) {
+export function SpaceApp({ adapter, t = defaultT }) {
+  const sessionId=adapter.conversation?.current?.id || null;
+  const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [exporting,setExporting]=useState(false);
   const deleteTitleId=useId();
-  const user=useCurrentUser(api);
-  const review=useSpaceReview(api,docId,sessionId,t,sendTarget);
+  const editUnavailableTipId=useId();
+  const user=useCurrentUser(adapter.identity?.getCurrentUser);
+  const review=useSpaceReview(api,docId,sessionId,t,adapter);
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
   const documentsSnapshot=useRef(null);
@@ -629,16 +681,22 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
       const snapshot=await call('readDocument',{docId});
       if(!snapshot || typeof snapshot.content!=='string') throw new Error('Document unavailable');
       const filename=exportFileName(snapshot.title,format);
-      if(format==='md') {
-        const blob=new Blob([snapshot.content],{type:'text/markdown;charset=utf-8'});
-        const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
-      } else if(format==='docx') {
-        const blob=createDocx(snapshot.content),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
-      }
+      const file=format==='md'
+        ? {name:filename,type:'text/markdown;charset=utf-8',bytes:new TextEncoder().encode(snapshot.content)}
+        : format==='docx'
+          ? {name:filename,type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',bytes:new Uint8Array(await createDocx(snapshot.content).arrayBuffer())}
+          : null;
+      if(!file || !supportsCapability(adapter.capabilities,'files.export.save') || typeof adapter.files?.saveExport!=='function') throw new Error('Export saving is unavailable');
+      const saved=await adapter.files.saveExport(file);
+      if(saved!==true) throw new Error('Export saving was not accepted');
     } catch {
       setMessage(t('export.failed'));
     }
     finally { setExporting(false); }
+  };
+  const backToHome=async()=>{
+    if(review.editing){const saved=await review.switchToReview();if(!saved)return;}
+    setDocId(null);
   };
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
@@ -665,12 +723,12 @@ export function SpaceApp({ api, sessionId = null, t = defaultT, sendTarget = nul
         </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
-      <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} onClick={()=>setDocId(null)}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-            <div className="space-header-tools">{review.doc&&<ReviewZoomControls review={review} t={t}/>} {review.doc&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {review.doc&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} sendTarget={sendTarget} t={t}/>}</div>
+      <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
+            <div className="space-header-tools">{review.doc&&<div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>}{review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>} {review.doc&&<><ReviewZoomControls review={review} t={t}/>{supportsCapability(adapter.capabilities,'files.export.save')&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}</>}</div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}
-    {!home&&<div className="space-message" role="status" aria-live="polite">{message || (review.doc ? review.message : '')}</div>}
+    {!home&&<div className="space-message" role="status" aria-live="polite">{review.editSaveError ? '' : message || (review.doc ? review.message : '')}</div>}
     <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} className="space-delete-dialog">
       <h2 id={deleteTitleId}>{t('document.deleteTitle')}</h2>
       <p>{t('document.deleteDescription',{title:deleteTarget?.title || deleteTarget?.id || ''})}</p>

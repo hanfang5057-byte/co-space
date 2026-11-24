@@ -1,5 +1,6 @@
 import {useSyncExternalStore} from 'react';
 import { SpaceApp } from '../../../packages/review-ui/src/SpaceApp.jsx';
+import './theme.css';
 import { SpaceDocumentReference } from '../../../packages/review-ui/src/SpaceReference.jsx';
 import { SpaceSidebarDocument, SpaceSidebarTitle } from '../../../packages/review-ui/src/SpaceSidebar.jsx';
 import { api as request } from '../../../packages/review-ui/src/api.js';
@@ -9,6 +10,8 @@ import { documentTitle } from '../../../packages/review-ui/src/document-titles.j
 import { documentIdFromDshResource, dshSpaceResourceFor } from './resource-reference.js';
 import { workspaceNameForSession } from './workspace-name.js';
 import { BRAND } from '../../../packages/brand/brand.js';
+import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../packages/adapter-contract/src/index.js';
+import adapterDeclaration from '../adapter.json' with { type: 'json' };
 
 export const name = 'dsh-space-client';
 /** Client services: slots, the current Session, copy, conversation text, and the right Sidebar. */
@@ -20,12 +23,8 @@ const SIDEBAR_ID = 'dsh-plugin-space';
 const SIDEBAR_KIND = 'space-document';
 const SIDEBAR_PATTERN = 'dsh-resource://space/**';
 
-function DshSpaceSidebarDocument(props) {
-  return <SpaceSidebarDocument {...props} getDocumentIdFromResource={documentIdFromDshResource}/>;
-}
-
 function DshSpaceSidebarTitle(props) {
-  return <SpaceSidebarTitle {...props} getDocumentIdFromResource={documentIdFromDshResource}/>;
+  return <SpaceSidebarTitle {...props}/>;
 }
 
 function SpaceIcon({size=16}) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M9 9v11"/></svg>; }
@@ -40,8 +39,8 @@ function SpaceIcon({size=16}) { return <svg width={size} height={size} viewBox="
 function createSendBridge(ctx) {
   const service = name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined) ?? ctx[name];
   return {
-    canCreate: true,
-    getSessionLabel(sessionId) {
+    canCreate: typeof service('sessions')?.binding === 'function' && typeof service('uiWorkspace')?.openSession === 'function',
+    getConversationLabel(sessionId) {
       const row=service('sessions')?.list?.getSnapshot?.()?.byId?.[sessionId];
       return row?.title || row?.displayTitle || null;
     },
@@ -49,10 +48,58 @@ function createSendBridge(ctx) {
       const items=service('workspaces')?.list?.getSnapshot?.()?.items;
       return workspaceNameForSession(items,sessionId);
     },
-    openSession(sessionId) {
+    open(sessionId) {
       try { service('uiWorkspace')?.openSession(sessionId); } catch { /* navigation is best effort */ }
     },
+    send: request => api('sendComments', {
+      docId:request.documentId,
+      commentIds:request.commentIds,
+      ...(request.conversationId?{sessionId:request.conversationId}:{}),
+      ...(request.createConversation?{forceNew:true}:{}),
+      ...(request.excludeConversationId?{newSessionFrom:request.excludeConversationId}:{}),
+      operationId:request.requestId,
+    }).then(result=>({
+      requestId:result.requestId,
+      status:result.status,
+      ...(result.sessionId?{conversationId:result.sessionId}:{}),
+      ...(result.createdSession?{createdConversation:true}:{}),
+    })),
   };
+}
+
+function saveExport({name,type,bytes}) {
+  if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return false;
+  const blob=new Blob([bytes],{type});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;link.download=name;link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  return true;
+}
+
+function resolveDshCapabilities(ctx, conversation) {
+  const services = name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined) ?? ctx[name];
+  const available = [];
+  if (services('uiSession')?.adapter?.current) available.push('conversation.current.read');
+  // DSH registers the prompt endpoint in the server adapter. Availability can
+  // still change per request, so send failures remain explicit at the API edge.
+  available.push('conversation.send');
+  if (conversation?.canCreate) available.push('conversation.create');
+  if (typeof services('uiWorkspace')?.openSession === 'function') available.push('conversation.open');
+  if (typeof services('sessions')?.binding === 'function') available.push('conversation.references.insert');
+  if (typeof services('workspaces')?.list?.getSnapshot === 'function') available.push('workspace.list');
+  if (typeof services('uiConversation')?.userText?.register === 'function') available.push('conversation.references.render');
+  if (typeof services('sidebarRight')?.openResource === 'function') available.push('navigation.document.open');
+  if (typeof services('sidebarRightTabs')?.register === 'function') available.push('navigation.deepLink.register');
+  if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && typeof document !== 'undefined') available.push('files.export.save');
+  if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') available.push('clipboard.write');
+  // DSH server registers this endpoint; the account plugin may still be absent,
+  // in which case the API safely resolves to an anonymous user.
+  available.push('identity.current.read');
+  return resolveAdapterCapabilities({
+    ...adapterDeclaration,
+    contractVersion: ADAPTER_CONTRACT_VERSION,
+  }, available);
 }
 
 /**
@@ -129,11 +176,25 @@ export async function openSpacePicker(ctx, sessionId, t) {
 export function apply(ctx) {
   const t=ctx.locale.bind(NS);
   const sendBridge=createSendBridge(ctx);
+  const capabilities=resolveDshCapabilities(ctx,sendBridge);
+  const adapter={
+    core:{request:api},
+    capabilities,
+    conversation:sendBridge,
+    identity:{getCurrentUser:()=>api('getUser')},
+    files:{saveExport},
+    clipboard:{writeText:text=>navigator.clipboard.writeText(text)},
+    navigation:{
+      openDocument:docId=>openSpaceDocument(ctx,docId),
+      createDocumentLink:dshSpaceResourceFor,
+      parseDocumentLink:documentIdFromDshResource,
+    },
+  };
   ctx.effect(()=>ctx.locale.register(NS,{zh,en}),'dsh-space: dictionaries');
   ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:'spaces',locale:NS},function SpaceMain({t:translate}){
     const current=ctx.uiSession?.adapter?.current;
     const state=useSyncExternalStore(current?.subscribe || (()=>()=>{}),current?.getSnapshot || (()=>null),()=>null);
-    return <SpaceApp api={api} sessionId={state?.key || null} t={translate} sendTarget={sendBridge}/>;
+    return <SpaceApp t={translate} adapter={{...adapter,conversation:{...sendBridge,current:state?.key?{id:state.key}:null,canCreate:sendBridge.canCreate&&capabilities.available.includes('conversation.create')}}}/>;
   }));
   ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'spaces',order:20,label:()=> BRAND.name.en},SpaceIcon));
 
@@ -145,22 +206,28 @@ export function apply(ctx) {
   }),'dsh-space: reference text rule');
   ctx.slots.inject('conversation.user.text.node',()=>ctx.slots.register({
     name:'conversation.user.text.node', key:'space-document', priority:100, locale:NS,
-    inject:()=>({openDocument:docId=>{openSpaceDocument(ctx,docId);}}),
+    inject:()=>({adapter}),
   },SpaceDocumentReference));
 
   // One resource tab type per document; the persisted address is the document
   // identity, so a reload restores the same document rather than a blank page.
   ctx.effect(()=>ctx.sidebarRightTabs.register({
     id:SIDEBAR_ID, kind:SIDEBAR_KIND, patterns:[SIDEBAR_PATTERN], priority:'extension',
-    canOpen:address=>documentIdFromDshResource(address)!==null,
-    title:address=>documentTitle(documentIdFromDshResource(address)) || t('sidebar.title'),
+    canOpen:address=>adapter.navigation.parseDocumentLink(address)!==null,
+    title:address=>documentTitle(adapter.navigation.parseDocumentLink(address),api) || t('sidebar.title'),
   }),'dsh-space: sidebar document type');
   ctx.slots.inject('sidebar.right.pane.tab',()=>ctx.slots.register({
     name:'sidebar.right.pane.tab', key:SIDEBAR_ID, locale:NS,
-    inject:()=>({sendTarget:sendBridge}),
-  },DshSpaceSidebarDocument));
+    inject:()=>({adapter}),
+  },function DshSpaceSidebarDocument(props){
+    const current=ctx.uiSession?.adapter?.current;
+    const state=useSyncExternalStore(current?.subscribe || (()=>()=>{}),current?.getSnapshot || (()=>null),()=>null);
+    const bridge={...adapter,conversation:{...sendBridge,current:state?.key?{id:state.key}:null}};
+    return <SpaceSidebarDocument {...props} adapter={bridge}/>;
+  }));
   ctx.slots.inject('sidebar.right.pane.tab.title',()=>ctx.slots.register({
     name:'sidebar.right.pane.tab.title', key:SIDEBAR_ID, locale:NS,
+    inject:()=>({adapter}),
   },DshSpaceSidebarTitle));
 
   ctx.inject(['inputTriggers'],scope=>{

@@ -12,6 +12,5 @@ await Promise.all([
   cp(path.join(root, 'apps/site/styles.css'), path.join(output, 'styles.css')),
   cp(path.join(root, 'apps/site/site.js'), path.join(output, 'site.js')),
   cp(path.join(root, brand.icon), path.join(output, 'assets/cospace-icon.svg')),
-  cp(path.join(root, 'adapters/workbuddy/install.sh'), path.join(output, 'install.sh')),
 ]);
 console.log(`Built static site at ${path.relative(root, output)}`);

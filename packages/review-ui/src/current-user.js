@@ -1,14 +1,14 @@
 /**
- * Signed-in DeepSeek account used to attribute local comments.
+ * Optional signed-in user supplied by the adapter for local comment attribution.
  *
  * One read per page load is shared by the Space page and every Sidebar review
- * panel. A missing account plugin, signed-out state, or failed network read
+ * panel. A missing identity capability, signed-out state, or failed request
  * resolves to `null`, and comment cards keep their localized fallback author.
  */
 import { useEffect, useSyncExternalStore } from 'react';
-import { api as defaultApi } from './api.js';
 
 const stores = new WeakMap();
+const anonymousIdentity = async () => null;
 
 function createStore(request) {
   const listeners = new Set();
@@ -26,7 +26,7 @@ function createStore(request) {
     load() {
       if (store.loading !== null) return store.loading;
       if (store.loaded) return Promise.resolve(store.user);
-      store.loading = request('getUser')
+      store.loading = request()
         .then(value => {
           store.user = value && value.signedIn ? value : null;
           store.loaded = true;
@@ -57,10 +57,10 @@ function storeFor(request) {
 
 /**
  * Subscribe to the signed-in account.
- * @param {(method: string, args?: object) => Promise<any>} request - plugin API transport.
+ * @param {() => Promise<any>|any} request - optional adapter identity bridge.
  * @returns {{signedIn: boolean, name: string|null, avatarUrl: string|null}|null} account or null.
  */
-export function useCurrentUser(request = defaultApi) {
+export function useCurrentUser(request = anonymousIdentity) {
   const store = storeFor(request);
   useEffect(() => { if (!store.loaded) void store.load(); }, [store]);
   return useSyncExternalStore(store.subscribe, store.getSnapshot, () => null);

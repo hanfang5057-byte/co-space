@@ -1,6 +1,6 @@
 # 工作台前端组件约定
 
-CoSpace 的审阅界面由 `packages/review-ui` 共享，DSH 使用宿主 React，WorkBuddy 自带 React。颜色优先使用 `space.css` 的 `--space-*` 语义变量及宿主 `--dsw-alias-*` 变量；新增控件沿用现有焦点轮廓、触屏尺寸和中英文文案。常用图标通过 `lucide-react` 按需导入，图标按钮必须提供可访问名称。
+CoSpace 的审阅界面由 `packages/review-ui` 共享。适配器通过[通用宿主契约](14-adapter-integration.md)注入能力，不得把宿主 SDK 或宿主 URI 放入共享 UI。颜色优先使用 `space.css` 的 `--space-*` 语义变量及宿主主题变量；新增控件沿用现有焦点轮廓、触屏尺寸和中英文文案。常用图标通过 `lucide-react` 按需导入，图标按钮必须提供可访问名称。
 
 文本选区工具条使用 `@floating-ui/dom` 根据 Markdown 源码范围映射到的 DOM Range 定位，滚动和尺寸变化时更新，并通过 flip/shift 避免边缘裁切。文档批注的位置、连线及持久化仍由现有审阅逻辑负责。
 
@@ -11,4 +11,4 @@ DSH 客户端构建要求 React 来自宿主，禁止将 `react-dom` 打入客�
 文档首页搜索、筛选和排序是本地视图状态，不修改文档或审阅数据。编辑器、正文虚拟化及协作同步属于独立设计问题，不由基础组件升级隐式引入。
 
 
-WorkBuddy 构建将共享 UI 和适配器的 React 导入统一解析到适配器的 React，并通过 esbuild 元数据检查仅有一份 React，避免 hooks 绑定到不同实例导致页面空白。
+当前 DSH 由宿主提供 React。未来独立 WebApp 若自带 React，应在其适配器构建中确保共享 UI 与应用解析到同一 React 实例，避免 hooks 绑定到不同实例。

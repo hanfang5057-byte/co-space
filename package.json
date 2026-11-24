@@ -7,6 +7,7 @@
   "workspaces": [
     "packages/review-core",
     "packages/review-ui",
+    "packages/adapter-contract",
     "packages/transport-mcp",
     "packages/transport-http",
     "adapters/dsh"
@@ -21,13 +22,11 @@
     "build:market": "node scripts/build-market.mjs",
     "build:dsh": "npm run build:client && node scripts/build-dsh.mjs && node scripts/build-market.mjs",
     "dev:dsh": "node scripts/dev-dsh.mjs",
-    "build:workbuddy": "node adapters/workbuddy/build.mjs",
     "build:site": "node scripts/build-site.mjs",
-    "verify:workbuddy-package": "npm run build:workbuddy && node adapters/workbuddy/verify.mjs",
-    "pack:workbuddy": "node scripts/pack-npm.mjs workbuddy",
-    "pack:npm": "node scripts/pack-npm.mjs",
-    "pack:dsh": "node scripts/pack-npm.mjs dsh",
-    "verify:dsh-package": "npm run build:dsh && node scripts/verify-dsh-package.mjs && npm pack ./dist/dsh-plugin --dry-run"
+    "verify:architecture": "node scripts/verify-adapter-boundaries.mjs",
+    "pack:npm": "node scripts/pack-dsh.mjs",
+    "pack:dsh": "node scripts/pack-dsh.mjs",
+    "verify:dsh-package": "npm run build:dsh && npm run verify:architecture && node scripts/verify-dsh-package.mjs && npm pack ./dist/dsh-plugin --dry-run"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

@@ -1,3 +1,7 @@
+# Historical record — WorkBuddy adapter removed
+
+本文仅保留过往调研、实现和验收记录。WorkBuddy 不再是当前适配器、产品目标或发布对象。新增适配器请遵循[适配器接入规范](14-adapter-integration.md)。
+
 # 10 · WorkBuddy Connector 开发方案
 
 > 调研基准：2026-11-23。本文根据 WorkBuddy 开放平台官方 Connector 文档、开发者公约及当前仓库实现整理，并持续记录实施与宿主验收状态。平台字段和审核规则可能变化；提审前应以开放平台最新文档和 Connector Meta 工具导出结果为准。Connector 已完成本机实现和 macOS WorkBuddy 验收，尚未提审或上架。

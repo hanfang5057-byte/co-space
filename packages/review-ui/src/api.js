@@ -1,11 +1,12 @@
 /** Browser transport to the CoSpace Host HTTP route; every surface shares it. */
 import { COSPACE_API_PATH } from '../../transport-http/http-handler.js';
 
-export async function api(method, args = {}) {
+export async function api(method, args = {}, options = {}) {
   const response = await fetch(COSPACE_API_PATH, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ method, args }),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   const body = await response.json();
   if (!response.ok || body.error) {

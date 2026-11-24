@@ -22,6 +22,7 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
         return space.deleteDocument(args.docId);
       }
       case 'decide': return space.decide(args);
+      case 'updateDocument': return space.updateContent(args);
       case 'listComments': return space.listComments(args.docId);
       case 'createComment': return space.createComment(args);
       case 'deleteComment': return space.deleteComment(args);
