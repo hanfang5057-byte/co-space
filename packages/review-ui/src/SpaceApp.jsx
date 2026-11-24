@@ -84,21 +84,34 @@ function ExportMenu({ exporting, onExport, t }) {
   </div>;
 }
 
-/** Shared native modal surface for workbench dialogs. */
-function SpaceDialog({ open, onClose, labelledBy, className = '', children }) {
+/** Shared accessible modal surface for all workbench dialogs. */
+function SpaceDialog({ open, onClose, labelledBy, title, closeLabel, className = '', closeOnBackdrop = false, actions, children }) {
   const dialogRef=useRef(null);
+  const onCloseRef=useRef(onClose);
+  onCloseRef.current=onClose;
   useEffect(()=>{
+    if(!open||typeof document==='undefined')return;
     const dialog=dialogRef.current;
-    if(!dialog) return;
-    if(open && !dialog.open) {
-      if(typeof dialog.showModal==='function') dialog.showModal();
-      else dialog.setAttribute('open','');
-    } else if(!open && dialog.open) {
-      if(typeof dialog.close==='function') dialog.close();
-      else dialog.removeAttribute('open');
-    }
+    const previousFocus=document.activeElement;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    const focusable=()=>[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex]:not([tabindex="-1"])')];
+    const initial=dialog.querySelector('[autofocus]')||focusable()[0]||dialog;
+    initial.focus();
+    const onKeyDown=event=>{
+      if(event.key==='Escape'){event.preventDefault();onCloseRef.current?.();return}
+      if(event.key!=='Tab')return;
+      const items=focusable();
+      if(!items.length){event.preventDefault();dialog.focus();return}
+      const first=items[0],last=items.at(-1);
+      if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog)){event.preventDefault();last.focus()}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+    };
+    document.addEventListener('keydown',onKeyDown);
+    return()=>{document.removeEventListener('keydown',onKeyDown);document.body.style.overflow=previousOverflow;if(previousFocus instanceof HTMLElement&&previousFocus.isConnected)previousFocus.focus()};
   },[open]);
-  return <dialog ref={dialogRef} className={`space-dialog ${className}`} aria-labelledby={labelledBy} onClose={onClose}>{children}</dialog>;
+  if(!open||typeof document==='undefined')return null;
+  return <div className="space-dialog-backdrop" onMouseDown={event=>{if(closeOnBackdrop&&event.target===event.currentTarget)onClose()}}><section ref={dialogRef} className={`space-dialog ${className}`} role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1} onMouseDown={event=>event.stopPropagation()}><header className="space-dialog-header"><h2 id={labelledBy}>{title}</h2><button type="button" className="space-dialog-close" aria-label={closeLabel} onClick={()=>onCloseRef.current?.()}><X size={17} aria-hidden="true"/></button></header><div className="space-dialog-content">{children}</div>{actions&&<footer className="space-dialog-actions">{actions}</footer>}</section></div>;
 }
 
 /**
@@ -348,18 +361,13 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
   if(!sendable.length || (!canCurrent&&!canCreate&&!canCopy)) return null;
   return <>
     <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={open}><MessageSquare size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
-    <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} className="space-send-dialog">
-      <h2 id={titleId}>{t('send.chooseTitle')}</h2>
+    <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} title={t('send.chooseTitle')} closeLabel={t('dialog.close')} className="space-send-dialog" actions={<><button type="button" autoFocus onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button><button type="button" className="is-primary" disabled={review.busy || !sendable.length || (mode==='current'&&!canCurrent) || (mode==='new'&&!canCreate)} onClick={()=>{setConfirming(false);void review.send(mode);}}>{t(confirmKey)}</button></>}>
       <p>{t('send.chooseDescription',{count:sendable.length})}</p>
       <fieldset className="space-send-options"><legend>{t('send.destination')}</legend>
         <label className="space-send-option"><input type="radio" name={groupId} value="current" checked={mode==='current'} disabled={!canCurrent} onChange={()=>setMode('current')}/><span><strong>{t('send.currentOption')}</strong><small className="space-send-conversation">{canCurrent && workspaceLabel && <span className="space-send-workspace">{workspaceLabel}</span>}{canCurrent ? (sessionLabel || t('send.sessionId',{id:sessionId})) : t('send.currentUnavailable')}</small></span></label>
         <label className="space-send-option"><input type="radio" name={groupId} value="new" checked={mode==='new'} disabled={!canCreate} onChange={()=>setMode('new')}/><span><strong>{t('send.newOption')}</strong><small>{canCreate?t('send.newOptionHint'):t('send.newUnavailable')}</small></span></label>
         {canCopy&&<label className="space-send-option"><input type="radio" name={groupId} value="copy" checked={mode==='copy'} onChange={()=>setMode('copy')}/><span><strong>{t('send.copyOption')}</strong><small>{t('send.copyOptionHint')}</small></span></label>}
       </fieldset>
-      <div className="space-comment-actions">
-        <button type="button" autoFocus onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button>
-        <button type="button" className="is-primary" disabled={review.busy || !sendable.length || (mode==='current'&&!canCurrent) || (mode==='new'&&!canCreate)} onClick={()=>{setConfirming(false);void review.send(mode);}}>{t(confirmKey)}</button>
-      </div>
     </SpaceDialog>
   </>;
 }
@@ -611,21 +619,17 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     </div>
     <div className="space-comment-layer">
       {selection && !composerOpen && !busy && <button ref={fabRef} type="button" className={`space-comment-fab${!fabPosition && fabBelow?' is-below':''}${fabPosition?' is-positioned':''}`} style={fabPosition || {left:fabLeft,top:fabBelow?(anchor?.bottom||0)+10:(anchor?.top||0)-10}} onMouseDown={event=>event.preventDefault()} onClick={openComposer} aria-haspopup="dialog" aria-label={t('comment.bubble')}><CommentIcon/><span>{t('comment.bubble')}</span></button>}
-      <SpaceDialog open={Boolean(selection && composerOpen)} onClose={()=>{setComposerOpen(false);setMessage('')}} labelledBy={commentTitleId} className="space-comment-dialog">
+      <SpaceDialog open={Boolean(selection && composerOpen)} onClose={()=>{setComposerOpen(false);setMessage('')}} labelledBy={commentTitleId} title={t('comment.addTitle')} closeLabel={t('dialog.close')} className="space-comment-dialog" actions={selection&&<><button type="button" onClick={closeComposer}>{t('comment.cancel')}</button><button type="button" className="is-primary" disabled={busy || !draft.trim()} onClick={saveComment}>{t('comment.save')}</button></>}>
         {selection && <>
-          <h2 id={commentTitleId}>{t('comment.addTitle')}</h2>
           <p className="space-comment-selected">{t('comment.selected',{quote:selection.quote})}</p>
           <label htmlFor={commentFieldId}>{t('comment.label')}</label>
           <textarea ref={textareaRef} autoFocus id={commentFieldId} rows="4" maxLength="4000" value={draft} onChange={event=>{setDraft(event.target.value);if(message)setMessage('')}} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();if(!busy&&draft.trim())saveComment()}}}/>
           {message && <p className="space-comment-error" role="alert">{message}</p>}
-          <div className="space-comment-actions"><button type="button" onClick={closeComposer}>{t('comment.cancel')}</button><button type="button" disabled={busy || !draft.trim()} onClick={saveComment}>{t('comment.save')}</button></div>
         </>}
       </SpaceDialog>
-      <SpaceDialog open={Boolean(review.editSaveError)} onClose={review.dismissEditSaveError} labelledBy={editSaveErrorTitleId} className="space-comment-dialog">
-        <h2 id={editSaveErrorTitleId}>{t('edit.saveErrorTitle')}</h2>
+      <SpaceDialog open={Boolean(review.editSaveError)} onClose={review.dismissEditSaveError} labelledBy={editSaveErrorTitleId} title={t('edit.saveErrorTitle')} closeLabel={t('dialog.close')} className="space-comment-dialog" actions={<button type="button" autoFocus onClick={review.dismissEditSaveError}>{t('edit.keepEditing')}</button>}>
         <p role="alert">{review.editSaveError}</p>
         <p className="space-muted">{t('edit.saveErrorKeepEditing')}</p>
-        <div className="space-comment-actions"><button type="button" autoFocus onClick={review.dismissEditSaveError}>{t('edit.keepEditing')}</button></div>
       </SpaceDialog>
       {composerOpen && selection?.rects?.map((rect,index)=><span key={index} className="space-selection-hint" style={{left:rect.left,top:rect.top,width:rect.width,height:rect.height}}/>)}
     </div>
@@ -638,6 +642,8 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
+  const [settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(null),[settingsError,setSettingsError]=useState(''),[settingsScope,setSettingsScope]=useState('document'),[instructionText,setInstructionText]=useState(''),[instructionSaveState,setInstructionSaveState]=useState('idle'),[settingsBusy,setSettingsBusy]=useState(false);
+  const instructionSaveTimer=useRef(null);
   const [exporting,setExporting]=useState(false);
   const deleteTitleId=useId();
   const editUnavailableTipId=useId();
@@ -694,6 +700,11 @@ export function SpaceApp({ adapter, t = defaultT }) {
     }
     finally { setExporting(false); }
   };
+  const openCollaboration=async(scope)=>{setSettings(null);setSettingsError('');setSettingsScope(scope);setInstructionText('');setInstructionSaveState('idle');setSettingsOpen(true);setSettingsBusy(true);try{const next=await call('readCollaboration',{docId:scope==='document'?docId:undefined});setSettings(next);setInstructionText((scope==='global'?next.global:next.document)?.content||'')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t))}finally{setSettingsBusy(false)}};
+  const saveCollaboration=useCallback(async(content)=>{const current=settingsScope==='global'?settings?.global:settings?.document;setInstructionSaveState('saving');try{await call('saveInstructions',{scope:settingsScope,docId:settingsScope==='document'?docId:undefined,content,baseVersion:current?.version||0,operationId:requestId()});const next=await call('readCollaboration',{docId:settingsScope==='document'?docId:undefined});setSettings(next);setInstructionSaveState('saved')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t));setInstructionSaveState('error')}},[call,docId,settingsScope,settings,t]);
+  useEffect(()=>{if(!settingsOpen||!settings||settingsError)return;const current=settingsScope==='global'?settings.global:settings.document;if(instructionText===(current?.content||''))return;const timer=setTimeout(()=>{instructionSaveTimer.current=null;saveCollaboration(instructionText)},450);instructionSaveTimer.current=timer;return()=>{clearTimeout(timer);if(instructionSaveTimer.current===timer)instructionSaveTimer.current=null}},[settingsOpen,settings,settingsError,settingsScope,instructionText,saveCollaboration]);
+  const saveInstructionNow=async()=>{if(instructionSaveTimer.current){clearTimeout(instructionSaveTimer.current);instructionSaveTimer.current=null}await saveCollaboration(instructionText)};
+  const closeCollaboration=async()=>{const current=settingsScope==='global'?settings?.global:settings?.document;if(settings&&instructionText!==(current?.content||''))await saveInstructionNow();setSettingsOpen(false)};
   const backToHome=async()=>{
     if(review.editing){const saved=await review.switchToReview();if(!saved)return;}
     setDocId(null);
@@ -708,6 +719,8 @@ export function SpaceApp({ adapter, t = defaultT }) {
       .sort((a,b)=>sort==='title' ? (a.title||a.id||'').localeCompare(b.title||b.id||'',undefined,{numeric:true}) : time(b)-time(a));
   },[documents,query,filter,sort]);
   const home=!docId;
+  const savedInstruction=settingsScope==='global'?settings?.global:settings?.document;
+  const instructionDirty=Boolean(settings)&&instructionText!==(savedInstruction?.content||'');
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
       <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span><small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></header>
@@ -724,15 +737,14 @@ export function SpaceApp({ adapter, t = defaultT }) {
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
       <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-            <div className="space-header-tools">{review.doc&&<div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>}{review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>} {review.doc&&<><ReviewZoomControls review={review} t={t}/>{supportsCapability(adapter.capabilities,'files.export.save')&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}</>}</div>
+            <div className="space-header-tools">{review.doc&&<button type="button" className="space-collab-trigger" onClick={()=>openCollaboration('document')}>{t('collab.open')}</button>}{review.doc&&<div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>}{review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>} {review.doc&&<><ReviewZoomControls review={review} t={t}/>{supportsCapability(adapter.capabilities,'files.export.save')&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}</>}</div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}
     {!home&&<div className="space-message" role="status" aria-live="polite">{review.editSaveError ? '' : message || (review.doc ? review.message : '')}</div>}
-    <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} className="space-delete-dialog">
-      <h2 id={deleteTitleId}>{t('document.deleteTitle')}</h2>
+    <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} title={t('document.deleteTitle')} closeLabel={t('dialog.close')} className="space-delete-dialog" actions={<><button type="button" autoFocus disabled={busy} onClick={()=>setDeleteTarget(null)}>{t('document.deleteCancel')}</button><button type="button" className="is-danger" disabled={busy} onClick={deleteDocument}>{t('document.deleteConfirm')}</button></>}>
       <p>{t('document.deleteDescription',{title:deleteTarget?.title || deleteTarget?.id || ''})}</p>
-      <div className="space-delete-actions"><button type="button" autoFocus disabled={busy} onClick={()=>setDeleteTarget(null)}>{t('document.deleteCancel')}</button><button type="button" className="is-danger" disabled={busy} onClick={deleteDocument}>{t('document.deleteConfirm')}</button></div>
     </SpaceDialog>
+    <SpaceDialog open={settingsOpen} onClose={closeCollaboration} labelledBy="space-collab-title" title={t('collab.documentTitle')} closeLabel={t('dialog.close')} closeOnBackdrop actions={<button type="button" className="is-primary" disabled={!instructionDirty||instructionSaveState==='saving'||settingsBusy||Boolean(settingsError)} onClick={saveInstructionNow}>{t('collab.save')}</button>}>{settingsError&&<p className="space-collab-error" role="alert">{settingsError}</p>}{settingsBusy&&!settings?<p role="status">{t('collab.loading')}</p>:<><textarea rows="8" maxLength={12000} value={instructionText} onChange={event=>{setSettingsError('');setInstructionSaveState('idle');setInstructionText(event.target.value)}} placeholder={t('collab.placeholder')}/><p className="space-collab-save-status" role="status">{instructionSaveState==='saving'?t('collab.saving'):instructionSaveState==='saved'?t('collab.saved'):instructionSaveState==='error'?t('collab.saveError'):''}</p></>}</SpaceDialog>
   </div>;
 }

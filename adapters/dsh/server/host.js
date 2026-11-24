@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { SpaceService, documentWithTitle } from '../../../packages/review-core/src/space-service.js';
+import { CollaborationStore } from '../../../packages/review-core/src/collaboration-store.js';
 
 /** Host-facing façade. All mutations share the document store used by MCP. */
 export function createHostApi({ home, prompt, getUser, resolveTarget }) {
   const space = new SpaceService(home);
+  const collaboration = new CollaborationStore(home);
   space.markInterruptedUnknown();
   const dispatch = async (method, args = {}) => {
     switch (method) {
@@ -18,8 +20,10 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
         return space.createDocument({ id: `doc-${operationId}`.slice(0, 200), content: documentWithTitle(title), operationId });
       }
       case 'readDocument': return space.readDocument(args.docId);
+      case 'readCollaboration': return collaboration.readInstructions(args.docId);
+      case 'saveInstructions': return collaboration.saveInstructions(args);
       case 'deleteDocument': {
-        return space.deleteDocument(args.docId);
+        const result=space.deleteDocument(args.docId);collaboration.deleteDocument(args.docId);return result;
       }
       case 'decide': return space.decide(args);
       case 'updateDocument': return space.updateContent(args);
@@ -77,5 +81,5 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
       default: throw Object.assign(new Error('未知操作'),{code:'METHOD_NOT_FOUND'});
     }
   };
-  return { dispatch, close() {space.close();} };
+  return { dispatch, collaboration, close() {collaboration.close();space.close();} };
 }

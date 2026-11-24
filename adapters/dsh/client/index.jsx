@@ -147,7 +147,7 @@ export async function openSpacePicker(ctx, sessionId, t) {
   if(!binding) return;
   const documents=await api('listDocuments');
   if(ctx.sessions.binding(sessionId)!==binding) return;
-  const modal=document.createElement('dialog'); modal.className='space-dialog space-picker-dialog'; modal.setAttribute('aria-labelledby','space-picker-title');
+  const modal=document.createElement('dialog'); modal.className='space-picker-dialog'; modal.setAttribute('aria-labelledby','space-picker-title');
   const title=document.createElement('h2');title.id='space-picker-title';title.textContent=t('picker.title');modal.append(title);
   const description=document.createElement('p');description.textContent=t('picker.description');modal.append(description);
   const list=document.createElement('fieldset');const legend=document.createElement('legend');legend.textContent=t('picker.documents');list.append(legend);
