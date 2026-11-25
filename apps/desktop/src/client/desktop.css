@@ -84,6 +84,10 @@ body {
   flex: 1 1 0;
   min-block-size: 0;
   overflow: auto;
+  scrollbar-width: none;
+}
+.webapp-content > .agent-setup::-webkit-scrollbar {
+  display: none;
 }
 
 .agent-setup {
@@ -93,7 +97,7 @@ body {
   color: #303128;
 }
 
-.agent-setup-heading { max-inline-size: 570px; margin-block-end: 34px; }
+.agent-setup-heading { margin-block-end: 34px; }
 .agent-kicker {
   color: #8a6b3e;
   font-size: 11px;
