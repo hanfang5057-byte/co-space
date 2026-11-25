@@ -2,6 +2,15 @@
 
 All notable changes to the DSH plugin `dsh-plugin-space` are recorded here. The plugin follows Semantic Versioning.
 
+## 0.1.8
+
+Security and distribution update.
+
+- Apply DSH's connection admission check (`ctx.connection.requestRejection`) to the CoSpace HTTP route before dispatch; reject requests without a valid Host/Origin and browser credential, and fail closed when the connection service is unavailable.
+- Add tests for rejected, missing-connection, and admitted HTTP requests.
+- Prefer the immediately updated GitHub raw index and keep jsDelivr and GitHub Pages as mirrors.
+- Point the package homepage at the source repository.
+
 ## 0.1.7
 
 Distribution and documentation release; no runtime behavior changes.
