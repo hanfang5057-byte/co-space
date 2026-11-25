@@ -24,6 +24,6 @@ Documents, suggestions, comments, and comment-handling results are stored locall
 ## Links
 
 - [Source and documentation](https://github.com/hanfang5057-byte/co-space)
-- [Plugin index](https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json)
+- [Plugin index](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json)
 - [Review model and limits](https://github.com/hanfang5057-byte/co-space/tree/main/docs)
 - [Security policy](https://github.com/hanfang5057-byte/co-space/blob/main/SECURITY.md)

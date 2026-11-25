@@ -18,7 +18,7 @@ DSH 插件包名为 `dsh-plugin-space`，已发布到 npm。
 
 - **DSH Desktop / Web**：打开左侧 **Plugins**，点 **Add plugin**，输入 `dsh-plugin-space` 并确认安装；安装后启用，左侧栏出现 **CoSpace** 入口。
 - **命令行**：`dsh plugin add dsh-plugin-space`。命令安装到当前 profile；Desktop 用户优先用界面安装，避免装进另一个 profile。
-- **从插件市场发现**：在 **Plugins → Experimental plugins** 开启 **Custom plugin indexes**，再到 **Discover → Add index source** 添加 `https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`（更新可能有缓存延迟；若打不开可改用 `https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`），搜索 CoSpace 安装。
+- **从插件市场发现**：在 **Plugins → Experimental plugins** 开启 **Custom plugin indexes**，再到 **Discover → Add index source** 添加 `https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`（立即更新；若打不开可改用 `https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`），搜索 CoSpace 安装。
 - **离线 / 内网**：从 [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases) 下载 `dsh-plugin-space-<version>.tgz`，运行 `dsh plugin add ./dsh-plugin-space-<version>.tgz`。
 - 插件声明 `engines.dsh = ^0.2.2-rc.5`、Node.js ≥ 24；DSH 升级大版本后需要重新核对兼容性。
 - 本地开发时修改源码后，按下方「打包」中的命令构建，再将生成的目录安装到对应宿主。
@@ -104,7 +104,7 @@ npm run build:dsh
 
 品牌名称、简介和图标源文件的唯一来源是 `packages/brand/metadata.json`；共享 UI、DSH 插件包和市场索引均从这里读取。`description` 同时用于插件详情页、npm 包和 market 索引的简介，图标由 `icon` 指定。修改这些品牌字段后运行 `npm run build:dsh`，刷新 DSH 包、市场索引和图标。
 
-市场索引的版本列表不再手工维护。发布前运行 `node scripts/sync-market.mjs`，它从 npm registry 拉取已发布版本、发布时间和 `engines.dsh`，并写入周下载量与 GitHub 星标排序键；`node scripts/sync-market.mjs --check` 只校验现有索引。索引同时发布到 jsDelivr 镜像（`https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`）、GitHub raw（`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`）和 GitHub Pages（`https://hanfang5057-byte.github.io/co-space/market/index.json`）；落地页由 Pages 部署发布。
+市场索引的版本列表不再手工维护。发布前运行 `node scripts/sync-market.mjs`，它从 npm registry 拉取已发布版本、发布时间和 `engines.dsh`，并写入周下载量与 GitHub 星标排序键；`node scripts/sync-market.mjs --check` 只校验现有索引。索引同时发布到 GitHub raw（`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`）、jsDelivr 镜像（`https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`）和 GitHub Pages（`https://hanfang5057-byte.github.io/co-space/market/index.json`）；落地页由 Pages 部署发布。
 
 已把本地插件以 `link:` 方式安装到 DSH profile 时，用监听模式开发：
 
