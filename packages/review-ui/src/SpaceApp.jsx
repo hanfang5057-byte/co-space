@@ -15,6 +15,18 @@ import './space.css';
 
 const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
+function HomeSelect({ label, value, options, onChange }) {
+  const [open,setOpen]=useState(false);
+  const root=useRef(null);
+  useEffect(()=>{if(!open)return;const close=event=>{if(!root.current?.contains(event.target))setOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[open]);
+  const current=options.findIndex(option=>option.value===value);
+  return <div className="space-home-select" ref={root}>
+    <button type="button" className="space-home-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const direction=event.key==='ArrowDown'?1:-1;onChange(options[(current+direction+options.length)%options.length].value)}}}>
+      <span>{options[current]?.label}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
+    </button>
+    {open&&<div className="space-home-select-menu" role="listbox" aria-label={label}>{options.map(option=><button type="button" role="option" aria-selected={value===option.value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false)}}>{option.label}{value===option.value&&<span aria-hidden="true">✓</span>}</button>)}</div>}
+  </div>;
+}
 function scrollToSourceOffset(surface, offset, markdownSource) {
   if (!surface) return false;
   if (scrollSourceRange(surface, offset, offset, markdownSource)) return true;
@@ -674,7 +686,6 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(null),[settingsError,setSettingsError]=useState(''),[settingsScope,setSettingsScope]=useState('document'),[instructionText,setInstructionText]=useState(''),[instructionSaveState,setInstructionSaveState]=useState('idle'),[settingsBusy,setSettingsBusy]=useState(false);
-  const instructionSaveTimer=useRef(null);
   const [exporting,setExporting]=useState(false);
   const [promptTask,setPromptTask]=useState(null),[copiedPrompt,setCopiedPrompt]=useState(false);
   const deleteTitleId=useId();
@@ -734,9 +745,8 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
   };
   const openCollaboration=async(scope)=>{setSettings(null);setSettingsError('');setSettingsScope(scope);setInstructionText('');setInstructionSaveState('idle');setSettingsOpen(true);setSettingsBusy(true);try{const next=await call('readCollaboration',{docId:scope==='document'?docId:undefined});setSettings(next);setInstructionText((scope==='global'?next.global:next.document)?.content||'')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t))}finally{setSettingsBusy(false)}};
   const saveCollaboration=useCallback(async(content)=>{const current=settingsScope==='global'?settings?.global:settings?.document;setInstructionSaveState('saving');try{await call('saveInstructions',{scope:settingsScope,docId:settingsScope==='document'?docId:undefined,content,baseVersion:current?.version||0,operationId:requestId()});const next=await call('readCollaboration',{docId:settingsScope==='document'?docId:undefined});setSettings(next);setInstructionSaveState('saved')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t));setInstructionSaveState('error')}},[call,docId,settingsScope,settings,t]);
-  useEffect(()=>{if(!settingsOpen||!settings||settingsError)return;const current=settingsScope==='global'?settings.global:settings.document;if(instructionText===(current?.content||''))return;const timer=setTimeout(()=>{instructionSaveTimer.current=null;saveCollaboration(instructionText)},450);instructionSaveTimer.current=timer;return()=>{clearTimeout(timer);if(instructionSaveTimer.current===timer)instructionSaveTimer.current=null}},[settingsOpen,settings,settingsError,settingsScope,instructionText,saveCollaboration]);
-  const saveInstructionNow=async()=>{if(instructionSaveTimer.current){clearTimeout(instructionSaveTimer.current);instructionSaveTimer.current=null}await saveCollaboration(instructionText)};
-  const closeCollaboration=async()=>{const current=settingsScope==='global'?settings?.global:settings?.document;if(settings&&instructionText!==(current?.content||''))await saveInstructionNow();setSettingsOpen(false)};
+  const saveInstructionNow=async()=>{await saveCollaboration(instructionText)};
+  const closeCollaboration=()=>{setSettingsOpen(false)};
   const backToHome=async()=>{
     if(review.editing){const saved=await review.switchToReview();if(!saved)return;}
     setDocId(null);
@@ -760,7 +770,7 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
       <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span><small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></div><div className="space-header-tools">{onOpenAgents&&<button type="button" className="space-collab-trigger" onClick={onOpenAgents}>Agent 接入</button>}{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
-        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><label><span className="space-visually-hidden">{t('home.filter')}</span><select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">{t('home.filterAll')}</option><option value="pending">{t('home.filterPending')}</option></select></label><label><span className="space-visually-hidden">{t('home.sort')}</span><select value={sort} onChange={event=>setSort(event.target.value)}><option value="recent">{t('home.sortRecent')}</option><option value="title">{t('home.sortTitle')}</option></select></label></div>}
+        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
         {shownDocuments.length ? <div className="space-home-grid">{shownDocuments.map((item,index)=><article className="space-home-card" key={item.id}>
           <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>setDocId(item.id)}>
             <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">{BRAND.name.en.toUpperCase()}</span></span>
