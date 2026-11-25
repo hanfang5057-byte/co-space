@@ -19,7 +19,7 @@ export function documentFromMarkdown(text) {
 export function documentWithTitle(title) {
   if (typeof title !== 'string' || !title.trim()) throw Object.assign(new Error('title must be a non-empty string'), { code: 'INVALID_INPUT' });
   const text = title.trim().slice(0, 100);
-  return `# ${text}\n\n`;
+  return `# ${text}\n\n\n`;
 }
 
 export class SpaceService {

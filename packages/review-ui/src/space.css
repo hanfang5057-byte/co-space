@@ -720,6 +720,33 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
     visibility: visible !important;
   }
 }
+
+/* Preview toolbar: keep frequent controls visible and tuck secondary tools away. */
+.space-preview-top .space-header-tools { justify-content: flex-end; margin-inline-start: auto; gap: 8px; min-block-size: 48px; padding: 4px 6px; border: 1px solid var(--space-border); border-radius: 14px; background: var(--space-card); box-shadow: 0 2px 8px color-mix(in srgb, var(--space-text) 5%, transparent); }
+.space-preview-top .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 38px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.space-preview-top .space-mode-switch { display: inline-flex; align-items: center; min-block-size: 30px; block-size: 30px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 8px; background: transparent; }
+.space-app .space-preview-top .space-mode-switch button { min-block-size: 28px; padding-inline: 12px; border-radius: 7px; font-size: 13px; line-height: 1; }
+.space-preview-top .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--space-border); border-radius: 0; background: transparent; }
+.space-app .space-preview-top .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
+.space-preview-top .space-zoom-tools span { min-inline-size: 40px; color: var(--space-text); font-size: 12px; }
+.space-tools-menu { position: relative; z-index: 30; display: grid; place-items: center; inline-size: 38px; block-size: 38px; margin-inline-end: 2px; padding-inline-end: 6px; border-inline-end: 1px solid var(--space-border); }
+.space-app .space-tools-menu-trigger { display: grid; place-items: center; inline-size: 34px; block-size: 34px; min-block-size: 34px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--space-muted); }
+.space-app .space-tools-menu-trigger:hover:not(:disabled), .space-app .space-tools-menu-trigger[aria-expanded="true"] { background: color-mix(in srgb, var(--space-text) 5%, var(--space-card)); color: var(--space-text); }
+.space-tools-menu-panel { position: absolute; inset-block-start: calc(100% + 8px); inset-inline-start: 0; z-index: 40; inline-size: 210px; padding: 6px; border: 1px solid var(--space-border); border-radius: 10px; background: var(--space-card); box-shadow: 0 10px 30px rgba(40,34,24,.14); }
+.space-tools-menu-panel p { margin: 5px 8px 3px; color: var(--space-muted); font-size: 11px; font-weight: 600; }
+.space-tools-menu-divider { block-size: 1px; margin: 5px 4px; background: var(--space-border); }
+.space-app .space-tools-menu-panel button { display: flex; align-items: center; justify-content: space-between; inline-size: 100%; min-block-size: 36px; margin: 0; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--space-text); font-size: 13px; text-align: start; cursor: pointer; }
+.space-app .space-tools-menu-panel button:hover:not(:disabled), .space-app .space-tools-menu-panel button:focus-visible { background: color-mix(in srgb, var(--space-text) 5%, var(--space-card)); }
+.space-app .space-tools-menu-panel button:disabled { cursor: wait; opacity: .55; }
+.space-tools-menu-panel button span { color: var(--space-muted); font-size: 11px; }
+.space-app .space-preview-top .space-send-header { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-block-size: 38px; block-size: 38px; box-sizing: border-box; padding-inline: 14px; border: 0; border-radius: 10px; background: var(--space-text); color: var(--space-paper); font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; box-shadow: 0 2px 6px rgba(20,16,10,.12); }
+.space-app .space-preview-top .space-send-header:hover:not(:disabled) { filter: brightness(1.08); }
+.space-preview-top .space-header-tools :is(button, [tabindex="0"]):focus-visible { outline: 2px solid var(--space-accent); outline-offset: 2px; }
+.space-home-header .space-header-tools { justify-content: flex-end; gap: 4px; min-block-size: 48px; margin-inline-start: auto; padding: 4px; border: 1px solid var(--space-border); border-radius: 14px; background: var(--space-card); box-shadow: 0 2px 8px color-mix(in srgb, var(--space-text) 5%, transparent); }
+.space-app .space-home-header .space-collab-trigger { min-block-size: 38px; block-size: 38px; padding-inline: 12px; border: 0; border-radius: 9px; background: transparent; color: var(--space-text); font-size: 13px; font-weight: 500; }
+.space-app .space-home-header .space-collab-trigger:hover:not(:disabled) { background: color-mix(in srgb, var(--space-text) 5%, var(--space-card)); }
+.space-app .space-home-header .space-home-new { min-block-size: 38px; block-size: 38px; padding-inline: 14px; border-radius: 9px; box-shadow: none; }
+.space-home-header .space-header-tools :is(button, [tabindex="0"]):focus-visible { outline: 2px solid var(--space-accent); outline-offset: 2px; }
 @media (pointer: coarse) {
   .space-app .space-comment-delete-icon { inline-size: 40px; block-size: 40px; min-block-size: 40px; inset-block-start: 8px; inset-inline-end: 8px; opacity: 1; pointer-events: auto; }
   .space-app .space-suggestion-actions button { inline-size: 40px; block-size: 40px; min-block-size: 40px; }

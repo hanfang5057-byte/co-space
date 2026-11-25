@@ -1,6 +1,6 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft } from 'lucide-react';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
@@ -54,34 +54,32 @@ function IconButton({ label, children, ...props }) {
   return <button type="button" aria-label={label} title={label} {...props}>{children}</button>;
 }
 
-function ExportMenu({ exporting, onExport, t }) {
+function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, onOpenAgents, canExport, t }) {
   const [open,setOpen]=useState(false);
-  const rootRef=useRef(null), triggerRef=useRef(null), closeTimer=useRef(null);
+  const rootRef=useRef(null), triggerRef=useRef(null);
   const panelId=useId();
-  const cancelClose=()=>{clearTimeout(closeTimer.current);closeTimer.current=null;};
   useEffect(()=>{
     if(!open) return;
     const dismiss=event=>{if(!rootRef.current?.contains(event.target)) setOpen(false);};
+    const keydown=event=>{if(event.key==='Escape'){setOpen(false);triggerRef.current?.focus();}};
     document.addEventListener('pointerdown',dismiss);
-    return ()=>document.removeEventListener('pointerdown',dismiss);
+    document.addEventListener('keydown',keydown);
+    return ()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('keydown',keydown);};
   },[open]);
-  useEffect(()=>()=>clearTimeout(closeTimer.current),[]);
-  const leave=event=>{
-    if(event.pointerType==='touch') return;
-    cancelClose();
-    closeTimer.current=setTimeout(()=>{
-      closeTimer.current=null;
-      if(!rootRef.current?.contains(document.activeElement)) setOpen(false);
-    },180);
-  };
-  const select=format=>{cancelClose();setOpen(false);void onExport(format);};
-  return <div className="space-export-menu" ref={rootRef}
-    onPointerEnter={event=>{if(event.pointerType!=='touch'){cancelClose();setOpen(true);}}}
-    onPointerLeave={leave}
-    onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget)){cancelClose();setOpen(false);}}}
-    onKeyDown={event=>{if(event.key==='Escape' && open){event.preventDefault();event.stopPropagation();cancelClose();setOpen(false);triggerRef.current?.focus();}}}>
-    <button ref={triggerRef} type="button" className="space-export-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{cancelClose();setOpen(value=>!value);}}>{exporting?t('export.busy'):t('export.button')}</button>
-    {open && <div id={panelId} className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>select('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>select('docx')}>Word <span>.docx</span></button></div>}
+  const run=action=>{setOpen(false);action?.();};
+  return <div className="space-tools-menu" ref={rootRef}>
+    <button ref={triggerRef} type="button" className="space-tools-menu-trigger" aria-label={t('toolbar.more')} title={t('toolbar.more')} aria-haspopup="true" aria-expanded={open} aria-controls={panelId} onClick={()=>setOpen(value=>!value)}><MoreHorizontal size={19} aria-hidden="true"/></button>
+    {open&&<div id={panelId} className="space-tools-menu-panel">
+      {onOpenAgents&&<button type="button" onClick={()=>run(onOpenAgents)}>Agent 接入</button>}
+      {onReview&&<button type="button" onClick={()=>run(onReview)}>让 Agent 审阅</button>}
+      {onPreferences&&<button type="button" onClick={()=>run(onPreferences)}>{t('collab.open')}</button>}
+      {canExport&&<>
+        <div className="space-tools-menu-divider" role="separator"/>
+        <p>{t('export.button')}</p>
+        <button type="button" disabled={exporting} onClick={()=>run(()=>onExport('md'))}>Markdown <span>.md</span></button>
+        <button type="button" disabled={exporting} onClick={()=>run(()=>onExport('docx'))}>Word <span>.docx</span></button>
+      </>}
+    </div>}
   </div>;
 }
 
@@ -129,7 +127,7 @@ function SpaceDialog({ open, onClose, labelledBy, title, closeLabel, className =
  * @param {{mode?: 'copy', canCreate?: boolean, openSession?: (sessionId: string) => void} | null} sendTarget - optional comment processing action mode.
  * @returns {object} review state and the actions that change it.
  */
-export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = null) {
+export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = null, autoEditDocId = null) {
   const sendTarget=adapter?.conversation || null;
   const [doc,setDoc]=useState(null);
   const [comments,setComments]=useState([]);
@@ -155,6 +153,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     const sequence=++loadSequence.current;
     const next=await call('readDocument',{docId:id});
     if (sequence!==loadSequence.current) return;
+    if(id===autoEditDocId){setEditing(true);setEditBaseVersion(next?.version??null);setEditDirty(false)}
     const nextComments=next?.comments || [];
     const signature=JSON.stringify(next);
     const contentChanged=!snapshot.current || snapshot.current.content!==next?.content || snapshot.current.version!==next?.version;
@@ -162,7 +161,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     snapshot.current={signature,content:next?.content,version:next?.version};
     if(contentChanged) setSelection(null);
     if (next?.title) rememberDocumentTitle(id,next.title,api);
-  },[call]);
+  },[call,autoEditDocId]);
   useEffect(()=>{
     setEditing(false);setEditBaseVersion(null);setEditDirty(false);editorRef.current=null;
     if (!docId) {
@@ -254,7 +253,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,editSaveError,dismissEditSaveError,editorRef,startEditing,switchToReview,markEditDirty:()=>setEditDirty(true)};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,dismissEditSaveError,editorRef,startEditing,switchToReview,markEditDirty:()=>setEditDirty(true)};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -577,6 +576,15 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     hoverTimer.current=setTimeout(()=>{hoverTimer.current=null;setHoverPreview(null);},180);
   };
   const trackHover=event=>{
+    // Insertions are rendered as widgets/ins nodes outside the source text
+    // spans, so map their explicit suggestion id before trying source offsets.
+    const suggestionId=event.target?.closest?.('[data-suggestion-id]')?.getAttribute('data-suggestion-id');
+    const insertedAnnotation=suggestionId==null?null:suggestionItems.find(item=>String(item.id)===suggestionId);
+    if(insertedAnnotation){
+      keepHover();
+      setHoverPreview(previous=>previous?.key===insertedAnnotation.key ? previous : {key:insertedAnnotation.key,left:event.clientX,top:event.clientY});
+      return;
+    }
     const range=document.caretRangeFromPoint?.(event.clientX,event.clientY);
     const point=range
       ? {node:range.startContainer,offset:range.startOffset}
@@ -594,12 +602,33 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     }
     else closeHover();
   };
+  const handleMarkdownLinkClick=event=>{
+    const link=event.target?.closest?.('a[href]');
+    if(!link||!surface.current?.contains(link)) return;
+    const href=link.getAttribute('href')?.trim();
+    if(!href) return;
+    let destination;
+    try { destination=new URL(href,window.location.href); }
+    catch { event.preventDefault();return; }
+    const current=new URL(window.location.href);
+    if(href.startsWith('#')&&destination.origin===current.origin&&destination.pathname===current.pathname&&destination.search===current.search) return;
+    if(['http:','https:','mailto:','tel:'].includes(destination.protocol)) {
+      // Tauri's shell plugin opens external links with target="_blank" in the
+      // system browser; regular browsers keep the CoSpace tab and open a tab.
+      link.target='_blank';
+      link.rel='noopener noreferrer';
+      return;
+    }
+    // DSH resource links are resolved by the host. Other schemes are not
+    // allowed to replace the active CoSpace view.
+    if(destination.protocol!=='dsh-resource:') event.preventDefault();
+  };
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
-      <div ref={surface} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} suggestions={suggestions}/></div>
+      <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.deleted?' is-deleted':''}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
@@ -641,6 +670,7 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
   const sessionId=adapter.conversation?.current?.id || null;
   const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
+  const [autoEditDocId,setAutoEditDocId]=useState(null);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(null),[settingsError,setSettingsError]=useState(''),[settingsScope,setSettingsScope]=useState('document'),[instructionText,setInstructionText]=useState(''),[instructionSaveState,setInstructionSaveState]=useState('idle'),[settingsBusy,setSettingsBusy]=useState(false);
@@ -650,7 +680,7 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
   const deleteTitleId=useId();
   const editUnavailableTipId=useId();
   const user=useCurrentUser(adapter.identity?.getCurrentUser);
-  const review=useSpaceReview(api,docId,sessionId,t,adapter);
+  const review=useSpaceReview(api,docId,sessionId,t,adapter,autoEditDocId);
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
   const documentsSnapshot=useRef(null);
@@ -668,7 +698,7 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
     setBusy(true);setMessage('');
     try {
       const created=await call('createDocument',{title:t('document.untitled'),operationId:requestId()});
-      await reloadDocs();setDocId(created.id);
+      await reloadDocs();setAutoEditDocId(created.id);setDocId(created.id);
     } catch (e) { setMessage(errorText(e,t)); }
     finally { setBusy(false); }
   };
@@ -741,7 +771,15 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
       <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-            <div className="space-header-tools">{onOpenAgents&&<button type="button" className="space-collab-trigger" onClick={onOpenAgents}>Agent 接入</button>}{review.doc&&adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'review',docId})}>让 Agent 审阅</button>}{review.doc&&<button type="button" className="space-collab-trigger" onClick={()=>openCollaboration('document')}>{t('collab.open')}</button>}{review.doc&&<div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>}{review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>} {review.doc&&<><ReviewZoomControls review={review} t={t}/>{supportsCapability(adapter.capabilities,'files.export.save')&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}</>}</div>
+            <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
+              {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} onOpenAgents={onOpenAgents} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
+              {review.doc&&<div className="space-toolbar-group is-view">
+                <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
+                <ReviewZoomControls review={review} t={t}/>
+              </div>}
+              {review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>}
+              {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}
+            </div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}

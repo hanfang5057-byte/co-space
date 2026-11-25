@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { CrepeBuilder } from '@milkdown/crepe/builder';
-import { Plugin } from '@milkdown/kit/prose/state';
+import { Plugin, Selection } from '@milkdown/kit/prose/state';
+import { editorViewCtx } from '@milkdown/kit/core';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { $prose } from '@milkdown/kit/utils';
 import { blockEdit } from '@milkdown/crepe/feature/block-edit';
@@ -67,7 +68,7 @@ function suggestionPlugin(surface, markdown, suggestions, onReady) {
   });
 }
 
-export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsReady, t, readOnly = false, suggestions = [] }) {
+export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsReady, t, readOnly = false, suggestions = [], autoFocus = false }) {
   const rootRef = useRef(null);
   const callbacksRef = useRef({ onChange, onDecorationsReady, t });
   callbacksRef.current = { onChange, onDecorationsReady, t };
@@ -106,8 +107,21 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
         created = false;
         return;
       }
+      if (autoFocus && !readOnly) builder.editor.action(ctx => {
+        const view = ctx.get(editorViewCtx);
+        const { doc, schema } = view.state;
+        if (doc.lastChild?.type !== schema.nodes.paragraph || doc.lastChild.content.size > 0) {
+          view.dispatch(view.state.tr.insert(doc.content.size, schema.nodes.paragraph.create()));
+        }
+      });
       ready = true;
       editorRef.current = builder;
+      if (autoFocus && !readOnly) builder.editor.action(ctx => {
+        const view = ctx.get(editorViewCtx);
+        const end = view.state.doc.content.size - 1;
+        view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(end), 1)));
+        view.focus();
+      });
     };
 
     initialize().catch(error => {
@@ -122,7 +136,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
       if (editorRef.current === builder) editorRef.current = null;
       if (builder && created) void builder.destroy();
     };
-  }, [readOnly, markdown, suggestions]);
+  }, [readOnly, markdown, suggestions, autoFocus]);
 
   return <div ref={rootRef} className={`space-milkdown-root${readOnly ? ' is-readonly' : ''}`} aria-label={t('edit.contentLabel')} />;
 }
