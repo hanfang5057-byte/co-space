@@ -4,6 +4,6 @@
 
 Agent 接入页由本地适配器检测并配置 CodeBuddy 与 WorkBuddy。用户逐个点击“一键接入”后，CoSpace 只更新自己的 MCP 条目并复制协作 Skill，保留其他配置；接入后需重启对应 Agent。CodeBuddy 配置写入 `~/.codebuddy/`，WorkBuddy 配置写入 `~/.workbuddy/mcp.json`；两者的 Skill 分别安装到对应目录下的 `skills/cospace-review/`。
 
-开发版要求 Node.js 24 或更高版本、Rust stable 和 `npm install`。在仓库根目录运行 `npm run desktop:dev` 进行开发，运行 `npm run desktop:package` 打包当前系统。最终发行文件统一整理在 `dist/releases/desktop/<平台>/`：macOS 提供 DMG，Windows 提供 MSI/NSIS 安装包，Linux 提供 deb/AppImage。Rust 中间编译文件保留在 `apps/desktop/src-tauri/target/`。Node 运行时作为 Tauri sidecar 随应用分发，用户无需安装 Node 或 npm。Skill 随应用一起打包，首次接入不需要下载 Skill；Agent 与桌面应用通过本机文件和 stdio MCP 通信。
+开发版要求 Node.js 24 或更高版本、Rust stable 和 `npm install`。在仓库根目录运行 `npm run desktop:dev` 进行开发；桌面 UI 源码变更会自动重建并刷新页面，刷新会重置当前页面状态。Node sidecar 与 Rust 源码变更需重启开发进程。运行 `npm run desktop:package` 打包当前系统。最终发行文件统一整理在 `dist/releases/desktop/<平台>/`：macOS 提供 DMG，Windows 提供 MSI/NSIS 安装包，Linux 提供 deb/AppImage。Rust 中间编译文件保留在 `apps/desktop/src-tauri/target/`。Node 运行时作为 Tauri sidecar 随应用分发，用户无需安装 Node 或 npm。Skill 随应用一起打包，首次接入不需要下载 Skill；Agent 与桌面应用通过本机文件和 stdio MCP 通信。
 
 macOS 本地打包会为 `.app` 生成并验证 ad-hoc 签名。正式对外分发需设置 `APPLE_SIGNING_IDENTITY` 使用 Developer ID 签名，并完成 Apple notarization；本地构建不会自动提交公证。

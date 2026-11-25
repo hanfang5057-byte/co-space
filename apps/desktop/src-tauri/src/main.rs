@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Mutex;
+use std::path::PathBuf;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 use url::Url;
@@ -13,13 +14,19 @@ fn main() {
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
             let server = resource_dir.join("desktop/server.bundle.cjs");
-            let (mut events, child) = app
+            let mut sidecar = app
                 .shell()
                 .sidecar("cospace-node")?
                 .args([server.to_string_lossy().into_owned()])
                 .env("COSPACE_OPEN_BROWSER", "0")
-                .env("COSPACE_RESOURCE_DIR", resource_dir.to_string_lossy().into_owned())
-                .spawn()?;
+                .env("COSPACE_RESOURCE_DIR", resource_dir.to_string_lossy().into_owned());
+            if cfg!(debug_assertions) {
+                let webapp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../build/webapp");
+                sidecar = sidecar
+                    .env("COSPACE_DEV", "1")
+                    .env("COSPACE_WEBAPP_DIST", webapp.to_string_lossy().into_owned());
+            }
+            let (mut events, child) = sidecar.spawn()?;
             app.manage(NodeSidecar(Mutex::new(Some(child))));
 
             let handle = app.handle().clone();

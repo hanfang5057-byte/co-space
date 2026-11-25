@@ -17,7 +17,7 @@
   "scripts": {
     "build": "node scripts/build-webapp.mjs",
     "prepare:tauri": "npm run build && node scripts/prepare-tauri.mjs",
-    "dev": "npm run prepare:tauri && npm exec tauri -- dev --config src-tauri/tauri.conf.json",
+    "dev": "node scripts/dev.mjs",
     "package": "npm run prepare:tauri && node scripts/build-tauri.mjs && node scripts/package-release.mjs",
     "smoke": "node scripts/smoke-sidecar.mjs",
     "web": "npm run build && node src/server/index.js",

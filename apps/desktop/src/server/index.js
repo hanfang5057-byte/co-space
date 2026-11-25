@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -15,7 +15,8 @@ import { resolveWebHome } from '../shared/paths.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const resources = process.env.COSPACE_RESOURCE_DIR;
 const root = resources || path.resolve(here, '../../../..');
-const webappDist = resources ? path.join(root, 'dist/webapp') : path.resolve(here, '../../build/webapp');
+const devMode = process.env.COSPACE_DEV === '1';
+const webappDist = process.env.COSPACE_WEBAPP_DIST || (resources ? path.join(root, 'dist/webapp') : path.resolve(here, '../../build/webapp'));
 function openBrowser(url) {
   const [command, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
   const child = spawn(command, args, { detached: true, stdio: 'ignore' }); child.on('error', () => {}); child.unref();
@@ -24,17 +25,22 @@ export async function startWebApp({ port = Number(process.env.COSPACE_PORT || 0)
   await mkdir(home, { recursive: true, mode: 0o700 });
   const api = createHostApi({ home });
   const token = randomBytes(32).toString('base64url');
-  const index = await readFile(path.join(webappDist, 'index.html'));
-  const client = await readFile(path.join(webappDist, 'app.js'));
-  const css = await readFile(path.join(webappDist, 'app.css'));
   const httpHandler = createHttpHandler(api, { token });
   const server = createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(index.toString().replace('<!--COSPACE_TOKEN-->', `<script>window.__COSPACE_LOCAL_TOKEN__=${JSON.stringify(token)}</script>`)); return;
+      let index = await readFile(path.join(webappDist, 'index.html'), 'utf8');
+      index = index.replace('<!--COSPACE_TOKEN-->', `<script>window.__COSPACE_LOCAL_TOKEN__=${JSON.stringify(token)}</script>`);
+      if (devMode) index = index.replace('</body>', `<script>let v;setInterval(async()=>{try{const r=await fetch('/__dev/version',{cache:'no-store'});const n=await r.text();if(v&&v!==n)location.reload();v=n}catch{}},700)</script></body>`);
+      res.end(index); return;
     }
-    if (req.method === 'GET' && req.url === '/app.js') { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); res.end(client); return; }
-    if (req.method === 'GET' && req.url === '/app.css') { res.writeHead(200, { 'content-type': 'text/css; charset=utf-8' }); res.end(css); return; }
+    if (devMode && req.method === 'GET' && req.url === '/__dev/version') {
+      const assets = await Promise.all(['app.js', 'app.css'].map(name => stat(path.join(webappDist, name)).catch(() => null)));
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(assets.map(asset => asset ? `${asset.mtimeMs}:${asset.size}` : 'missing').join('|')); return;
+    }
+    if (req.method === 'GET' && req.url === '/app.js') { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': devMode ? 'no-store' : 'public, max-age=3600' }); res.end(await readFile(path.join(webappDist, 'app.js'))); return; }
+    if (req.method === 'GET' && req.url === '/app.css') { res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': devMode ? 'no-store' : 'public, max-age=3600' }); res.end(await readFile(path.join(webappDist, 'app.css'))); return; }
     if (req.url?.startsWith('/local/agents')) {
       if (req.headers['x-cospace-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`)) { res.writeHead(403); res.end(); return; }
       if (req.method === 'GET' && req.url === '/local/agents') {
