@@ -194,7 +194,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     && !suggestions.some(item=>['pending','conflicted'].includes(item.status))
     && !comments.some(item=>['pending','sending','failed','unknown'].includes(item.status));
   const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
-  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollToSourceOffset(surface.current,item.from,doc?.content?.length||0))setMessage(t('suggestion.unavailable'));};
+  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollToSourceOffset(surface.current,item.from,doc?.content||''))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
   const decide=(suggestionId,decision)=>perform(async()=>{await call('decide',{docId,suggestionId,decision,operationId:requestId()});await reload(docId)});
@@ -599,7 +599,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
-      <div ref={surface} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} t={t} readOnly={!editing}/></div>
+      <div ref={surface} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} suggestions={suggestions}/></div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.deleted?' is-deleted':''}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />

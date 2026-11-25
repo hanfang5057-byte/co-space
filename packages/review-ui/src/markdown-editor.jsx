@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { CrepeBuilder } from '@milkdown/crepe/builder';
+import { Plugin } from '@milkdown/kit/prose/state';
+import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
+import { $prose } from '@milkdown/kit/utils';
 import { blockEdit } from '@milkdown/crepe/feature/block-edit';
 import { cursor } from '@milkdown/crepe/feature/cursor';
 import { linkTooltip } from '@milkdown/crepe/feature/link-tooltip';
@@ -17,11 +20,57 @@ import '@milkdown/crepe/theme/common/placeholder.css';
 import '@milkdown/crepe/theme/common/toolbar.css';
 import '@milkdown/crepe/theme/common/table.css';
 import '@milkdown/crepe/theme/classic.css';
+import { readSourceSpans, sourceRangeToDom } from './markdown-dom.js';
 
-export function MarkdownEditor({ markdown, editorRef, onChange, t, readOnly = false }) {
+function suggestionPlugin(surface, markdown, suggestions, onReady) {
+  let decorations = DecorationSet.empty;
+  let destroyed = false;
+  const refresh = view => {
+    const spans = readSourceSpans(surface, markdown);
+    const next = [];
+    for (const item of suggestions) {
+      if (!['pending', 'conflicted'].includes(item.status)) continue;
+      const mapped = sourceRangeToDom(spans, item.from, item.to);
+      if (!mapped) continue;
+      let from, to;
+      try {
+        from = view.posAtDOM(mapped.range.startContainer, mapped.range.startOffset);
+        to = view.posAtDOM(mapped.range.endContainer, mapped.range.endOffset);
+      } catch { continue; }
+      if (item.expected && to > from) {
+        next.push(Decoration.inline(from, to, {
+          class: `space-suggestion-delete${item.status === 'conflicted' ? ' is-conflicted' : ''}`,
+          'data-suggestion-id': String(item.id),
+        }, { inclusiveStart: false, inclusiveEnd: false }));
+      }
+      if (item.replacement) {
+        const insertion = document.createElement('span');
+        insertion.className = `space-suggestion-insert${item.status === 'conflicted' ? ' is-conflicted' : ''}`;
+        insertion.dataset.suggestionId = String(item.id);
+        insertion.textContent = item.replacement;
+        insertion.setAttribute('aria-label', `建议新增：${item.replacement}`);
+        next.push(Decoration.widget(to, insertion, { key: `cospace-suggestion-${item.id}`, side: 1 }));
+      }
+    }
+    decorations = DecorationSet.create(view.state.doc, next);
+    view.dispatch(view.state.tr.setMeta('cospace-suggestion-decorations', true));
+    delete surface.__spaceSourceSpans;
+    readSourceSpans(surface, markdown);
+    onReady?.();
+  };
+  return new Plugin({
+    props: { decorations: () => decorations },
+    view(view) {
+      queueMicrotask(() => { if (!destroyed) refresh(view); });
+      return { destroy() { destroyed = true; } };
+    },
+  });
+}
+
+export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsReady, t, readOnly = false, suggestions = [] }) {
   const rootRef = useRef(null);
-  const callbacksRef = useRef({ onChange, t });
-  callbacksRef.current = { onChange, t };
+  const callbacksRef = useRef({ onChange, onDecorationsReady, t });
+  callbacksRef.current = { onChange, onDecorationsReady, t };
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +81,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, t, readOnly = fa
     const initialize = async () => {
       builder = new CrepeBuilder({ root: rootRef.current, defaultValue: markdown });
       builder.setReadonly(readOnly);
+      if (readOnly && suggestions.length) builder.editor.use($prose(() => suggestionPlugin(rootRef.current, markdown, suggestions, () => callbacksRef.current.onDecorationsReady?.())));
       builder
         .addFeature(cursor)
         .addFeature(listItem)
@@ -72,7 +122,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, t, readOnly = fa
       if (editorRef.current === builder) editorRef.current = null;
       if (builder && created) void builder.destroy();
     };
-  }, [readOnly]);
+  }, [readOnly, markdown, suggestions]);
 
   return <div ref={rootRef} className={`space-milkdown-root${readOnly ? ' is-readonly' : ''}`} aria-label={t('edit.contentLabel')} />;
 }
