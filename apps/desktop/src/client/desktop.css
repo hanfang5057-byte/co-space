@@ -32,24 +32,6 @@ body {
   background: #fbfaf7;
 }
 
-.webapp-sidebar-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  padding: 0 10px 26px;
-  color: #28291f;
-}
-
-.webapp-brand-mark {
-  inline-size: 34px;
-  block-size: 34px;
-  flex: none;
-  object-fit: contain;
-}
-.webapp-sidebar-brand strong, .webapp-sidebar-brand small { display: block; }
-.webapp-sidebar-brand strong { font-size: 14px; letter-spacing: -.02em; }
-.webapp-sidebar-brand small { margin-block-start: 2px; color: #89877d; font-size: 10px; }
-
 .webapp-sidebar-nav { display: grid; gap: 5px; }
 .webapp-sidebar-link {
   display: flex;
@@ -251,9 +233,7 @@ body {
 @media (max-width: 620px) {
   .webapp-shell { flex-direction: column; }
   .webapp-sidebar { flex: none; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; border-inline-end: 0; border-block-end: 1px solid #e6e1d7; }
-  .webapp-sidebar-brand { padding: 0; }
-  .webapp-sidebar-brand > span:last-child, .webapp-sidebar-footer { display: none; }
-  .webapp-brand-mark { inline-size: 30px; block-size: 30px; }
+  .webapp-sidebar-footer { display: none; }
   .webapp-sidebar-nav { display: flex; flex: 1; justify-content: flex-end; gap: 4px; }
   .webapp-sidebar-link { inline-size: auto; min-block-size: 38px; gap: 7px; padding-inline: 10px; font-size: 12px; }
   .agent-setup { inline-size: calc(100% - 32px); padding-block-start: 34px; }

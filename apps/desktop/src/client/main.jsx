@@ -2,7 +2,6 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Files, PlugZap } from 'lucide-react';
 import { SpaceApp } from '../../../../packages/review-ui/src/SpaceApp.jsx';
-import { brandIcon } from '../../../../packages/brand/brand.js';
 import { api } from '../../../../packages/transport-http/client.js';
 import '../../../../packages/review-ui/src/space.css';
 import './desktop.css';
@@ -38,7 +37,6 @@ function App() {
   }, []);
   return <div className="webapp-shell">
     <aside className="webapp-sidebar" aria-label="CoSpace 导航">
-      <div className="webapp-sidebar-brand"><img className="webapp-brand-mark" src={brandIcon} alt=""/><span><strong>CoSpace</strong><small>智联文档空间</small></span></div>
       <nav className="webapp-sidebar-nav" aria-label="主导航">
         <button type="button" className="webapp-sidebar-link" aria-current={page === 'workbench' ? 'page' : undefined} onClick={() => setPage('workbench')}><Files size={17} strokeWidth={1.8} aria-hidden="true"/><span>文档工作台</span></button>
         <button type="button" className="webapp-sidebar-link" aria-current={page === 'agents' ? 'page' : undefined} onClick={() => setPage('agents')}><PlugZap size={17} strokeWidth={1.8} aria-hidden="true"/><span>Agent 接入</span></button>
