@@ -10,6 +10,7 @@ import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
 import { supportsCapability } from '../../adapter-contract/src/index.js';
+import { autonomousReviewPrompt, commentProcessingPrompt } from '../../adapter-contract/src/prompts.js';
 import './space.css';
 
 const h = createElement;
@@ -226,7 +227,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     if(mode==='copy') {
       if(!canCopy) throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
       if(typeof adapter?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
-      const text=`space:${encodeURIComponent(docId)}\n${t('send.processingPrompt')}`;
+      const text=commentProcessingPrompt(`space:${encodeURIComponent(docId)}`,ids);
       await adapter.clipboard.writeText(text);
       setMessage(t('send.copied'));
       setActiveComment(null);
@@ -712,7 +713,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
   };
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
-  const promptText=promptTask ? (promptTask.docId ? `请通过 CoSpace MCP 读取文档引用 space:${encodeURIComponent(promptTask.docId)}，审阅内容并提交具体修改建议。不要直接覆盖已接受内容；所有修改以建议提交，等待我在 CoSpace 中接受或拒绝。不要替我发送评论。` : '请根据我的要求，通过 CoSpace MCP 创建一份新文档并提交完整初稿。') : '';
+  const promptText=promptTask ? (promptTask.docId ? autonomousReviewPrompt(`space:${encodeURIComponent(promptTask.docId)}`) : '请根据我的要求，通过 CoSpace MCP 创建一份新文档并提交完整初稿。') : '';
   const copyPrompt=async()=>{try{await navigator.clipboard.writeText(promptText);setCopiedPrompt(true)}catch{setCopiedPrompt(false)}};
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const shownDocuments=useMemo(()=>{

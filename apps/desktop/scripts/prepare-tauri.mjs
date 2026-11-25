@@ -28,7 +28,7 @@ const bundleOptions = {
   platform: 'node',
   format: 'cjs',
   target: 'node24',
-  external: ['jsonc-parser', 'yaml'],
+  external: ['jsonc-parser'],
   define: { 'import.meta.url': '__bundleFileUrl' },
   banner: { js: 'const __bundleFileUrl = require("node:url").pathToFileURL(__filename).href;' },
   sourcemap: false,
@@ -45,7 +45,6 @@ await build({
 });
 await cp(path.join(appDir, 'src/agent/skill'), path.join(resources, 'desktop/skill'), { recursive: true });
 await cp(path.join(repoRoot, 'node_modules/jsonc-parser'), path.join(resources, 'node_modules/jsonc-parser'), { recursive: true });
-await cp(path.join(repoRoot, 'node_modules/yaml'), path.join(resources, 'node_modules/yaml'), { recursive: true });
 await cp(path.join(appDir, 'build/webapp'), path.join(resources, 'dist/webapp'), { recursive: true });
 const runtime = process.platform === 'win32' ? 'cospace-node.exe' : 'cospace-node';
 await cp(process.execPath, path.join(binaries, `${runtime}-${target}${suffix}`));
