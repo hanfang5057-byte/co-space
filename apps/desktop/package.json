@@ -1,0 +1,27 @@
+{
+  "name": "@cospace/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "add-mcp": "^2.6.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "skills": "^1.9.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.6",
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "node scripts/build-webapp.mjs",
+    "prepare:tauri": "npm run build && node scripts/prepare-tauri.mjs",
+    "dev": "npm run prepare:tauri && npm exec tauri -- dev --config src-tauri/tauri.conf.json",
+    "package": "npm run prepare:tauri && node scripts/build-tauri.mjs && node scripts/package-release.mjs",
+    "smoke": "node scripts/smoke-sidecar.mjs",
+    "web": "npm run build && node src/server/index.js",
+    "mcp": "node src/mcp/index.js"
+  }
+}

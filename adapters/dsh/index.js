@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHostApi } from './server/host.js';
+import { createHostApi } from '../../packages/host-api/src/index.js';
 import { createHttpHandler, COSPACE_API_PATH } from '../../packages/transport-http/http-handler.js';
 import { createSendTargetResolver } from './server/send-target.js';
 import { createUserResolver } from './server/user.js';

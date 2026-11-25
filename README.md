@@ -8,7 +8,7 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 
 ## 当前状态
 
-本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享审阅 UI、适配器契约、通用传输层和 DSH 适配器。适配器负责将核心能力接入宿主；核心不依赖任何宿主。适配器能力契约和新增流程见[适配器接入规范](docs/14-adapter-integration.md)。
+本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享服务接口、共享审阅 UI、适配器契约、通用传输层、DSH 插件和 Tauri 桌面应用。DSH 插件位于 `adapters/dsh/`；桌面产品、Node sidecar、Agent 接入和 Tauri 壳统一位于 `apps/desktop/`。共享核心不依赖具体宿主。目录边界和新增接入流程见[适配器接入规范](docs/14-adapter-integration.md)及[系统架构记录](docs/09-host-adapters-architecture.md)。
 
 正文以 Markdown 源文本保存和审阅。Agent 提交带版本和 UTF-16 源码区间的替换建议；段落、标题、列表、表格、链接等 Markdown 结构都通过普通文本替换修改。完整接口、坐标和安全限制见[审阅内核说明](docs/07-review-core.md)。
 
@@ -86,6 +86,10 @@ npm run check
 ```
 
 测试包含真实 MCP stdio、SQLite 存储、建议决策、评论处理模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。可用 `sh scripts/test-ui.sh` 运行模拟 DOM 的界面测试，该脚本在临时目录安装测试依赖。
+
+## 桌面版开发与打包
+
+桌面版需要 Node.js 24 或更高版本、Rust stable，以及当前平台的 Tauri 系统依赖。运行 `npm run desktop:dev` 启动开发版，运行 `npm run desktop:package` 构建当前平台安装包，最终产物写入 `dist/releases/desktop/<平台>/`。运行 `npm run desktop:smoke` 可检查打包 Node sidecar 的 HTTP 与 MCP 启动。
 
 ## 打包
 

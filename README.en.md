@@ -8,7 +8,7 @@ CoSpace lets you review the exact edits an agent proposes for your personal docu
 
 ## Status
 
-This repository is a private npm workspace for CoSpace. It contains the shared review core, shared review UI, adapter contract, host-independent transports, and the DSH adapter. Adapters connect the core to a host; the core does not depend on any host. See the [adapter integration guide](docs/14-adapter-integration.md).
+This repository is a private npm workspace for CoSpace. It contains the shared review core and service facade, shared review UI, adapter contract, host-independent transports, the DSH plugin, and a Tauri desktop app. The DSH plugin lives in `adapters/dsh/`; the desktop product, Node sidecar, Agent integration, and Tauri shell live together in `apps/desktop/`. Shared packages do not depend on a specific host. See the [adapter integration guide](docs/14-adapter-integration.md) and [system architecture](docs/09-host-adapters-architecture.md).
 
 Document text is stored and reviewed as Markdown source. The agent submits replacement suggestions with a document version and UTF-16 source ranges; paragraphs, headings, lists, tables, and links are all changed through ordinary text replacement. See the [review core notes](docs/07-review-core.md) for the full interface, coordinates, and safety limits.
 
@@ -56,6 +56,10 @@ npm run check
 ```
 
 The test suite covers real MCP stdio, SQLite storage, suggestion decisions, simulated comment handling, restart, conflicts, and process concurrency; it is not an end-to-end test of the DSH host UI. `sh scripts/test-ui.sh` runs the simulated-DOM UI flow.
+
+### Desktop development and packaging
+
+The desktop app requires Node.js 24 or later, stable Rust, and the Tauri system dependencies for the current platform. Run `npm run desktop:dev` to launch it, `npm run desktop:package` to build the current platform installers, and `npm run desktop:smoke` to check the packaged Node sidecar's HTTP and MCP startup. Final artifacts are collected under `dist/releases/desktop/<platform>/`.
 
 ### Build and release
 

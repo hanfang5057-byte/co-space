@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { SpaceService, documentWithTitle } from '../../../packages/review-core/src/space-service.js';
-import { CollaborationStore } from '../../../packages/review-core/src/collaboration-store.js';
+import { SpaceService, documentWithTitle } from '../../review-core/src/space-service.js';
+import { CollaborationStore } from '../../review-core/src/collaboration-store.js';
 
 /** Host-facing façade. All mutations share the document store used by MCP. */
 export function createHostApi({ home, prompt, getUser, resolveTarget }) {

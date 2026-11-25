@@ -13,7 +13,20 @@ if(fills.length!==2||fills[0].left!==10||fills[0].width!==80)throw Error('overla
 if(outlines.length!==1||outlines[0].key!=='comment:b:0:active-outline')throw Error('active comment outline was not preserved separately');
 const reviewData=require('./fixtures/review-data.cjs');let markdown=reviewData.content;let comments=[];let suggestions=reviewData.suggestions;const calls=[];
 const api=async(method,args)=>{calls.push([method,args]);switch(method){case'listDocuments':return[{id:'d',title:'Review sample',pending:1},{id:'e',title:'Another document',pending:0}];case'getUser':return{signedIn:true,name:'Ada Lovelace',avatarUrl:null};case'readDocument':return{id:'d',title:'Review sample',version:0,content:markdown,suggestions,comments};case'listComments':return comments;case'createComment':comments=[{id:'c',docId:'d',quote:args.quote,body:args.body,anchor:args.anchor,resolved:{from:args.anchor.from,to:args.anchor.to},status:'pending',stale:false}];return comments[0];case'decide':return{status:'accepted'};case'sendComments':return{status:'sent',sessionId:args.sessionId||'new-session',createdSession:!args.sessionId};case'deleteComment':return{deleted:true};default:throw Error(method)}};
-(async()=>{const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(SpaceApp,{api,sessionId:'s'})));
+function testAdapter({sessionId=null,canCreate=false,getSessionLabel,getWorkspaceLabel,openSession}={}){
+  const available=['conversation.send','clipboard.write'];if(canCreate)available.push('conversation.create');
+  return {
+    core:{request:api},capabilities:{declared:available,available},identity:{getCurrentUser:()=>api('getUser')},
+    clipboard:{writeText:text=>window.navigator.clipboard.writeText(text)},
+    conversation:{
+      current:sessionId?{id:sessionId}:null,canCreate,
+      getConversationLabel:getSessionLabel,getWorkspaceLabel,
+      send:async request=>{const result=await api('sendComments',{sessionId:request.conversationId,commentIds:request.commentIds,newSessionFrom:request.excludeConversationId,forceNew:Boolean(request.excludeConversationId)});return{createdConversation:request.createConversation===true,conversationId:result.sessionId};},
+      open:openSession,
+    },
+  };
+}
+(async()=>{const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(SpaceApp,{adapter:testAdapter({sessionId:'s'})})));
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30))});
 const click=async el=>{if(!el)throw Error('missing control');await act(async()=>el.dispatchEvent(new window.MouseEvent('click',{bubbles:true})));};
 const search=document.querySelector('.space-document-search input');
@@ -103,7 +116,7 @@ await click(sendButton);await click([...document.querySelectorAll('.space-send-d
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,40))});if(!calls.some(x=>x[0]==='sendComments'&&x[1].sessionId==='s'))throw Error('processing request did not target the current conversation');const prompt=calls.find(x=>x[0]==='sendComments')[1];if(prompt.commentIds.length!==1||prompt.commentIds[0]!=='c')throw Error('processing request did not identify the pending comment set');
 await act(async()=>root.unmount());
 // A Space page without a conversation must be able to create one instead of disabling send.
-const opened=[];const secondRoot=createRoot(document.getElementById('root'));await act(async()=>secondRoot.render(React.createElement(SpaceApp,{api,sessionId:null,sendTarget:{canCreate:true,openSession:id=>opened.push(id)}})));
+const opened=[];const secondRoot=createRoot(document.getElementById('root'));await act(async()=>secondRoot.render(React.createElement(SpaceApp,{adapter:testAdapter({canCreate:true,openSession:id=>opened.push(id)})})));
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30))});
 await click(document.querySelector('.space-home-card-open'));
 await click([...document.querySelectorAll('button')].find(x=>x.textContent.includes('处理评论')));
@@ -113,7 +126,7 @@ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,40))});if(!cal
 
 await act(async()=>secondRoot.unmount());
 const selected=[];const choiceRoot=createRoot(document.getElementById('root'));
-await act(async()=>choiceRoot.render(React.createElement(SpaceApp,{api,sessionId:'current-session',sendTarget:{canCreate:true,getSessionLabel:()=> '项目讨论',getWorkspaceLabel:()=> '产品工作区',openSession:id=>selected.push(id)}})));
+await act(async()=>choiceRoot.render(React.createElement(SpaceApp,{adapter:testAdapter({sessionId:'current-session',canCreate:true,getSessionLabel:()=> '项目讨论',getWorkspaceLabel:()=> '产品工作区',openSession:id=>selected.push(id)})})));
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30))});await click(document.querySelector('.space-home-card-open'));await click([...document.querySelectorAll('button')].find(x=>x.textContent.includes('处理评论')));
 if(!document.querySelector('.space-send-dialog')?.textContent.includes('项目讨论')||!document.querySelector('.space-send-dialog input[value=current]')?.checked)throw Error('current conversation title or default missing');
 if(document.querySelector('.space-send-workspace')?.textContent!=='产品工作区')throw Error('workspace tag missing from current conversation');
@@ -125,7 +138,7 @@ if(!calls.some(x=>x[0]==='sendComments'&&x[1].newSessionFrom==='current-session'
 await act(async()=>choiceRoot.unmount());
 
 let copied='';Object.defineProperty(window.navigator,'clipboard',{value:{writeText:async text=>{copied=text}},configurable:true});Object.defineProperty(globalThis,'navigator',{value:window.navigator,configurable:true});
-const thirdRoot=createRoot(document.getElementById('root'));await act(async()=>thirdRoot.render(React.createElement(SpaceApp,{api,sessionId:null,sendTarget:{mode:'copy'}})));
+const thirdRoot=createRoot(document.getElementById('root'));await act(async()=>thirdRoot.render(React.createElement(SpaceApp,{adapter:testAdapter()})));
 await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30))});await click(document.querySelector('.space-home-card-open'));const copyButton=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('处理评论'));await click(copyButton);
 if(!document.querySelector('.space-send-dialog')?.open||copied||!document.querySelector('.space-send-dialog input[value=copy]')?.checked)throw Error('copy confirmation missing or clipboard written early');
 await click([...document.querySelectorAll('.space-send-dialog button')].find(x=>x.textContent==='取消'));if(copied)throw Error('cancelling copied the prompt');

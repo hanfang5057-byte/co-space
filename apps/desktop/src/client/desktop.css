@@ -1,0 +1,47 @@
+html, body, #root {
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+}
+
+.webapp-shell {
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.webapp-nav {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  padding: 8px max(20px, calc((100vw - 1280px) / 2));
+  border-block-end: 1px solid #e8e5dc;
+  background: #fbfaf7;
+}
+
+.webapp-nav strong { margin-inline-end: 12px; }
+.webapp-nav button, .agent-setup button { border: 1px solid #d8d5cb; border-radius: 8px; background: #fff; padding: 8px 12px; cursor: pointer; }
+
+.webapp-shell > .space-app {
+  flex: 1 1 0;
+  block-size: auto;
+  min-block-size: 0;
+}
+
+.webapp-shell > .agent-setup {
+  flex: 1 1 0;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.agent-setup { max-inline-size: 900px; margin: 36px auto; padding: 0 24px 60px; color: #34382f; }
+.agent-setup section { margin-block-start: 24px; padding: 20px; border: 1px solid #e4e1d8; border-radius: 12px; background: #fff; }
+.agent-setup pre { overflow: auto; padding: 16px; border-radius: 8px; background: #f4f3ef; white-space: pre-wrap; }
+.agent-setup code { overflow-wrap: anywhere; }

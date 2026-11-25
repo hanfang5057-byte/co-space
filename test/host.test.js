@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {createHostApi} from '../adapters/dsh/server/host.js';
+import {createHostApi} from '../packages/host-api/src/index.js';
 import {createHttpHandler} from '../packages/transport-http/http-handler.js';
 import {documentFromMarkdown, SpaceService} from '../packages/review-core/src/space-service.js';
 
@@ -61,7 +61,7 @@ test('UI creates an untitled document with an empty body and replays its operati
 test('client bundle registers Space panel, picker action, and reference serialization',async()=>{
  const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
  const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
- const context={window:{__ModuleLoader__:{load:value=>{descriptor=value}}},document:{createElement:()=>({}),head:{append:()=>{}}},console};
+ const context={window:{__ModuleLoader__:{load:value=>{descriptor=value}}},document:{createElement:()=>({}),documentElement:{style:{}},body:{style:{}},head:{append:()=>{}}},console};
  vm.runInNewContext(bundle,context);
  const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
  const plugin=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
@@ -76,7 +76,7 @@ test('client bundle registers Space panel, picker action, and reference serializ
  assert.equal(tabTypes[0].kind,'space-document');
  assert.equal(tabTypes[0].patterns[0],'dsh-resource://space/**');
  const card=registrations.find(x=>x.options.name==='conversation.user.text.node'&&x.options.key==='space-document');
- card.options.inject().openDocument('doc-1');
+ card.options.inject().adapter.navigation.openDocument('doc-1');
  assert.deepEqual(opened,['dsh-resource://space/doc-1']);
  const rule=rules.find(x=>x.id==='space-document');assert.ok(rule);
  const node=rule.match('space:doc-1 请改写',0);assert.equal(node.id,'space-document');assert.equal(node.start,0);assert.equal(node.end,11);assert.equal(node.data.docId,'doc-1');
@@ -100,9 +100,10 @@ test('document picker inserts the checked documents into the bound conversation'
    querySelectorAll(){return [];}
  }
  const elements=[];const modalRoot=[];const document={
+   documentElement:{style:{}},
    createElement(tag){const element=new Element(tag);elements.push(element);return element;},
    createTextNode(text){return {textContent:text};},
-   body:{append(element){modalRoot.push(element);}},
+   body:{style:{},append(element){modalRoot.push(element);}},
    head:{append(){}},
  };
  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
@@ -139,9 +140,10 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
     querySelectorAll(){return [];}
   }
   const elements=[];const modalRoot=[];const document={
+    documentElement:{style:{}},
     createElement(tag){const element=new Element(tag);elements.push(element);return element;},
     createTextNode(text){return {textContent:text};},
-    body:{append(element){modalRoot.push(element);}},
+    body:{style:{},append(element){modalRoot.push(element);}},
     head:{append(){}},
   };
   const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
