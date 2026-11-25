@@ -1,27 +1,53 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft } from 'lucide-react';
+import { Files, PlugZap } from 'lucide-react';
 import { SpaceApp } from '../../../../packages/review-ui/src/SpaceApp.jsx';
+import { brandIcon } from '../../../../packages/brand/brand.js';
 import { api } from '../../../../packages/transport-http/client.js';
 import '../../../../packages/review-ui/src/space.css';
 import './desktop.css';
 import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../../packages/adapter-contract/src/index.js';
 import adapterDeclaration from '../../adapter.json' with { type: 'json' };
 
+function saveExport({ name, type, bytes }) {
+  if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return false;
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}
+
 function App() {
   const [page, setPage] = React.useState('workbench');
-  const adapter = React.useMemo(() => ({
-    core: { request: api },
-    prompts: { mcpReady: true },
-    capabilities: resolveAdapterCapabilities({ ...adapterDeclaration, contractVersion: ADAPTER_CONTRACT_VERSION }, []),
-  }), []);
+  const adapter = React.useMemo(() => {
+    const available = [];
+    if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && typeof document !== 'undefined') available.push('files.export.save');
+    if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') available.push('clipboard.write');
+    available.push('identity.current.read');
+    return {
+      core: { request: api },
+      prompts: { mcpReady: true },
+      files: { saveExport },
+      clipboard: { writeText: text => navigator.clipboard.writeText(text) },
+      identity: { getCurrentUser: () => api('getUser') },
+      capabilities: resolveAdapterCapabilities({ ...adapterDeclaration, contractVersion: ADAPTER_CONTRACT_VERSION }, available),
+    };
+  }, []);
   return <div className="webapp-shell">
-    {page === 'agents' && <nav className="webapp-nav" aria-label="主导航">
-      <button className="webapp-back" type="button" aria-label="返回工作台" title="返回工作台" onClick={() => setPage('workbench')}><ArrowLeft size={18} aria-hidden="true"/></button>
-      <span className="webapp-current-page">Agent 接入</span>
-      <span className="webapp-local"><i/>本地空间</span>
-    </nav>}
-    {page === 'workbench' ? <SpaceApp adapter={adapter} onOpenAgents={() => setPage('agents')}/> : <AgentSetup/>}
+    <aside className="webapp-sidebar" aria-label="CoSpace 导航">
+      <div className="webapp-sidebar-brand"><img className="webapp-brand-mark" src={brandIcon} alt=""/><span><strong>CoSpace</strong><small>智联文档空间</small></span></div>
+      <nav className="webapp-sidebar-nav" aria-label="主导航">
+        <button type="button" className="webapp-sidebar-link" aria-current={page === 'workbench' ? 'page' : undefined} onClick={() => setPage('workbench')}><Files size={17} strokeWidth={1.8} aria-hidden="true"/><span>文档工作台</span></button>
+        <button type="button" className="webapp-sidebar-link" aria-current={page === 'agents' ? 'page' : undefined} onClick={() => setPage('agents')}><PlugZap size={17} strokeWidth={1.8} aria-hidden="true"/><span>Agent 接入</span></button>
+      </nav>
+      <div className="webapp-sidebar-footer"><i aria-hidden="true"/><span>本地空间</span></div>
+    </aside>
+    <main className="webapp-content">
+      {page === 'workbench' ? <SpaceApp adapter={adapter}/> : <AgentSetup/>}
+    </main>
   </div>;
 }
 
@@ -40,8 +66,14 @@ function AgentSetup() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [resultDialog]);
   return <main className="agent-setup">
-    <div className="agent-setup-heading"><span className="agent-kicker">协作设置</span><h1>连接你的 Agent</h1><p>为常用 Agent 配置 CoSpace MCP 与协作 Skill，让它们协助起草和审阅文档。</p></div>
+    <div className="agent-setup-heading"><span className="agent-kicker">协作设置</span><h1>连接你的 Agent</h1><p>WorkBuddy 可由 CoSpace 自动接入；DeepSeek Harness 请按下方说明手动安装插件。</p></div>
     <section className="agent-list"><div className="agent-list-heading"><div><h2>可用的 Agent</h2><p>仅写入 CoSpace 自己的配置条目</p></div><span className="agent-list-count">{agents.length} 个</span></div><p className="agent-scan-status" role="status">{scanMessage}</p>{agents.map(agent=><article className="agent-row" key={agent.id}><div className="agent-row-copy"><strong>{agent.name}</strong><small>{[agent.mcpDetected?'MCP 已配置':'',agent.skillDetected?'Skill 已安装':''].filter(Boolean).join(' · ')||'已检测到，可连接'}</small></div><button disabled={working!==null} onClick={()=>connect(agent.id)}>{working===agent.id?'正在接入…':agent.mcpDetected&&agent.skillDetected?'重新安装':'一键接入'}</button></article>)}</section>
+    <section className="agent-guide" aria-labelledby="deepseek-guide-title">
+      <div className="agent-guide-heading"><div><span className="agent-guide-kicker">手动安装</span><h2 id="deepseek-guide-title">DeepSeek Harness</h2></div><span className="agent-guide-badge">插件</span></div>
+      <p>在 DeepSeek Harness 中安装 CoSpace 插件，启用后即可在侧边栏打开文档工作台。</p>
+      <ol><li>打开左侧 <strong>Plugins</strong>，选择 <strong>Add plugin</strong>。</li><li>输入插件名 <code>dsh-plugin-space</code> 并确认安装。</li><li>安装后启用插件；侧边栏会出现 <strong>CoSpace</strong> 入口。</li></ol>
+      <p className="agent-guide-cli">也可在终端运行 <code>dsh plugin add dsh-plugin-space</code>。</p>
+    </section>
     <aside className="agent-safety"><span aria-hidden="true">✓</span><p>建议仍由你审阅并决定是否采纳。CoSpace 不会开启自动批准。</p></aside>
     {resultDialog && <div className="agent-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setResultDialog(null); }}>
       <section className="agent-result-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-result-title" aria-describedby="agent-result-description">

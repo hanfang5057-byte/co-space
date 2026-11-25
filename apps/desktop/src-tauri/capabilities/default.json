@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default permissions for the CoSpace workbench window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "shell:allow-open"]
 }
