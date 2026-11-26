@@ -12,7 +12,7 @@ CoSpace 提供两个产品入口，当前可用状态和安装方式见[官网](
 
 | 入口 | 适用场景 | 安装与状态 |
 | --- | --- | --- |
-| DSH 插件 | 在 DSH 对话中引用文档并审阅建议 | npm 包 `dsh-plugin-space`；在 DSH 的 Plugins 页面添加，或运行 `dsh plugin add dsh-plugin-space`。需要 Node.js 24+、DSH `^0.2.2-rc.5`。 |
+| DSH 插件 | 在 DSH 对话中引用文档并审阅建议 | npm 包 `dsh-plugin-space`；在 DSH 的 Plugins 页面添加，或运行 `dsh plugin add dsh-plugin-space`。当前发布版需要 Node.js 24+、DSH `^0.2.2-rc.5`。 |
 | Local Server | 为其他支持 stdio MCP 的 Agent 提供本地文档服务 | [查看安装状态和配置说明](apps/local-server/README.md)。 |
 
 如需从插件市场发现 DSH 插件，可将[市场索引](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json)添加到 DSH 的 Custom plugin indexes。
@@ -31,7 +31,7 @@ CoSpace 将文档保存为 Markdown。Agent 对已有文档提交有版本约束
 
 ## 本地开发
 
-需要 Node.js 24 或更高版本。
+Local Server 开发需要 Node.js 22.22.2 或更高版本。
 
 ```sh
 npm install

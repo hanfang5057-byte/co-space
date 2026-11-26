@@ -9,8 +9,8 @@ const manifest = JSON.parse(await readFile(path.join(appDir, 'package.json'), 'u
 const distManifest = JSON.parse(await readFile(path.join(appDir, 'dist/package.json'), 'utf8'));
 assert.equal(distManifest.name, manifest.name);
 assert.equal(distManifest.version, manifest.version);
-assert.ok(manifest.engines.node === '>=24');
-for (const file of ['bin/cospace-local.js', 'README.md', 'LICENSE', 'dist/cli.js', 'dist/daemon.cjs', 'dist/mcp.cjs', 'dist/web/index.html', 'dist/web/app.js', 'dist/web/app.css']) await access(path.join(appDir, file));
+assert.ok(manifest.engines.node === '>=22.22.2');
+for (const file of ['bin/cospace-local.js', 'README.md', 'LICENSE', 'skills/cospace-review/SKILL.md', 'dist/cli.js', 'dist/daemon.cjs', 'dist/mcp.cjs', 'dist/web/index.html', 'dist/web/app.js', 'dist/web/app.css']) await access(path.join(appDir, file));
 const daemon = await readFile(path.join(appDir, 'dist/daemon.cjs'), 'utf8');
 const mcp = await readFile(path.join(appDir, 'dist/mcp.cjs'), 'utf8');
 const webApp = await readFile(path.join(appDir, 'dist/web/app.js'), 'utf8');

@@ -23,7 +23,7 @@ await build({
   bundle: true,
   format: 'esm',
   platform: 'node',
-  target: 'node24',
+  target: 'node22',
   packages: 'bundle',
   external: ['@modelcontextprotocol/sdk', 'zod'],
   sourcemap: false,

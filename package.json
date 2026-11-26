@@ -16,7 +16,7 @@
     "apps/local-server"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=22.22.2"
   },
   "scripts": {
     "pretest": "npm run build:client",

@@ -28,7 +28,7 @@ await build({
   packages: 'bundle',
   platform: 'node',
   format: 'cjs',
-  target: 'node24',
+  target: 'node22',
   sourcemap: false,
 });
 await build({
@@ -38,7 +38,7 @@ await build({
   packages: 'bundle',
   platform: 'node',
   format: 'cjs',
-  target: 'node24',
+  target: 'node22',
   sourcemap: false,
 });
 await build({
@@ -48,7 +48,7 @@ await build({
   packages: 'bundle',
   platform: 'node',
   format: 'esm',
-  target: 'node24',
+  target: 'node22',
   sourcemap: false,
 });
 const manifest = JSON.parse(await readFile(path.join(appDir, 'package.json'), 'utf8'));

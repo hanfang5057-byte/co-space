@@ -54,7 +54,7 @@ async function run() {
       const packageDir = path.join(temp, 'node_modules', '@hanfang5057', 'co-space');
       const source = path.join(packageDir, 'dist');
       const packageJson = JSON.parse(await readFile(path.join(packageDir, 'package.json'), 'utf8'));
-      if (packageJson.name !== '@hanfang5057/co-space' || packageJson.version !== candidate || packageJson.engines?.node !== '>=24') throw new Error('Downloaded package metadata is invalid');
+      if (packageJson.name !== '@hanfang5057/co-space' || packageJson.version !== candidate || packageJson.engines?.node !== '>=22.22.2') throw new Error('Downloaded package metadata is invalid');
       await installRuntimeVersion({ sourceVersionHome: source, runtimeHome, version: candidate });
       await requestRuntimeUpgrade(runtimeHome, candidate);
     } catch (error) { process.stderr.write(`CoSpace update check: ${error.message}\n`); }

@@ -1,6 +1,6 @@
 {
   "name": "@hanfang5057/co-space",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "description": "Local CoSpace MCP server and document review web app",
   "type": "module",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "cospace"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=22.22.2"
   },
   "bin": {
     "cospace-local": "bin/cospace-local.js"
@@ -26,6 +26,7 @@
   "files": [
     "bin/",
     "dist/",
+    "skills/",
     "README.md",
     "LICENSE"
   ],
