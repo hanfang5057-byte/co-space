@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tauri-apps/api": "^2.12.5",
     "jsonc-parser": "^3.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

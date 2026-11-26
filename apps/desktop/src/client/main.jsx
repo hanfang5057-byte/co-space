@@ -2,28 +2,22 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Files, PlugZap } from 'lucide-react';
 import { SpaceApp } from '../../../../packages/review-ui/src/SpaceApp.jsx';
+import { invoke } from '@tauri-apps/api/core';
 import { api } from '../../../../packages/transport-http/client.js';
 import '../../../../packages/review-ui/src/space.css';
 import './desktop.css';
 import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../../packages/adapter-contract/src/index.js';
 import adapterDeclaration from '../../adapter.json' with { type: 'json' };
 
-function saveExport({ name, type, bytes }) {
-  if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return false;
-  const url = URL.createObjectURL(new Blob([bytes], { type }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return true;
+function saveExport({ name, bytes }) {
+  return invoke('save_export', { name, bytes: Array.from(bytes) });
 }
 
 function App() {
   const [page, setPage] = React.useState('workbench');
   const adapter = React.useMemo(() => {
     const available = [];
-    if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && typeof document !== 'undefined') available.push('files.export.save');
+    available.push('files.export.save');
     if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') available.push('clipboard.write');
     available.push('identity.current.read');
     return {

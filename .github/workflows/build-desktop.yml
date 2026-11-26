@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/build-desktop.yml'
       - 'apps/desktop/**'
+      - 'apps/local-server/**'
+      - 'packages/local-runtime/**'
       - 'packages/review-core/**'
       - 'packages/host-api/**'
       - 'packages/review-ui/**'

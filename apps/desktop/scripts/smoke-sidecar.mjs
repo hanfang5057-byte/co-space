@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -48,7 +48,7 @@ try {
   const webResult = await new Promise((resolve, reject) => {
     const child = spawn(runtime, ['-e', source], {
       cwd: resources,
-      env: { ...process.env, COSPACE_WEB_HOME: home, COSPACE_RESOURCE_DIR: resources },
+      env: { ...process.env, HOME: home, USERPROFILE: home, COSPACE_WEB_HOME: path.join(home, 'webapp'), COSPACE_RESOURCE_DIR: resources },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -57,12 +57,18 @@ try {
     child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
     child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
     child.once('error', error => { clearTimeout(timeout); reject(error); });
-    child.once('exit', code => { clearTimeout(timeout); code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr || `Packaged runtime exited with ${code}`)); });
+    child.once('exit', async code => {
+      clearTimeout(timeout);
+      if (code === 0) return resolve(stdout.trim());
+      let daemonLog = '';
+      try { daemonLog = await readFile(path.join(home, 'Library', 'Application Support', 'CoSpace', 'local-server', 'profiles', (await import('node:crypto')).createHash('sha256').update(path.join(home, 'webapp')).digest('hex').slice(0, 16), 'daemon.log'), 'utf8'); } catch {}
+      reject(new Error([stderr, daemonLog && `Daemon log:\n${daemonLog}`, `Packaged runtime exited with ${code}`].filter(Boolean).join('\n')));
+    });
   });
   const mcpResult = await new Promise((resolve, reject) => {
     const child = spawn(runtime, ['desktop/mcp-entry.bundle.cjs'], {
       cwd: resources,
-      env: { ...process.env, COSPACE_WEB_HOME: home, COSPACE_RESOURCE_DIR: resources },
+      env: { ...process.env, HOME: home, USERPROFILE: home, COSPACE_WEB_HOME: path.join(home, 'webapp'), COSPACE_RESOURCE_DIR: resources },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const lines = readline.createInterface({ input: child.stdout });
@@ -84,7 +90,7 @@ try {
       try {
         const message = JSON.parse(line);
         if (message.id !== 1) return;
-        if (message.error || message.result?.serverInfo?.name !== 'space') throw new Error('Unexpected packaged MCP initialize response');
+        if (message.error || message.result?.serverInfo?.name !== 'CoSpace') throw new Error('Unexpected packaged MCP initialize response');
         finish(null, message.result.serverInfo.name);
       } catch (error) { finish(error); }
     });

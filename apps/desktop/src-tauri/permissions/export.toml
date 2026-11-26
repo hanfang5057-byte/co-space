@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-save-export"
+description = "Allows the workbench to open a save dialog and write the selected export file"
+commands.allow = ["save_export"]
