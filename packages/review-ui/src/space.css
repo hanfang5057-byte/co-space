@@ -809,8 +809,25 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 .space-milkdown-root { min-height:900px; }
 .space-paper-wrap.is-editing .space-comment-layer,.space-paper-wrap.is-editing .space-anchor-layer { display:none; }
 .space-app .space-paper { padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
-.space-update-status { margin-inline-start: 6px; font: 500 11px/1.4 var(--font-ui,system-ui,sans-serif); letter-spacing: 0; color: var(--space-muted); }
-.space-update-status.is-waiting, .space-update-status.is-failed, .space-update-status.is-offline { color: #92550d; }
+.space-version-badge { display:inline-flex; align-items:center; max-inline-size:min(48vw,360px); overflow:hidden; margin-inline-start:6px; border:1px solid #e5e8e0; border-radius:999px; background:#f7f8f4; box-shadow:0 1px 2px rgba(42,48,35,.035); color:#626b5e; font:600 10px/1.25 var(--font-ui,system-ui,sans-serif); letter-spacing:0; vertical-align:middle; white-space:nowrap; }
+.space-version-number { flex:none; padding:4px 7px; border-inline-end:1px solid #e5e8e0; background:rgba(255,255,255,.5); color:#697064; font:600 9px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:0; }
+.space-version-status { display:inline-flex; align-items:center; gap:5px; min-inline-size:0; overflow:hidden; padding:4px 8px; color:#626b5e; text-overflow:ellipsis; white-space:nowrap; }
+.space-version-status::before { flex:none; inline-size:6px; block-size:6px; border-radius:50%; background:currentColor; content:""; }
+.space-version-badge.is-checking, .space-version-badge.is-downloading, .space-version-badge.is-switching { border-color:#dce7f1; background:#f3f7fb; color:#55738d; }
+.space-version-badge.is-checking .space-version-number, .space-version-badge.is-downloading .space-version-number, .space-version-badge.is-switching .space-version-number { border-color:#dce7f1; color:#55738d; }
+.space-version-badge.is-checking .space-version-status::before, .space-version-badge.is-downloading .space-version-status::before, .space-version-badge.is-switching .space-version-status::before { animation:space-update-pulse 1.8s ease-out infinite; }
+.space-version-badge.is-current, .space-version-badge.is-updated { border-color:#dce9dd; background:#f1f7f1; color:#527456; }
+.space-version-badge.is-current .space-version-number, .space-version-badge.is-updated .space-version-number { border-color:#dce9dd; color:#527456; }
+.space-version-badge.is-waiting { border-color:#ecdcb9; background:#fbf6e9; color:#8a641f; }
+.space-version-badge.is-waiting .space-version-number { border-color:#ecdcb9; color:#8a641f; }
+.space-version-badge.is-failed, .space-version-badge.is-offline { border-color:#efd9d5; background:#fbf3f1; color:#995c51; }
+.space-version-badge.is-failed .space-version-number, .space-version-badge.is-offline .space-version-number { border-color:#efd9d5; color:#995c51; }
+.space-version-badge.is-disabled { border-color:#e8e6e0; background:#f6f5f2; color:#777970; }
+.space-version-badge.is-disabled .space-version-number { border-color:#e8e6e0; color:#777970; }
+.space-brand .space-version-badge { max-inline-size:min(40vw,330px); }
+@keyframes space-update-pulse { 0% { box-shadow:0 0 0 0 currentColor; } 70% { box-shadow:0 0 0 4px transparent; } 100% { box-shadow:0 0 0 0 transparent; } }
+@media (prefers-reduced-motion:reduce) { .space-version-badge.is-checking .space-version-status::before, .space-version-badge.is-downloading .space-version-status::before, .space-version-badge.is-switching .space-version-status::before { animation:none; } }
+@container space-app (max-width:700px) { .space-version-badge { max-inline-size:40vw; }.space-version-status { padding-inline:6px; font-size:9px; }.space-brand .space-version-badge { max-inline-size:35vw; } }
 /* Keep Crepe's renderer, while mapping its theme to the former reading surface. */
 .space-app .space-milkdown-root .milkdown {
   --crepe-color-background:var(--space-paper);
