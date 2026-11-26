@@ -6,7 +6,6 @@ Describe the user-visible behavior and why it is needed.
 
 - [ ] `npm run build:dsh`
 - [ ] `npm run check`
-- [ ] `sh scripts/test-ui.sh` (when the review UI changes)
 
 ## Host verification
 
