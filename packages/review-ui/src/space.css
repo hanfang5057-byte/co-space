@@ -722,7 +722,13 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 }
 @container space-app (max-width: 1101px) {
   .space-app .space-doc-stage.has-annotations { grid-template-columns: 794px; gap: 0; }
-  .space-app .space-comment-rail { display: none; }
+  /* Keep the annotation nodes mounted in the layout tree so their fixed
+     hover previews can escape the rail while the side column is collapsed. */
+  .space-app .space-comment-rail { position:absolute; inset:0 auto auto 0; inline-size:0; min-inline-size:0; padding:0; overflow:visible; pointer-events:none; }
+  .space-app .space-comment-rail .space-comment-spacer,
+  .space-app .space-comment-rail .space-comment-stale { display:none; }
+  .space-app .space-comment-rail .space-comment-balloons { pointer-events:none; }
+  .space-app .space-comment-rail .space-annotation-balloon { visibility:hidden !important; pointer-events:none; }
   .space-app .space-comment-lines { display: none; }
   .space-app .space-annotation-balloon.is-hover-preview {
     position: fixed !important;
