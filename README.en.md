@@ -1,83 +1,51 @@
 # CoSpace (智联文档空间)
 
-![CoSpace app icon](assets/cospace-icon.svg)
+Let agents help draft and revise documents while you decide which changes take effect.
 
 English | [中文](README.md)
 
-CoSpace lets you review the exact edits an agent proposes for your personal documents. You can create an empty document in CoSpace, and the agent can create a new document with complete initial content; changes to an existing document must be proposed as suggestions, and only your acceptance changes the accepted text. Adjacent edits can merge into one review unit, and genuinely overlapping submissions are rejected.
+CoSpace is a workspace for agents and personal documents. An agent can read documents you name, create a new document, or propose versioned edits at specific text ranges. Existing documents change only after you accept a suggestion. Overlapping edits are rejected to protect concurrent work.
 
-## Status
+## Get started
 
-This repository is a private npm workspace for CoSpace. It contains the shared review core and service facade, shared review UI, adapter contract, host-independent transports, the DSH plugin, Local Server, and a Tauri desktop app. The DSH plugin lives in `adapters/dsh/`; the Local Server CLI lives in `apps/local-server/`; the desktop product, Node sidecar, Agent integration, and Tauri shell live together in `apps/desktop/`. Shared packages do not depend on a specific host. See the [adapter integration guide](docs/14-adapter-integration.md) and [system architecture](docs/09-host-adapters-architecture.md).
+CoSpace has three product entry points. Check the [website](https://hanfang5057-byte.github.io/co-space/) for current availability and installation instructions:
 
-Document text is stored and reviewed as Markdown source. The agent submits replacement suggestions with a document version and UTF-16 source ranges; paragraphs, headings, lists, tables, and links are all changed through ordinary text replacement. See the [review core notes](docs/07-review-core.md) for the full interface, coordinates, and safety limits.
+| Entry point | Use case | Installation and status |
+| --- | --- | --- |
+| DSH plugin | Reference documents and review suggestions in DSH conversations | npm package `dsh-plugin-space`; add it from DSH's Plugins page or run `dsh plugin add dsh-plugin-space`. Requires Node.js 24+ and DSH `^0.2.2-rc.5`. |
+| Local Server | Provide local document services to other agents that support stdio MCP | [Installation and configuration](apps/local-server/README.md). |
+| CoSpace Desktop | Use a dedicated desktop workspace and local agent integration | [Supported platforms and availability](apps/desktop/README.md). |
 
-## Install
+To discover the DSH plugin in its market, add the [market index](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json) to DSH's Custom plugin indexes.
 
-The DSH plugin package is `dsh-plugin-space`, published on npm.
+## How it works
 
-- **DSH Desktop / Web**: open **Plugins**, choose **Add plugin**, enter `dsh-plugin-space`, and enable it. A **CoSpace** entry appears in the sidebar.
-- **CLI**: `dsh plugin add dsh-plugin-space`. This installs into the current profile; Desktop users should prefer the UI so the plugin lands in the running profile.
-- **From the plugin market**: enable **Custom plugin indexes** under **Plugins → Experimental plugins**, then add `https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json` in **Discover → Add index source** and search for CoSpace (updates immediately; if it is unreachable, use `https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`).
-- **Offline / internal**: download `dsh-plugin-space-<version>.tgz` from [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases) and run `dsh plugin add ./dsh-plugin-space-<version>.tgz`.
+CoSpace stores documents as Markdown. Agents propose versioned text replacements to existing documents; you review and accept or reject each one. Users can create a blank document, and agents can create documents with initial content. Comments are user-authored context and are sent to an agent only after the user explicitly asks it to handle them.
 
-The plugin declares `engines.dsh = ^0.2.2-rc.5` and Node.js 24 or later; recheck compatibility after a DSH major release. `adapters/dsh/client.js` is generated: run `npm run build:client` after changing `packages/review-ui/src/` or `adapters/dsh/client/`; do not edit generated files by hand. React is provided by the host and stays external in the client bundle.
+Documents and review records are stored in local SQLite. The DSH plugin has an isolated data directory; Local Server and Desktop share the same local service and data directory. MCP tools operate on explicitly named documents and do not enumerate documents.
 
-### Local Server and Desktop
+## Architecture
 
-The coordinated product version is `0.1.9`; the three version sources remain independent. For this release preparation, the DSH npm `latest` tag and the external awesome-dsh-plugin listing still point to `0.1.8`; the DSH and Local Server `0.1.9` tarballs are staged and verified but not yet published. Do not use the Local Server `@latest` commands in [`apps/local-server/README.md`](apps/local-server/README.md) until `@cospace/local-server@0.1.9` is published.
+One shared review core serves three product entry points: the DSH plugin, Local Server, and CoSpace Desktop. Shared packages do not depend on a specific host; adapters and apps integrate through the host API, capability contract, and host-independent transports. Desktop and Local Server share `local-runtime`; DSH keeps its own runtime and data boundary.
 
-The Desktop `0.1.9` macOS arm64 DMG has been built and package-checked with ad-hoc signing. It has no Developer ID signature or notarization. Windows and Linux artifacts still need target-system or CI acceptance before release; the macOS package is not Gatekeeper-approved for general public distribution. See [`apps/desktop/README.md`](apps/desktop/README.md).
-
-## Entry points
-
-- **CoSpace in the sidebar**: browse personal documents, read text and pending suggestions, and accept or reject each one. Selecting text in the rendered document shows a **Comment** button; saved comments appear in the margin lane on the right, where they can be deleted. Suggestions appear as a different color in the same lane, and the document keeps a fixed minimum width with horizontal scrolling when the window is narrow.
-- **New document**: the **New document** button creates an empty document titled "Untitled document"; later title and body changes still go through agent suggestions.
-- **Composer + menu**: reference one or more CoSpace documents in the current conversation as `space:<docId>`.
-- **Document card**: a sent reference renders as a card; selecting it opens the right sidebar with that document's review pane, and a refresh restores the same document.
-- **Comment-driven revision**: select text, choose **Comment**, write and save it, then choose **Ask the agent to handle comments**. DSH sends only the document reference and a short instruction; the agent reads comments through `space_document_read`, proposes changes, and records each outcome with `space_comment_complete`. Comment text is not included in the prompt. Comment and suggestion state stays in the review pane across refreshes.
-
-## Data and privacy
-
-- Documents, suggestions, comments, comment-handling results, and DSH conversation request records are stored locally in SQLite; set `DSH_SPACE_HOME` to choose the directory.
-- When handling comments, DSH sends the reference and a short instruction through the host `sessionController.prompt`; comment text is not sent. Comment author information is limited to the display name and avatar the host account service already exposes; tokens, phone numbers, and email addresses are not read or recorded.
-- MCP agent tools can create and read explicitly named documents, submit suggestions, query suggestion status, and record comment outcomes; there is no document enumeration. Accepted text changes only when the user accepts a suggestion.
-
-## Limitations
-
-- Markdown syntax is not restricted by a structural allowlist; a suggestion must match an exact source range at the named version, and overlapping edits are rejected. Text changes only after acceptance.
-- A new document starts with the title "Untitled document" and an empty body; it cannot be edited directly afterwards, so title and body changes still require agent suggestions.
-- When the version changes but a reference can still be located uniquely, comment anchors map to the new position; comments that cannot be mapped safely move to a "position lost" group and keep their reference without a text anchor.
-- Comment-handling outcomes are recorded as separate operations; comments that need clarification keep their reason and state.
-- UI copy follows the DSH language (Chinese / English); domain error messages returned by the server are displayed as-is.
+See [system architecture](docs/09-host-adapters-architecture.md), the [adapter integration guide](docs/14-adapter-integration.md), and the [review core notes](docs/07-review-core.md) for detailed boundaries, integration steps, and review semantics.
 
 ## Development
 
-Requires Node.js 24 or later:
+Requires Node.js 24 or later. Desktop development also requires stable Rust and the platform dependencies for Tauri.
 
 ```sh
 npm install
-npm run build:dsh
 npm run check
+npm run build:dsh
 ```
 
-The test suite covers real MCP stdio, SQLite storage, suggestion decisions, simulated comment handling, restart, conflicts, and process concurrency; it is not an end-to-end test of the DSH host UI. Host UI acceptance must be performed in a supported DSH environment.
+See the [unified release process](docs/16-release-process.md) for build and release commands. Build and verify each product from its own staging directory; the root workspace is private and must not be published.
 
-### Desktop development and packaging
+## Project documentation
 
-The desktop app requires Node.js 24 or later, stable Rust, and the Tauri system dependencies for the current platform. Run `npm run desktop:dev` to launch it, `npm run desktop:package` to build the current platform installers, and `npm run desktop:smoke` to check the packaged Node sidecar's HTTP and MCP startup. Final artifacts are collected under `dist/releases/desktop/<platform>/`. The GitHub Actions workflow builds macOS, Windows, and Ubuntu artifacts on matching pull requests and `desktop-v*` tags.
-
-### Build and release
-
-- `npm run build:dsh` compiles the client bundle and assembles `dist/dsh-plugin/`, then refreshes the market index and icon from `packages/brand/metadata.json`.
-- `npm run verify:dsh-package` rebuilds, validates the package, market index, and brand fields, and runs `npm pack --dry-run`.
-- `npm run pack:dsh` writes the npm tarball to `dist/npm-packages/`.
-- `npm run local-server:pack` writes and verifies the `@cospace/local-server` tarball under `dist/npm-packages/`.
-- Before a release, run `node scripts/sync-market.mjs` to refresh published versions, timestamps, engines, and sort metrics from npm. `node scripts/sync-market.mjs --check` validates the index without network access. The index is mirrored on GitHub raw (`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`), jsDelivr (`https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`), and GitHub Pages (`https://hanfang5057-byte.github.io/co-space/market/index.json`); the landing page is deployed by Pages.
-- Release order: build and verify each requested npm package, publish and verify the packages, sync the DSH market index, then push the site/index changes and create package-specific tags and GitHub Release assets. A `main` push changing `apps/site/` deploys Pages automatically; do not deploy site commands for a package that is not yet published.
-
-See the [Chinese README](README.md) for the complete development notes and document list.
-
-## License
-
-MIT, see [LICENSE](LICENSE).
+- [DSH plugin](adapters/dsh/README.md)
+- [Local Server](apps/local-server/README.md)
+- [Desktop](apps/desktop/README.md)
+- [Product plan](PLAN.md)
+- [License](LICENSE): MIT
