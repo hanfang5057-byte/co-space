@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -37,11 +37,19 @@ assert.deepEqual(marketIcon, brandIcon, 'the market icon must match the brand ic
 const bundledEntries = await Promise.all(['index.js', 'server/mcp-entry.js'].map(file => readFile(path.join(packageRoot, file), 'utf8')));
 for (const source of bundledEntries) {
   assert.doesNotMatch(source, /(?:from\s*|import\s*)["'](?:\.\.?\/|(?:packages|adapters)\/)/, 'release entries must not depend on monorepo source paths');
+  assert.doesNotMatch(source, /(?:from\s*|import\s*)["']@cospace\//, 'release entries must not depend on private workspace packages');
 }
 assert.match(bundledEntries[1], /serverVersion:\s*[A-Za-z_$][\w$]*\.version/);
 assert.ok(bundledEntries[1].includes(`version: ${JSON.stringify(manifest.version)}`), 'the DSH MCP server version must match the package version');
 
 const home = await mkdtemp(path.join(tmpdir(), 'space-pack-check-'));
+const isolatedPackage = await mkdtemp(path.join(tmpdir(), 'space-package-load-'));
+await mkdir(path.join(isolatedPackage, 'server'), { recursive: true });
+await Promise.all([
+  cp(path.join(packageRoot, 'index.js'), path.join(isolatedPackage, 'index.js')),
+  cp(path.join(packageRoot, 'server/mcp-entry.js'), path.join(isolatedPackage, 'server/mcp-entry.js')),
+  writeFile(path.join(isolatedPackage, 'package.json'), '{"type":"module"}\n'),
+]);
 const previousHome = process.env.DSH_SPACE_HOME;
 process.env.DSH_SPACE_HOME = home;
 const registrations = [];
@@ -55,7 +63,7 @@ const ctx = {
 };
 
 try {
-  const plugin = await import(pathToFileURL(path.join(packageRoot, 'index.js')).href);
+  const plugin = await import(pathToFileURL(path.join(isolatedPackage, 'index.js')).href);
   assert.equal(plugin.name, 'dsh-space');
   plugin.apply(ctx);
   assert.equal(registrations[0].name, 'space');
@@ -66,7 +74,10 @@ try {
   for (const dispose of disposers.reverse()) dispose?.();
   if (previousHome === undefined) delete process.env.DSH_SPACE_HOME;
   else process.env.DSH_SPACE_HOME = previousHome;
-  await rm(home, { recursive: true, force: true });
+  await Promise.all([
+    rm(home, { recursive: true, force: true }),
+    rm(isolatedPackage, { recursive: true, force: true }),
+  ]);
 }
 
 execFileSync(process.execPath, ['scripts/sync-market.mjs', '--check'], { cwd: root, stdio: 'inherit' });
