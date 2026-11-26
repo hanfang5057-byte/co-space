@@ -4,6 +4,7 @@ import { SpaceApp } from '../../../../packages/review-ui/src/SpaceApp.jsx';
 import { api } from '../../../../packages/transport-http/client.js';
 import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../../packages/adapter-contract/src/index.js';
 import '../../../../packages/review-ui/src/space.css';
+import './shell.css';
 
 function saveExport({ name, type, bytes }) {
   if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return false;

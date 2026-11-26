@@ -25,6 +25,7 @@
     "build:market": "node scripts/build-market.mjs",
     "build:dsh": "npm run build:client && node scripts/build-dsh.mjs && node scripts/build-market.mjs",
     "dev:dsh": "node scripts/dev-dsh.mjs",
+    "dev:local": "node scripts/dev-local.mjs",
     "build:site": "node scripts/build-site.mjs",
     "local-server:build": "npm run build --workspace @hanfang5057/co-space",
     "local-server:pack": "npm run pack --workspace @hanfang5057/co-space",

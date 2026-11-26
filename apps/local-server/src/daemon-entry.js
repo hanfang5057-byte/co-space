@@ -22,7 +22,8 @@ async function run() {
     updateTimer = setInterval(() => { void checkForUpdate?.(); }, 6 * 60 * 60 * 1000);
     updateTimer.unref?.();
   };
-  const service = await startLocalService({ dataHome, runtimeHome, versionHome, version, updaterEnabled, onEnableUpdater: enableUpdater });
+  const port = process.env.COSPACE_DEV_PORT ? Number(process.env.COSPACE_DEV_PORT) : 0;
+  const service = await startLocalService({ dataHome, runtimeHome, versionHome, version, port, updaterEnabled, onEnableUpdater: enableUpdater, allowStopWithUi: process.env.COSPACE_DEV_ALLOW_UI_STOP === '1' });
   let checking = false;
   const npmInstall = args => new Promise((resolve, reject) => {
     const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'ignore', 'pipe'] });

@@ -51,7 +51,7 @@ async function dispatchMcp(space, collaboration, method, args = {}) {
   }
 }
 
-export async function startLocalService({ dataHome, runtimeHome, versionHome, version = '0.0.0', updaterEnabled = false, onEnableUpdater, host = '127.0.0.1', port = 0 } = {}) {
+export async function startLocalService({ dataHome, runtimeHome, versionHome, version = '0.0.0', updaterEnabled = false, onEnableUpdater, host = '127.0.0.1', port = 0, allowStopWithUi = false } = {}) {
   if (!dataHome || !runtimeHome || !versionHome) throw new TypeError('dataHome, runtimeHome, and versionHome are required');
   await Promise.all([
     mkdir(dataHome, { recursive: true, mode: 0o700 }),
@@ -140,7 +140,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       if (req.method === 'POST' && req.url === '/__cospace/control/stop') {
         if (req.headers['x-cospace-rpc-token'] !== secrets.rpcToken) { json(res, 403, { error: { code: 'FORBIDDEN', message: 'Invalid service authorization' } }); return; }
         pruneSessions();
-        if (mcpSessions.size > 0 || uiSessions.size > 0) { json(res, 409, { error: { code: 'ACTIVE_MCP_CLIENTS', message: `Cannot stop CoSpace while ${mcpSessions.size} Agent and ${uiSessions.size} review page connection(s) are active.` } }); return; }
+        if (mcpSessions.size > 0 || (!allowStopWithUi && uiSessions.size > 0)) { json(res, 409, { error: { code: 'ACTIVE_MCP_CLIENTS', message: `Cannot stop CoSpace while ${mcpSessions.size} Agent and ${uiSessions.size} review page connection(s) are active.` } }); return; }
         json(res, 200, { result: { stopping: true } });
         setImmediate(() => process.kill(process.pid, 'SIGTERM'));
         return;

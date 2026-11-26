@@ -10,16 +10,37 @@
     "type": "git",
     "url": "git+https://github.com/hanfang5057-byte/co-space.git"
   },
-  "keywords": ["mcp", "stdio", "agent", "document-review", "cospace"],
-  "engines": { "node": ">=24" },
-  "bin": { "cospace-local": "bin/cospace-local.js" },
-  "files": ["bin/", "dist/", "README.md", "LICENSE"],
-  "devDependencies": { "esbuild": "^0.28.2" },
+  "keywords": [
+    "mcp",
+    "stdio",
+    "agent",
+    "document-review",
+    "cospace"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "cospace-local": "bin/cospace-local.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "mcp": "node bin/cospace-local.js mcp",
     "web": "node bin/cospace-local.js service open",
     "pack": "node scripts/pack.mjs",
     "verify-package": "node scripts/verify-package.mjs"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }

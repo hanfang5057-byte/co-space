@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.resolve(appDir, '../..');
-const output = path.join(appDir, 'dist');
+const output = process.env.COSPACE_BUILD_OUTPUT ? path.resolve(process.env.COSPACE_BUILD_OUTPUT) : path.join(appDir, 'dist');
 const web = path.join(output, 'web');
 await rm(output, { recursive: true, force: true });
 await mkdir(web, { recursive: true });
