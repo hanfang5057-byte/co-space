@@ -39,8 +39,8 @@ export async function startWebApp({ port = Number(process.env.COSPACE_PORT || 0)
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
       res.end(assets.map(asset => asset ? `${asset.mtimeMs}:${asset.size}` : 'missing').join('|')); return;
     }
-    if (req.method === 'GET' && req.url === '/app.js') { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': devMode ? 'no-store' : 'public, max-age=3600' }); res.end(await readFile(path.join(webappDist, 'app.js'))); return; }
-    if (req.method === 'GET' && req.url === '/app.css') { res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': devMode ? 'no-store' : 'public, max-age=3600' }); res.end(await readFile(path.join(webappDist, 'app.css'))); return; }
+    if (req.method === 'GET' && req.url === '/app.js') { res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' }); res.end(await readFile(path.join(webappDist, 'app.js'))); return; }
+    if (req.method === 'GET' && req.url === '/app.css') { res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'no-store' }); res.end(await readFile(path.join(webappDist, 'app.css'))); return; }
     if (req.url?.startsWith('/local/agents')) {
       if (req.headers['x-cospace-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`)) { res.writeHead(403); res.end(); return; }
       if (req.method === 'GET' && req.url === '/local/agents') {
