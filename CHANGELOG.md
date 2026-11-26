@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the DSH plugin `dsh-plugin-space` are recorded here. The plugin follows Semantic Versioning.
+Changes to the DSH plugin `dsh-plugin-space` and coordinated CoSpace product releases are recorded here. DSH package versions follow Semantic Versioning.
 
 ## 0.1.9
 
