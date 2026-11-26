@@ -1,6 +1,5 @@
-import { homedir } from 'node:os';
-import path from 'node:path';
+import { resolveDataHome } from '../../../../packages/local-runtime/src/paths.js';
 
 export function resolveWebHome(env = process.env) {
-  return path.resolve(env.COSPACE_WEB_HOME || path.join(homedir(), '.cospace', 'webapp'));
+  return resolveDataHome(env);
 }

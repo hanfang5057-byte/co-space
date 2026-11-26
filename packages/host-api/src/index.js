@@ -4,10 +4,12 @@ import { SpaceService, documentWithTitle } from '../../review-core/src/space-ser
 import { CollaborationStore } from '../../review-core/src/collaboration-store.js';
 
 /** Host-facing façade. All mutations share the document store used by MCP. */
-export function createHostApi({ home, prompt, getUser, resolveTarget }) {
-  const space = new SpaceService(home);
-  const collaboration = new CollaborationStore(home);
-  space.markInterruptedUnknown();
+export function createHostApi({ home, prompt, getUser, resolveTarget, space: providedSpace, collaboration: providedCollaboration, markInterrupted = true }) {
+  const ownsSpace = !providedSpace;
+  const ownsCollaboration = !providedCollaboration;
+  const space = providedSpace || new SpaceService(home);
+  const collaboration = providedCollaboration || new CollaborationStore(home);
+  if (markInterrupted) space.markInterruptedUnknown();
   const dispatch = async (method, args = {}) => {
     switch (method) {
       case 'listSpaces': return space.listSpaces();
@@ -81,5 +83,5 @@ export function createHostApi({ home, prompt, getUser, resolveTarget }) {
       default: throw Object.assign(new Error('未知操作'),{code:'METHOD_NOT_FOUND'});
     }
   };
-  return { dispatch, collaboration, close() {collaboration.close();space.close();} };
+  return { dispatch, space, collaboration, close() { if (ownsCollaboration) collaboration.close(); if (ownsSpace) space.close(); } };
 }

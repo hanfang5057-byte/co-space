@@ -4,10 +4,6 @@ import { createHash } from 'node:crypto';
 import { documentFromMarkdown } from '../review-core/src/space-service.js';
 
 const text = result => ({ content: [{ type: 'text', text: JSON.stringify(result) }] });
-const wrap = fn => async args => {
-  try { return text(await fn(args)); }
-  catch (error) { return { isError: true, ...text({ error: { code: error.code || 'INTERNAL', message: error.message, details: error.details || {} } }) }; }
-};
 const id = z.string().min(1).max(200);
 export const resolveSpaceRef = value => { if (!value.startsWith('space:')) return value; try { return decodeURIComponent(value.slice(6)); } catch { throw Object.assign(new Error('Invalid Space reference'), {code:'INVALID_INPUT'}); } };
 const referenceFor = value => `space:${encodeURIComponent(value)}`;
@@ -27,8 +23,21 @@ const INSTRUCTIONS = [
   'Use space_suggestion_list to see which suggestions were accepted, rejected, or conflicted. Do not write the Space database or document files directly.',
 ].join('\n');
 
-export function createMcpServer(service, collaboration = null) {
-  const server = new McpServer({ name: 'CoSpace', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+export function createMcpServer(service, collaboration = null, { reviewUrl, serverVersion = '0.1.0', versionNotice } = {}) {
+  const instructions = [
+    INSTRUCTIONS,
+    reviewUrl ? `The local review UI is available at ${reviewUrl}. The user reviews and decides every suggestion there.` : '',
+    versionNotice || '',
+  ].filter(Boolean).join('\n\n');
+  const server = new McpServer({ name: 'CoSpace', version: serverVersion }, { instructions });
+  const wrap = fn => async args => {
+    try {
+      const result = await fn(args);
+      return text(reviewUrl && result && typeof result === 'object' && !Array.isArray(result) ? { ...result, reviewUrl } : result);
+    } catch (error) {
+      return { isError: true, ...text({ error: { code: error.code || 'INTERNAL', message: error.message, details: error.details || {} } }) };
+    }
+  };
   server.registerTool('space_document_create', {
     description: 'CoSpace: create a new document only when the user explicitly asks for one; an existing-document reference is not required. Provide its complete initial content as CommonMark Markdown, including a heading if you want a title. Omit id to derive a stable id from operationId. This cannot overwrite an existing document. Returns the id and its space:<id> reference.',
     inputSchema: { id: id.optional().describe('Optional document ID; omit to derive one from operationId.'), text: z.string().describe('Complete initial Markdown content; include a heading if the document should have a title.'), operationId: opId },
@@ -40,10 +49,10 @@ export function createMcpServer(service, collaboration = null) {
   server.registerTool('space_document_read', {
     description: 'CoSpace: read the specified document only. Returns its accepted Markdown source, current version, pending suggestions, and concise comments with quoted text, body, anchor, and status. This does not authorize processing comments. Offsets are UTF-16 code units into markdown. Use space_suggestion_list for decided suggestions.',
     inputSchema: { id: id.describe('The user-provided space:<docId> reference or its decoded document ID.') },
-  }, wrap(({ id }) => {
+  }, wrap(async ({ id }) => {
     const document = service.readDocument(resolveSpaceRef(id));
     const docId=resolveSpaceRef(id);
-    const preferences=collaboration?.readInstructions(docId);
+    const preferences=await collaboration?.readInstructions(docId);
     return { ...document, comments: document.comments.map(agentComment), collaboration:preferences?{instructions:[preferences.global?.content,preferences.document?.content].filter(Boolean).join('\n\n')}:null };
   }));
   server.registerTool('space_suggest', {

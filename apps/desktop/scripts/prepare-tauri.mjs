@@ -19,6 +19,7 @@ const suffix = process.platform === 'win32' ? '.exe' : '';
 await rm(resources, { recursive: true, force: true });
 await rm(binaries, { recursive: true, force: true });
 await mkdir(path.join(resources, 'desktop'), { recursive: true });
+await mkdir(path.join(resources, 'desktop/local-server'), { recursive: true });
 await mkdir(path.join(resources, 'dist'), { recursive: true });
 await mkdir(path.join(resources, 'node_modules'), { recursive: true });
 await mkdir(binaries, { recursive: true });
@@ -44,6 +45,8 @@ await build({
   ...bundleOptions,
 });
 await cp(path.join(appDir, 'src/agent/skill'), path.join(resources, 'desktop/skill'), { recursive: true });
+await cp(path.join(repoRoot, 'apps/local-server/dist/daemon.cjs'), path.join(resources, 'desktop/local-server/daemon.cjs'));
+await cp(path.join(repoRoot, 'apps/local-server/dist/web'), path.join(resources, 'desktop/local-server/web'), { recursive: true });
 await cp(path.join(repoRoot, 'node_modules/jsonc-parser'), path.join(resources, 'node_modules/jsonc-parser'), { recursive: true });
 await cp(path.join(appDir, 'build/webapp'), path.join(resources, 'dist/webapp'), { recursive: true });
 const runtime = process.platform === 'win32' ? 'cospace-node.exe' : 'cospace-node';

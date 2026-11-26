@@ -9,9 +9,9 @@ export async function detectAgentIntegrations() {
   return detectWorkBuddy() ? [await detectWorkBuddyIntegration()] : [];
 }
 
-export async function connectAgent(id, { entry, dataHome, node = process.execPath } = {}) {
+export async function connectAgent(id, { entry, dataHome, localServerDist, localServerVersion, node = process.execPath } = {}) {
   if (id !== 'workbuddy') throw Object.assign(new Error('暂不支持此 Agent'), { code: 'AGENT_UNSUPPORTED' });
   if (!detectWorkBuddy()) throw Object.assign(new Error('未检测到 WorkBuddy，暂不能自动接入'), { code: 'AGENT_NOT_DETECTED' });
-  const serverConfig = { type: 'stdio', command: node, args: [entry || path.resolve(here, 'mcp-entry.js')], env: { COSPACE_WEB_HOME: dataHome } };
+  const serverConfig = { type: 'stdio', command: node, args: [entry || path.resolve(here, 'mcp-entry.js')], env: { COSPACE_WEB_HOME: dataHome, COSPACE_LOCAL_SERVER_DIST: localServerDist, COSPACE_LOCAL_SERVER_VERSION: localServerVersion } };
   return connectWorkBuddy({ skillSource, serverConfig });
 }
