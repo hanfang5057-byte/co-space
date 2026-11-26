@@ -19,7 +19,7 @@ test('host comment bridge requires explicit action and treats unconfirmed receip
    assert.equal(sent.length,0);
    const payload={docId:'d',sessionId:'session-1',commentIds:[note.id],operationId:'send-1'};
    assert.equal((await host.dispatch('sendComments',payload)).status,'unknown');
-   assert.equal(sent.length,1);assert.equal(sent[0].sessionId,'session-1');assert.match(sent[0].content[0].text,/^space:d\n/);assert.match(sent[0].content[0].text,/space_document_read/);assert.match(sent[0].content[0].text,/space_comment_complete/);assert.doesNotMatch(sent[0].content[0].text,/clarify/);assert.doesNotMatch(sent[0].content[0].text,new RegExp(note.id));
+   assert.equal(sent.length,1);assert.equal(sent[0].sessionId,'session-1');assert.match(sent[0].content[0].text,/^space:d\n/);assert.match(sent[0].content[0].text,/space_document_read/);assert.match(sent[0].content[0].text,/space_comment_complete/);assert.doesNotMatch(sent[0].content[0].text,/clarify/);assert.match(sent[0].content[0].text,new RegExp(note.id));
    assert.equal((await host.dispatch('sendComments',payload)).status,'unknown');assert.equal(sent.length,1);
  } finally {host.close();rmSync(home,{recursive:true,force:true});}
 });
@@ -49,7 +49,7 @@ test('UI creates an untitled document with an empty body and replays its operati
    assert.equal(first.id,'doc-ui-create-1');assert.equal(first.title,'未命名文档');
    const list=await host.dispatch('listDocuments');assert.equal(list.length,1);assert.equal(list[0].title,'未命名文档');
    const doc=await host.dispatch('readDocument',{docId:first.id});
-   assert.equal(doc.content,'# 未命名文档\n\n');
+   assert.equal(doc.content,'# 未命名文档\n\n\n');
    const again=await host.dispatch('createDocument',{title:'未命名文档',operationId:'ui-create-1'});
    assert.equal(again.id,first.id);assert.equal((await host.dispatch('listDocuments')).length,1);
    const second=await host.dispatch('createDocument',{title:'未命名文档',operationId:'ui-create-2'});

@@ -632,9 +632,13 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       link.rel='noopener noreferrer';
       return;
     }
-    // DSH resource links are resolved by the host. Other schemes are not
-    // allowed to replace the active CoSpace view.
-    if(destination.protocol!=='dsh-resource:') event.preventDefault();
+    const documentId=adapter.navigation?.parseDocumentLink?.(href);
+    if(documentId) {
+      event.preventDefault();
+      adapter.navigation?.openDocument?.(documentId);
+      return;
+    }
+    event.preventDefault();
   };
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;

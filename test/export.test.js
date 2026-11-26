@@ -12,7 +12,8 @@ test('export parses common Markdown blocks and keeps filenames safe', () => {
 test('DOCX contains valid OOXML parts, safe links and excludes unsafe link targets', async () => {
   const parts = docxParts('[安全](https://example.test) [危险](javascript:alert(1)) **粗体**');
   assert.match(parts['word/document.xml'], /w:hyperlink r:id="rId1"/);
-  assert.doesNotMatch(parts['word/document.xml'], /javascript:/);
+  assert.doesNotMatch(parts['word/_rels/document.xml.rels'], /javascript:/);
+  assert.match(parts['word/document.xml'], /\[危险\]\(javascript:alert\(1\)\)/);
   assert.match(parts['word/_rels/document.xml.rels'], /https:\/\/example.test/);
   assert.match(parts['word/_rels/document.xml.rels'], /relationships\/styles/);
   assert.match(parts['word/styles.xml'], /styleId="Heading1"/);
