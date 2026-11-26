@@ -10,7 +10,7 @@ import { endpointFile, LOCAL_PROTOCOL_VERSION, secretFile } from './paths.js';
 
 const MAX_RPC_BODY = 1024 * 1024;
 const MCP_SESSION_TTL_MS = 60_000;
-const UI_SESSION_TTL_MS = 10 * 60_000;
+const UI_SESSION_TTL_MS = 90_000;
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -51,7 +51,7 @@ async function dispatchMcp(space, collaboration, method, args = {}) {
   }
 }
 
-export async function startLocalService({ dataHome, runtimeHome, versionHome, version = '0.0.0', updaterEnabled = false, onEnableUpdater, host = '127.0.0.1', port = 0, fallbackPort = false, allowStopWithUi = false, mcpSessionTtlMs = MCP_SESSION_TTL_MS, uiSessionTtlMs = UI_SESSION_TTL_MS, sessionSweepIntervalMs = 20_000 } = {}) {
+export async function startLocalService({ dataHome, runtimeHome, versionHome, version = '0.0.0', updaterEnabled = false, onEnableUpdater, host = '127.0.0.1', port = 0, fallbackPort = false, mcpSessionTtlMs = MCP_SESSION_TTL_MS, uiSessionTtlMs = UI_SESSION_TTL_MS, sessionSweepIntervalMs = 20_000 } = {}) {
   if (!dataHome || !runtimeHome || !versionHome) throw new TypeError('dataHome, runtimeHome, and versionHome are required');
   await Promise.all([
     mkdir(dataHome, { recursive: true, mode: 0o700 }),
@@ -158,7 +158,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       if (req.method === 'POST' && req.url === '/__cospace/control/stop') {
         if (req.headers['x-cospace-rpc-token'] !== secrets.rpcToken) { json(res, 403, { error: { code: 'FORBIDDEN', message: 'Invalid service authorization' } }); return; }
         pruneSessions();
-        if (mcpSessions.size > 0 || (!allowStopWithUi && uiSessions.size > 0) || inFlight > 1) { json(res, 409, { error: { code: 'ACTIVE_MCP_CLIENTS', message: `Cannot stop CoSpace while ${mcpSessions.size} Agent and ${uiSessions.size} review page connection(s) or ${Math.max(0, inFlight - 1)} request(s) are active.` } }); return; }
+        if (mcpSessions.size > 0 || inFlight > 1) { json(res, 409, { error: { code: 'ACTIVE_MCP_CLIENTS', message: `Cannot stop CoSpace while ${mcpSessions.size} Agent connection(s) or ${Math.max(0, inFlight - 1)} request(s) are active.` } }); return; }
         json(res, 200, { result: { stopping: true } });
         setImmediate(() => process.kill(process.pid, 'SIGTERM'));
         return;

@@ -25,7 +25,6 @@ async function mcp() {
 }
 
 async function main() {
-  process.env.COSPACE_DEV_ALLOW_UI_STOP = '1';
   await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
   let lock;
   const lockPath = path.join(runtimeHome, 'dev.lock');

@@ -32,7 +32,7 @@ npx -y @hanfang5057/co-space@latest service rollback
 ```
 
 Stopping the service preserves user data. Uninstalling the package or removing an Agent's MCP configuration also preserves data.
-Stop or restart is refused while an Agent or review page is actively connected; close them first. Legacy services may not track review pages.
+Stop or restart is refused while an Agent or request is active. Open review pages are counted for status and automatic update coordination, but do not block a manual restart; save edits before restarting because the page will disconnect. Stale page sessions expire after 90 seconds. Legacy services may not track review pages.
 
 ## Develop from the workspace
 
