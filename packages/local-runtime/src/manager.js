@@ -51,7 +51,7 @@ export async function installRuntimeVersion({ sourceVersionHome, runtimeHome, ve
     if (error.code !== 'EEXIST' && error.code !== 'ENOTEMPTY') throw error;
     try {
       const marker = JSON.parse(await readFile(path.join(versionHome, 'runtime.json'), 'utf8'));
-      if (marker.version === version && marker.protocolVersion === LOCAL_PROTOCOL_VERSION && JSON.stringify(marker.hashes) === JSON.stringify(expectedHashes)) return versionHome;
+      if (marker.version === version && marker.protocolVersion === LOCAL_PROTOCOL_VERSION && JSON.stringify(marker.hashes) === JSON.stringify(expectedHashes) && JSON.stringify(await digests(versionHome)) === JSON.stringify(expectedHashes)) return versionHome;
     } catch {}
     throw Object.assign(new Error(`Could not install CoSpace runtime ${version}`), { code: 'RUNTIME_INSTALL_CONFLICT' });
   }
@@ -65,7 +65,7 @@ async function reachableEndpoint(runtimeHome) {
     const response = await fetch(`http://${endpoint.host}:${endpoint.port}/__cospace/health`, { signal: AbortSignal.timeout(700) });
     const health = await response.json();
     if (!response.ok || health.ready !== true || health.runtimeId !== endpoint.runtimeId) return null;
-    return { ...endpoint, version: health.version, protocolVersion: health.protocolVersion, updaterEnabled: health.updaterEnabled === true, activeMcpClients: health.activeMcpClients || 0 };
+    return { ...endpoint, version: health.version, protocolVersion: health.protocolVersion, updaterEnabled: health.updaterEnabled === true, activeMcpClients: health.activeMcpClients || 0, activeUiSessions: health.activeUiSessions || 0, update: health.update || null };
   } catch { return null; }
 }
 
@@ -75,16 +75,26 @@ function assertCompatible(endpoint) {
   }
 }
 
-export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeHome = resolveRuntimeHome({ dataHome }), versionHome, sourceVersionHome, version = '0.0.0', autoUpdate = false, node = process.execPath, timeoutMs = 20000 } = {}) {
+export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeHome = resolveRuntimeHome({ dataHome }), versionHome, sourceVersionHome, version = '0.0.0', autoUpdate = false, scheduleUpgrade = true, node = process.execPath, timeoutMs = 20000 } = {}) {
   if (!versionHome) versionHome = await installRuntimeVersion({ sourceVersionHome, runtimeHome, version });
   await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
   await ensureSecrets(runtimeHome);
+  const useEndpoint = async current => {
+    const secrets = await readSecrets(runtimeHome);
+    if (!secrets?.rpcToken || !secrets?.uiToken) throw new Error('CoSpace service credentials are missing; stop and restart the service to recover.');
+    let upgradeNotice;
+    if (autoUpdate && scheduleUpgrade && /^\d+\.\d+\.\d+$/.test(version) && /^\d+\.\d+\.\d+$/.test(current.version || '') && version.localeCompare(current.version, 'en', { numeric: true }) > 0) {
+      try {
+        const result = await requestRuntimeUpgrade(runtimeHome, version);
+        upgradeNotice = result.scheduled ? 'scheduled' : 'restart-required';
+      } catch { upgradeNotice = 'restart-required'; }
+    }
+    return { ...current, dataHome, runtimeHome, rpcToken: secrets.rpcToken, uiToken: secrets.uiToken, upgradeNotice };
+  };
   let endpoint = await reachableEndpoint(runtimeHome);
   assertCompatible(endpoint);
   if (endpoint) {
-    const secrets = await readSecrets(runtimeHome);
-    if (!secrets?.rpcToken || !secrets?.uiToken) throw new Error('CoSpace service credentials are missing; stop and restart the service to recover.');
-    return { ...endpoint, dataHome, runtimeHome, rpcToken: secrets.rpcToken, uiToken: secrets.uiToken };
+    return useEndpoint(endpoint);
   }
 
   const lockPath = path.join(runtimeHome, 'start.lock');
@@ -95,9 +105,7 @@ export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeH
     endpoint = await reachableEndpoint(runtimeHome);
     assertCompatible(endpoint);
     if (endpoint) {
-      const secrets = await readSecrets(runtimeHome);
-      if (!secrets?.rpcToken || !secrets?.uiToken) throw new Error('CoSpace service credentials are missing; stop and restart the service to recover.');
-      return { ...endpoint, dataHome, runtimeHome, rpcToken: secrets.rpcToken, uiToken: secrets.uiToken };
+      return useEndpoint(endpoint);
     }
     try {
       const lock = await open(lockPath, 'wx', 0o600);
@@ -148,9 +156,7 @@ export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeH
     endpoint = await reachableEndpoint(runtimeHome);
     assertCompatible(endpoint);
     if (endpoint) {
-      const secrets = await readSecrets(runtimeHome);
-      if (!secrets?.rpcToken) throw new Error('CoSpace service started without an RPC credential');
-      return { ...endpoint, dataHome, runtimeHome, rpcToken: secrets.rpcToken, uiToken: secrets.uiToken };
+      return useEndpoint(endpoint);
     }
     await sleep(200);
   }

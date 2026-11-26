@@ -26,10 +26,12 @@ async function currentPaths() {
   return { dataHome, runtimeHome, versionHome };
 }
 
-async function ensureService() {
+async function ensureService({ scheduleUpgrade = true } = {}) {
   const paths = await currentPaths();
-  const endpoint = await ensureLocalDaemon({ ...paths, version: metadata.version, autoUpdate: true });
-  await enableLocalUpdater(paths.runtimeHome);
+  const endpoint = await ensureLocalDaemon({ ...paths, version: metadata.version, autoUpdate: true, scheduleUpgrade });
+  if (scheduleUpgrade) await enableLocalUpdater(paths.runtimeHome);
+  if (endpoint.upgradeNotice === 'restart-required') process.stderr.write('A newer CoSpace version is installed, but the running service cannot update itself. Save and close review pages, disconnect Agents, then run: npx -y @hanfang5057/co-space@latest service restart\n');
+  else if (endpoint.upgradeNotice === 'scheduled') process.stderr.write('A newer CoSpace version is ready and will start after review pages and Agents disconnect.\n');
   return endpoint;
 }
 
@@ -58,7 +60,7 @@ async function rollbackService(targetVersion) {
 }
 
 async function runMcp() {
-  const endpoint = await ensureService();
+  const endpoint = await ensureService({ scheduleUpgrade: false });
   const { startStdioMcp } = await import(pathToFileURL(path.join(distRoot, 'mcp.cjs')).href);
   await startStdioMcp({ ...endpoint, url: `http://${endpoint.host}:${endpoint.port}/` }, { packageVersion: metadata.version });
 }
@@ -66,7 +68,7 @@ async function runMcp() {
 async function runService(command, argument) {
   if (command === 'status') {
     const status = await localServiceStatus();
-    process.stdout.write(status.running ? `CoSpace Local Server ${status.version}\n${status.url}\nActive Agent connections: ${status.activeMcpClients}\n` : 'CoSpace Local Server is not running.\n');
+    process.stdout.write(status.running ? `CoSpace Local Server ${status.version}\n${status.url}\nActive Agent connections: ${status.activeMcpClients}\nActive review pages: ${status.activeUiSessions}\nUpdate: ${status.update?.state || (status.updaterEnabled ? 'checking' : 'unavailable')}${status.update?.targetVersion ? ` (${status.update.targetVersion})` : ''}${status.update?.reason ? ` (${status.update.reason})` : ''}\n` : 'CoSpace Local Server is not running.\n');
     return;
   }
   if (command === 'stop') {

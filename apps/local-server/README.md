@@ -17,7 +17,9 @@ Add this stdio MCP server to an Agent that supports Node.js 22.22.2 or later:
 }
 ```
 
-Restart or reconnect the Agent after changing its MCP configuration. The review URL is returned by MCP and can be opened later with `npx -y @hanfang5057/co-space@latest service open`. Starting with the first release that includes automatic updates, the background service checks npm's `latest` release periodically, downloads and verifies it in the background, and switches versions when no Agent MCP connection is active. The first upgrade to that release still requires `npx -y @hanfang5057/co-space@latest service restart`; older daemons cannot update themselves. A service restart briefly disconnects the review page, which reconnects when reopened or refreshed. User data is kept in its existing data directory.
+Restart or reconnect the Agent after changing its MCP configuration. The review URL is returned by MCP and can be opened later with `npx -y @hanfang5057/co-space@latest service open`. The service checks npm's `latest` release, stages a verified version and waits for both Agent connections and review pages to close before switching. The version indicator shows update progress and why a staged update is waiting. `service status` also reports the active connections and update state. The service attempts to keep its existing port; if it is unavailable, open CoSpace again to get the new address.
+
+Launching a newer CLI also requests a switch to its staged version. Older services that lack the upgrade protocol cannot switch automatically: save edits, close review pages, disconnect Agents, then run `npx -y @hanfang5057/co-space@latest service restart` once. An incompatible old service may not be able to detect open review pages, so close them before restarting. User data is kept in its existing data directory. If a candidate fails its health check, the service attempts to restart the previous runtime; data migrations must be independently compatible with rollback.
 
 ## Manage the local service
 
@@ -30,7 +32,7 @@ npx -y @hanfang5057/co-space@latest service rollback
 ```
 
 Stopping the service preserves user data. Uninstalling the package or removing an Agent's MCP configuration also preserves data.
-Stop or restart is refused while an Agent is actively connected; disconnect the Agent first.
+Stop or restart is refused while an Agent or review page is actively connected; close them first. Legacy services may not track review pages.
 
 ## Develop from the workspace
 

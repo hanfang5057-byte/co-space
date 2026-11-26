@@ -63,7 +63,7 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 ### Upgrade and rollback checks
 
 - New npm versions are immutable. Publish a new semver version rather than replacing an existing version.
-- `@latest` is resolved on a new npx launch. Releases that include the background updater also have the daemon check npm `latest` periodically, verify the tarball integrity, stage runtime assets outside the npm cache, and switch only after active MCP sessions close. The first rollout still requires users to restart once from the latest npm package because older daemons do not contain the updater. Verify candidate startup and fallback to the previous runtime before promotion.
+- `@latest` is resolved on a new npx launch. The daemon checks npm `latest` periodically, stages verified runtime assets outside the npm cache, and waits for both MCP sessions and review pages to close before switching. A newer CLI also requests a staged upgrade. Older daemons without the upgrade protocol require a one-time manual restart after saving edits, closing pages and disconnecting Agents. Verify candidate startup, port reuse, connection protection and fallback to the previous runtime before promotion.
 - Before promotion, verify that staged versioned daemon assets are installed outside the npm cache, the active service reports the intended version/protocol, and restart does not alter user data.
 - Keep the previous runtime bundle available for code rollback. Test schema compatibility and backup/restore behavior before any data-format migration.
 - Do not remove old npm versions or user runtime assets as a normal upgrade step.

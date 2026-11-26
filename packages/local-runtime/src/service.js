@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdir, readFile, writeFile, rename, rm, appendFile } from 'node:fs/promises';
+import { mkdir, open, readFile, writeFile, rename, rm, appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { CollaborationStore } from '../../review-core/src/collaboration-store.js';
 import { SpaceService } from '../../review-core/src/space-service.js';
@@ -51,7 +51,7 @@ async function dispatchMcp(space, collaboration, method, args = {}) {
   }
 }
 
-export async function startLocalService({ dataHome, runtimeHome, versionHome, version = '0.0.0', updaterEnabled = false, onEnableUpdater, host = '127.0.0.1', port = 0, allowStopWithUi = false } = {}) {
+export async function startLocalService({ dataHome, runtimeHome, versionHome, version = '0.0.0', updaterEnabled = false, onEnableUpdater, host = '127.0.0.1', port = 0, fallbackPort = false, allowStopWithUi = false, mcpSessionTtlMs = MCP_SESSION_TTL_MS, uiSessionTtlMs = UI_SESSION_TTL_MS, sessionSweepIntervalMs = 20_000 } = {}) {
   if (!dataHome || !runtimeHome || !versionHome) throw new TypeError('dataHome, runtimeHome, and versionHome are required');
   await Promise.all([
     mkdir(dataHome, { recursive: true, mode: 0o700 }),
@@ -70,38 +70,56 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
   let automaticUpdatesEnabled = updaterEnabled;
   let pendingUpgrade = null;
   let upgradeRunning = false;
+  let upgradeTimer = null;
+  let inFlight = 0;
+  let ownsUpgradeLock = false;
+  let updateStatus = { state: updaterEnabled ? 'checking' : 'disabled' };
+  const setUpdateStatus = status => { updateStatus = { ...status }; };
   let serviceCloseForUpgrade;
   const maybeUpgrade = () => {
-    if (!pendingUpgrade || upgradeRunning || mcpSessions.size || uiSessions.size) return;
-    const target = pendingUpgrade;
-    upgradeRunning = true;
-    setTimeout(() => {
+    if (!pendingUpgrade || upgradeRunning || upgradeTimer || mcpSessions.size || uiSessions.size || inFlight) return;
+    upgradeTimer = setTimeout(() => {
+      upgradeTimer = null;
+      if (!pendingUpgrade || upgradeRunning || mcpSessions.size || uiSessions.size || inFlight) return;
+      const target = pendingUpgrade;
+      upgradeRunning = true;
+      setUpdateStatus({ state: 'switching', targetVersion: target });
       void appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} switching to ${target}\n`, { mode: 0o600 });
-      void serviceCloseForUpgrade?.(target).catch(error => {
+      void serviceCloseForUpgrade?.(target).catch(async error => {
         void appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} switch failed: ${error.stack || error.message}\n`, { mode: 0o600 });
+        if (ownsUpgradeLock) { await rm(path.join(runtimeHome, 'start.lock'), { force: true }); ownsUpgradeLock = false; }
         upgradeRunning = false;
+        pendingUpgrade = null;
+        setUpdateStatus({ state: 'failed', targetVersion: target, reason: 'switch' });
       });
-    }, 500).unref?.();
+    }, 500);
+    upgradeTimer.unref?.();
   };
   const pruneSessions = () => {
-    const expiredBefore = Date.now() - MCP_SESSION_TTL_MS;
+    const expiredBefore = Date.now() - mcpSessionTtlMs;
     for (const [id, touchedAt] of mcpSessions) if (touchedAt < expiredBefore) mcpSessions.delete(id);
-    const expiredUiBefore = Date.now() - UI_SESSION_TTL_MS;
+    const expiredUiBefore = Date.now() - uiSessionTtlMs;
     for (const [id, touchedAt] of uiSessions) if (touchedAt < expiredUiBefore) uiSessions.delete(id);
     maybeUpgrade();
   };
+  const sessionTimer = setInterval(pruneSessions, sessionSweepIntervalMs);
+  sessionTimer.unref?.();
   let server;
   let endpoint;
 
   server = createServer(async (req, res) => {
+    let counted = false;
     try {
       const expectedHost = endpoint ? `${host}:${endpoint.port}` : null;
       if (!expectedHost || req.headers.host !== expectedHost) { res.writeHead(403); res.end(); return; }
       if (req.method === 'GET' && req.url === '/__cospace/health') {
         pruneSessions();
-        json(res, 200, { ready: true, runtimeId, version, protocolVersion: LOCAL_PROTOCOL_VERSION, updaterEnabled: automaticUpdatesEnabled, activeMcpClients: mcpSessions.size, activeUiSessions: uiSessions.size });
+        json(res, 200, { ready: !upgradeRunning, runtimeId, version, protocolVersion: LOCAL_PROTOCOL_VERSION, updaterEnabled: automaticUpdatesEnabled, activeMcpClients: mcpSessions.size, activeUiSessions: uiSessions.size, update: pendingUpgrade && !upgradeRunning ? { state: 'waiting', targetVersion: pendingUpgrade } : updateStatus });
         return;
       }
+      if (upgradeRunning) { json(res, 503, { error: { code: 'UPDATE_IN_PROGRESS', message: 'Service update in progress' } }); return; }
+      inFlight++;
+      counted = true;
       if (req.method === 'POST' && req.url === '/__cospace/mcp/session') {
         if (req.headers['x-cospace-rpc-token'] !== secrets.rpcToken) { json(res, 403, { error: { code: 'FORBIDDEN', message: 'Invalid local RPC authorization' } }); return; }
         if (!req.headers['content-type']?.toLowerCase().startsWith('application/json')) { json(res, 415, { error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'JSON required' } }); return; }
@@ -140,7 +158,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       if (req.method === 'POST' && req.url === '/__cospace/control/stop') {
         if (req.headers['x-cospace-rpc-token'] !== secrets.rpcToken) { json(res, 403, { error: { code: 'FORBIDDEN', message: 'Invalid service authorization' } }); return; }
         pruneSessions();
-        if (mcpSessions.size > 0 || (!allowStopWithUi && uiSessions.size > 0)) { json(res, 409, { error: { code: 'ACTIVE_MCP_CLIENTS', message: `Cannot stop CoSpace while ${mcpSessions.size} Agent and ${uiSessions.size} review page connection(s) are active.` } }); return; }
+        if (mcpSessions.size > 0 || (!allowStopWithUi && uiSessions.size > 0) || inFlight > 1) { json(res, 409, { error: { code: 'ACTIVE_MCP_CLIENTS', message: `Cannot stop CoSpace while ${mcpSessions.size} Agent and ${uiSessions.size} review page connection(s) or ${Math.max(0, inFlight - 1)} request(s) are active.` } }); return; }
         json(res, 200, { result: { stopping: true } });
         setImmediate(() => process.kill(process.pid, 'SIGTERM'));
         return;
@@ -149,10 +167,13 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
         if (req.headers['x-cospace-rpc-token'] !== secrets.rpcToken) { json(res, 403, { error: { code: 'FORBIDDEN', message: 'Invalid service authorization' } }); return; }
         const input = await readJsonBody(req);
         if (typeof input.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(input.version)) { json(res, 400, { error: { code: 'INVALID_VERSION', message: 'Invalid runtime version' } }); return; }
+        const stableVersion = value => /^\d+\.\d+\.\d+$/.test(value);
+        if (stableVersion(version) && stableVersion(input.version) && input.version.localeCompare(version, 'en', { numeric: true }) <= 0) { json(res, 409, { error: { code: 'NOT_NEWER', message: 'Upgrade version must be newer than the running service' } }); return; }
         pruneSessions();
         const target = path.join(path.dirname(versionHome), input.version, 'daemon.cjs');
         try { await readFile(target); } catch { json(res, 404, { error: { code: 'RUNTIME_NOT_INSTALLED', message: 'Runtime is not installed' } }); return; }
-        pendingUpgrade = input.version;
+        if (!pendingUpgrade || !stableVersion(pendingUpgrade) || !stableVersion(input.version) || input.version.localeCompare(pendingUpgrade, 'en', { numeric: true }) > 0) pendingUpgrade = input.version;
+        setUpdateStatus({ state: 'waiting', targetVersion: pendingUpgrade });
         json(res, 200, { result: { scheduled: true, waitingForConnections: mcpSessions.size > 0 || uiSessions.size > 0 } });
         maybeUpgrade();
         return;
@@ -168,7 +189,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
         let html = await readFile(path.join(webRoot, 'index.html'), 'utf8');
         const uiSessionId = randomBytes(18).toString('hex');
         uiSessions.set(uiSessionId, Date.now());
-        html = html.replace('<!--COSPACE_TOKEN-->', `<script>window.__COSPACE_LOCAL_TOKEN__=${JSON.stringify(secrets.uiToken)};(()=>{const id=${JSON.stringify(uiSessionId)},token=${JSON.stringify(secrets.uiToken)},base='http://${host}:'+location.port;const send=action=>fetch(base+'/__cospace/ui/session',{method:'POST',headers:{'content-type':'application/json','x-cospace-token':token},body:JSON.stringify({id,action}),keepalive:action==='close'}).catch(()=>{});send('open');const timer=setInterval(()=>send('heartbeat'),20000);addEventListener('pagehide',()=>{clearInterval(timer);send('close')},{once:true})})()</script>`);
+        html = html.replace('<!--COSPACE_TOKEN-->', `<script>window.__COSPACE_LOCAL_TOKEN__=${JSON.stringify(secrets.uiToken)};(()=>{const id=${JSON.stringify(uiSessionId)},token=${JSON.stringify(secrets.uiToken)},base='http://${host}:'+location.port;const send=action=>fetch(base+'/__cospace/ui/session',{method:'POST',headers:{'content-type':'application/json','x-cospace-token':token},body:JSON.stringify({id,action}),keepalive:action==='close'}).catch(()=>{});let timer;const start=()=>{clearInterval(timer);send('open');timer=setInterval(()=>send('heartbeat'),20000)};start();addEventListener('pagehide',()=>{clearInterval(timer);send('close')});addEventListener('pageshow',event=>{if(event.persisted)start()})})()</script>`);
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         res.end(html);
         return;
@@ -185,10 +206,21 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
     } catch (error) {
       if (res.headersSent) { res.destroy(error); return; }
       json(res, 400, { error: { code: error.code || 'INVALID_REQUEST', message: error.message || 'Request failed' } });
+    } finally {
+      if (counted) { inFlight--; maybeUpgrade(); }
     }
   });
 
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
+  const listen = listenPort => new Promise((resolve, reject) => {
+    const onError = error => { server.off('listening', onListening); reject(error); };
+    const onListening = () => { server.off('error', onError); resolve(); };
+    server.once('error', onError); server.once('listening', onListening); server.listen(listenPort, host);
+  });
+  try { await listen(port); }
+  catch (error) {
+    if (error.code === 'EADDRINUSE' && fallbackPort) await listen(0);
+    else { clearInterval(sessionTimer); api.close(); collaboration.close(); space.close(); throw error; }
+  }
   const address = server.address();
   endpoint = { pid: process.pid, runtimeId, host, port: address.port, version, protocolVersion: LOCAL_PROTOCOL_VERSION };
   const endpointPath = endpointFile(runtimeHome);
@@ -199,9 +231,11 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
 
   let closing;
   const close = () => closing ??= (async () => {
+    clearInterval(sessionTimer);
+    clearTimeout(upgradeTimer);
     await new Promise(resolve => {
       server.close(resolve);
-      server.closeAllConnections();
+      server.closeIdleConnections?.();
     });
     api.close();
     collaboration.close();
@@ -212,6 +246,11 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
     } catch {}
   })();
   serviceCloseForUpgrade = async version => {
+    const lockPath = path.join(runtimeHome, 'start.lock');
+    const lock = await open(lockPath, 'wx', 0o600);
+    ownsUpgradeLock = true;
+    try { await lock.writeFile(JSON.stringify({ pid: process.pid, nonce: randomBytes(16).toString('hex'), startedAt: Date.now() })); }
+    finally { await lock.close(); }
     await appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} closing old service\n`, { mode: 0o600 });
     await close();
     await appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} old service closed\n`, { mode: 0o600 });
@@ -220,7 +259,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       const targetHome = path.join(path.dirname(versionHome), target);
       const child = spawn(process.execPath, [path.join(targetHome, 'daemon.cjs')], {
         detached: true, stdio: 'ignore', windowsHide: true,
-        env: { ...process.env, COSPACE_DATA_HOME: dataHome, COSPACE_RUNTIME_HOME: runtimeHome, COSPACE_VERSION_HOME: targetHome, COSPACE_PACKAGE_VERSION: target, COSPACE_AUTO_UPDATE: automaticUpdatesEnabled ? '1' : '0' },
+        env: { ...process.env, COSPACE_DATA_HOME: dataHome, COSPACE_RUNTIME_HOME: runtimeHome, COSPACE_VERSION_HOME: targetHome, COSPACE_PACKAGE_VERSION: target, COSPACE_AUTO_UPDATE: automaticUpdatesEnabled ? '1' : '0', COSPACE_UPDATE_PORT: String(endpoint.port), COSPACE_UPDATE_RESULT: target === endpoint.version ? 'failed' : 'updated' },
       });
       child.once('error', error => { void appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} ${target}: ${error.stack || error.message}\n`, { mode: 0o600 }); });
       child.once('exit', (code, signal) => { void appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} ${target} exited code=${code} signal=${signal}\n`, { mode: 0o600 }); });
@@ -253,5 +292,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
     await healthy(process.env.COSPACE_PREVIOUS_VERSION || endpoint.version);
     process.exit(1);
   };
-  return { ...endpoint, url: `http://${host}:${address.port}/`, uiToken: secrets.uiToken, rpcToken: secrets.rpcToken, close };
+  if (process.env.COSPACE_UPDATE_RESULT === 'updated') setUpdateStatus({ state: 'updated' });
+  if (process.env.COSPACE_UPDATE_RESULT === 'failed') setUpdateStatus({ state: 'failed', reason: 'switch' });
+  return { ...endpoint, url: `http://${host}:${address.port}/`, uiToken: secrets.uiToken, rpcToken: secrets.rpcToken, close, setUpdateStatus };
 }

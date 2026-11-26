@@ -19,7 +19,7 @@ function saveExport({ name, type, bytes }) {
 
 const declaration = {
   id: 'local-server',
-  version: '0.1.12',
+  version: '0.1.13',
   contractVersion: ADAPTER_CONTRACT_VERSION,
   capabilities: ['files.export.save', 'clipboard.write', 'identity.current.read'],
 };
@@ -33,6 +33,11 @@ const adapter = {
   files: { saveExport },
   clipboard: { writeText: text => navigator.clipboard.writeText(text) },
   identity: { getCurrentUser: () => api('getUser') },
+  updates: { getStatus: async () => {
+    const response = await fetch('/__cospace/health', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Local service unavailable');
+    return response.json();
+  } },
   capabilities: resolveAdapterCapabilities(declaration, available),
 };
 

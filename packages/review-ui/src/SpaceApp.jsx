@@ -690,6 +690,14 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const [settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(null),[settingsError,setSettingsError]=useState(''),[settingsScope,setSettingsScope]=useState('document'),[instructionText,setInstructionText]=useState(''),[instructionSaveState,setInstructionSaveState]=useState('idle'),[settingsBusy,setSettingsBusy]=useState(false);
   const [exporting,setExporting]=useState(false);
   const [promptTask,setPromptTask]=useState(null),[copiedPrompt,setCopiedPrompt]=useState(false);
+  const [updateInfo,setUpdateInfo]=useState(null);
+  useEffect(()=>{
+    if(!adapter.updates?.getStatus) return;
+    let stopped=false;
+    const sync=async()=>{try{const status=await adapter.updates.getStatus();if(!stopped)setUpdateInfo(status)}catch{if(!stopped)setUpdateInfo(previous=>({...previous,update:{state:'offline'}}))}};
+    void sync();const timer=setInterval(sync,10000);
+    return()=>{stopped=true;clearInterval(timer)};
+  },[adapter]);
   const deleteTitleId=useId();
   const editUnavailableTipId=useId();
   const user=useCurrentUser(adapter.identity?.getCurrentUser);
@@ -767,9 +775,14 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const home=!docId;
   const savedInstruction=settingsScope==='global'?settings?.global:settings?.document;
   const instructionDirty=Boolean(settings)&&instructionText!==(savedInstruction?.content||'');
+  const updateState=updateInfo?.update?.state || (updateInfo?.updaterEnabled===false?'disabled':'checking');
+  const failureReason=['check','download','stage','switch'].includes(updateInfo?.update?.reason)?`.${updateInfo.update.reason}`:'';
+  const updateLabel=adapter.updates ? t(`update.${updateState}${updateState==='failed'?failureReason:''}`,{version:updateInfo?.update?.targetVersion||'',agents:updateInfo?.activeMcpClients||0,pages:updateInfo?.activeUiSessions||0}) : '';
+  const currentVersion=updateInfo?.version || displayVersion;
+  const updateIndicator=adapter.updates ? <span className={`space-update-status is-${updateState}`} aria-live={['waiting','updated','failed','offline'].includes(updateState)?'polite':'off'}>{updateLabel}</span> : null;
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
-      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')} <span className="space-build-version" title={t('build.versionTitle')}>v{displayVersion}</span></small></span></div><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
+      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')} <span className="space-build-version" title={t(adapter.updates?'update.versionTitle':'build.versionTitle')}>v{currentVersion}</span> {updateIndicator}</small></span></div><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
         {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
@@ -782,7 +795,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
         </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
-      <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
+      <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t(adapter.updates?'update.versionTitle':'build.versionTitle')}>{adapter.updates?currentVersion:localBuildVersion}</small> {updateIndicator}</span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
             <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
               {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
               {review.doc&&<div className="space-toolbar-group is-view">
