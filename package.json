@@ -19,7 +19,9 @@
     "node": ">=24"
   },
   "scripts": {
+    "pretest": "npm run build:client",
     "test": "node --test test/*.test.js",
+    "precheck": "npm run build:client",
     "check": "node --test test/*.test.js",
     "build:client": "node scripts/build-client.mjs",
     "build:market": "node scripts/build-market.mjs",
