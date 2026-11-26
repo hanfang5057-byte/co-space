@@ -52,6 +52,6 @@ await build({
   sourcemap: false,
 });
 const manifest = JSON.parse(await readFile(path.join(appDir, 'package.json'), 'utf8'));
-await writeFile(path.join(output, 'package.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, protocolVersion: 1 }, null, 2)}\n`);
+await writeFile(path.join(output, 'package.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, type: 'module', protocolVersion: 1 }, null, 2)}\n`);
 await cp(path.join(root, 'LICENSE'), path.join(appDir, 'LICENSE'));
 console.log(`Built Local Server ${manifest.version} at ${output}`);
