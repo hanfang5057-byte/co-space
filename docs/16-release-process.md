@@ -23,6 +23,7 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 5. Verify the published registry version, dist-tag, tarball integrity, and Git tag before declaring a release complete.
 6. Create and push annotated tags only after the corresponding npm package has published and its post-publish checks have passed. A partial multi-package release must be resolved before creating any tag for the combined release commit.
 7. Do not hand-edit generated files under `dist/` or generated market metadata.
+8. Before pushing a `main` commit that changes `apps/site/`, publish and verify every npm package named in the site's install commands. The Pages workflow deploys automatically on that push; keep unpublished product instructions off the live site until their package is available.
 
 ## DSH plugin release
 
