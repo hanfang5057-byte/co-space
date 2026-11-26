@@ -19,7 +19,7 @@ function saveExport({ name, type, bytes }) {
 
 const declaration = {
   id: 'local-server',
-  version: '0.1.11',
+  version: '0.1.12',
   contractVersion: ADAPTER_CONTRACT_VERSION,
   capabilities: ['files.export.save', 'clipboard.write', 'identity.current.read'],
 };

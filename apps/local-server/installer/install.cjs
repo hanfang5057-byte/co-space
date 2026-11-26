@@ -15,6 +15,7 @@ const skillDir = path.join(root, 'skills', 'cospace-review');
 const skillPath = path.join(skillDir, 'SKILL.md');
 const markerPath = path.join(skillDir, '.cospace-install.json');
 const server = { command: 'npx', args: ['-y', '@hanfang5057/co-space@latest', 'mcp'], runtime: { type: 'node', version: '>=22.22.2' } };
+const requiredNode = [22, 22, 2];
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function readOptional(file) { try { return fs.readFileSync(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
@@ -73,8 +74,25 @@ try {
     throw error;
   }
   console.log('CoSpace: WorkBuddy MCP configuration and Skill installed.');
-  console.log('Reconnect or restart WorkBuddy, then verify CoSpace tools and the Skill in a new session.');
-  console.log('The WorkBuddy managed Node runtime must support Node 22.22.2+. MCP connection is not verified by this installer.');
+  console.log(`MCP config: ${configPath}`);
+  console.log(`Skill: ${skillPath} (${beforeSkill ? (beforeSkill.toString() === skill ? 'already current' : 'updated') : 'installed'})`);
+  const runtimeRoot = path.join(root, 'binaries', 'node', 'versions');
+  let foundRuntime = false;
+  try {
+    for (const version of fs.readdirSync(runtimeRoot)) {
+      const executable = path.join(runtimeRoot, version, 'bin', 'node');
+      try {
+        const output = require('node:child_process').execFileSync(executable, ['-p', 'process.versions.node'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        const actual = output.split('.').map(Number);
+        if (actual[0] > requiredNode[0] || actual[0] === requiredNode[0] && (actual[1] > requiredNode[1] || actual[1] === requiredNode[1] && actual[2] >= requiredNode[2])) {
+          console.log(`WorkBuddy Node: ${output} (meets >=22.22.2)`); foundRuntime = true; break;
+        }
+      } catch {}
+    }
+  } catch {}
+  if (!foundRuntime) console.log('WorkBuddy Node: could not confirm a managed Node >=22.22.2; MCP startup may fail.');
+  console.log('Next: restart WorkBuddy, open a new session, and check that CoSpace tools and the cospace-review Skill are available.');
+  console.log('Installation writes configuration only; MCP connectivity is not verified here.');
 } catch (error) {
   console.error(`CoSpace: ${error.message}`);
   process.exitCode = 1;
