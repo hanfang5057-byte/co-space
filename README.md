@@ -28,7 +28,7 @@ DSH 插件包名为 `dsh-plugin-space`，已发布到 npm。
 
 ### Local Server 和 Desktop
 
-本次协调版本为 `0.1.9`，三端产品版本已对齐，版本来源仍各自独立。当前发布准备状态：DSH npm `latest` 仍为 `0.1.8`；DSH `0.1.9` 和 Local Server `0.1.9` tarball 已完成打包验收，但尚未发布到 npm。Local Server 的配置和本地服务命令见 [`apps/local-server/README.md`](apps/local-server/README.md)；请在 `@cospace/local-server@0.1.9` 发布后再使用其中的 `@latest` 命令。
+本次协调版本为 `0.1.9`，三端产品版本已对齐，版本来源仍各自独立。当前发布准备状态：DSH npm `latest` 仍为 `0.1.8`，awesome-dsh-plugin 外部目录也仍指向 `v0.1.8`；DSH `0.1.9` 和 Local Server `0.1.9` tarball 已完成打包验收，但尚未发布到 npm。Local Server 的配置和本地服务命令见 [`apps/local-server/README.md`](apps/local-server/README.md)；请在 `@cospace/local-server@0.1.9` 发布后再使用其中的 `@latest` 命令。
 
 Desktop `0.1.9` 的 macOS arm64 DMG 已生成并通过包校验，目前使用 ad-hoc 签名，未使用 Developer ID 或公证。Windows/Linux 产物需要在对应构建机或 CI 完成验收后再发布；当前 macOS 包不代表已通过 Gatekeeper 的公开分发验收。桌面构建说明见 [`apps/desktop/README.md`](apps/desktop/README.md)。
 

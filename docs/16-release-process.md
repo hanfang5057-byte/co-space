@@ -43,6 +43,7 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 4. Confirm the market check passes against the current registry state.
 5. Create annotated tag `vX.Y.Z` on the commit containing the release and market index, then push the tag.
 6. Attach the staged tarball to the GitHub Release and verify its digest matches the staged tarball.
+7. Update the [awesome-dsh-plugin listing](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/hanfang5057-byte__co-space--adapters-dsh.yml) in a PR. Keep its URL at `https://github.com/hanfang5057-byte/co-space/tree/main/adapters/dsh`, tarball at the new GitHub Release asset, and description/icon aligned with the verified package. Verify the listing after the PR merges.
 
 ## Local Server npm release
 

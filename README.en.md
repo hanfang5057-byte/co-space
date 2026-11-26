@@ -25,7 +25,7 @@ The plugin declares `engines.dsh = ^0.2.2-rc.5` and Node.js 24 or later; recheck
 
 ### Local Server and Desktop
 
-The coordinated product version is `0.1.9`; the three version sources remain independent. For this release preparation, the DSH npm `latest` tag is still `0.1.8`; the DSH and Local Server `0.1.9` tarballs are staged and verified but not yet published. Do not use the Local Server `@latest` commands in [`apps/local-server/README.md`](apps/local-server/README.md) until `@cospace/local-server@0.1.9` is published.
+The coordinated product version is `0.1.9`; the three version sources remain independent. For this release preparation, the DSH npm `latest` tag and the external awesome-dsh-plugin listing still point to `0.1.8`; the DSH and Local Server `0.1.9` tarballs are staged and verified but not yet published. Do not use the Local Server `@latest` commands in [`apps/local-server/README.md`](apps/local-server/README.md) until `@cospace/local-server@0.1.9` is published.
 
 The Desktop `0.1.9` macOS arm64 DMG has been built and package-checked with ad-hoc signing. It has no Developer ID signature or notarization. Windows and Linux artifacts still need target-system or CI acceptance before release; the macOS package is not Gatekeeper-approved for general public distribution. See [`apps/desktop/README.md`](apps/desktop/README.md).
 
