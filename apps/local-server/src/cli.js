@@ -1,12 +1,11 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureLocalDaemon, installRuntimeVersion, localServiceStatus, stopLocalDaemon } from '../../../packages/local-runtime/src/manager.js';
 import { resolveDataHome, resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
 
-const packageRoot = path.resolve(path.dirname(process.argv[1]), '..');
-const distRoot = path.join(packageRoot, 'dist');
+const distRoot = path.dirname(fileURLToPath(import.meta.url));
 const metadata = JSON.parse(await readFile(path.join(distRoot, 'package.json'), 'utf8'));
 
 function openBrowser(url) {
