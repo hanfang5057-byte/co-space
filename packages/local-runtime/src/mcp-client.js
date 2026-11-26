@@ -39,7 +39,7 @@ export async function startStdioMcp(endpoint, { packageVersion = endpoint?.versi
   };
   const collaboration = { readInstructions: docId => call('readInstructions', { docId }) };
   const versionNotice = endpoint.version && endpoint.version !== packageVersion
-    ? `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version}. To upgrade the background service, run: npx -y @cospace/local-server@latest service restart, then reconnect the Agent.`
+    ? `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version}. To upgrade the background service, run: npx -y @hanfang5057/co-space@latest service restart, then reconnect the Agent.`
     : undefined;
   const server = createMcpServer(space, collaboration, { reviewUrl: endpoint.url, serverVersion: packageVersion, versionNotice });
   const sessionId = randomUUID();

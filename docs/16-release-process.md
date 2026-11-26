@@ -7,7 +7,7 @@ This document is the source of truth for publishing CoSpace npm packages and Des
 | Product | Publishable artifact | Version source | Staged output | Git tag |
 |---|---|---|---|---|
 | DSH plugin | `dsh-plugin-space` | `release/npm-version.json`, synchronized into `adapters/dsh/package.json`, `adapters/dsh/adapter.json`, and `package-lock.json` by the packaging script | `dist/dsh-plugin/` and `dist/npm-packages/dsh-plugin-space-X.Y.Z.tgz` | `vX.Y.Z` |
-| Local Server | `@cospace/local-server` | `apps/local-server/package.json` | `dist/npm-packages/cospace-local-server-X.Y.Z.tgz` (built package contents are under `apps/local-server/dist/`) | `local-server-vX.Y.Z` |
+| Local Server | `@hanfang5057/co-space` | `apps/local-server/package.json` | `dist/npm-packages/hanfang5057-co-space-X.Y.Z.tgz` (built package contents are under `apps/local-server/dist/`) | `local-server-vX.Y.Z` |
 | Desktop | Platform installer(s), not npm | `apps/desktop/src-tauri/tauri.conf.json` | `dist/releases/desktop/<platform>/` | No npm release tag unless explicitly coordinated with an npm release commit |
 
 The coordinated CoSpace `0.1.9` release aligns the DSH plugin, Local Server, and Desktop product versions at `0.1.9`. Their version sources remain independent, so verify all three before publishing.
@@ -57,8 +57,8 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 
 ### Publish and finish
 
-1. Publish only the staged tarball, never the private root workspace: `npm publish ./dist/npm-packages/cospace-local-server-X.Y.Z.tgz --access public --tag latest` (use `--tag next` for prereleases).
-2. Verify `@cospace/local-server@X.Y.Z` in the registry, tarball integrity, and intended `latest` or `next` dist-tag.
+1. Publish only the staged tarball, never the private root workspace: `npm publish ./dist/npm-packages/hanfang5057-co-space-X.Y.Z.tgz --access public --tag latest` (use `--tag next` for prereleases).
+2. Verify `@hanfang5057/co-space@X.Y.Z` in the registry, tarball integrity, and intended `latest` or `next` dist-tag.
 3. Verify npm provenance when the configured public CI publishing flow supports it.
 4. Create annotated tag `local-server-vX.Y.Z` on the commit containing the package version and release implementation, then push the tag.
 5. Record the registry version, dist-tag, package integrity, tag commit, and supported runtime/Agent acceptance results in the release notes.
@@ -66,7 +66,7 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 ### Upgrade and rollback checks
 
 - New npm versions are immutable. Publish a new semver version rather than replacing an existing version.
-- `@latest` is resolved on a new npx launch; already-running MCP and daemon processes do not update in place. A newer MCP client reports the daemon version and upgrade command. After all Agents disconnect, run `npx -y @cospace/local-server@latest service restart`, then reconnect the Agent.
+- `@latest` is resolved on a new npx launch; already-running MCP and daemon processes do not update in place. A newer MCP client reports the daemon version and upgrade command. After all Agents disconnect, run `npx -y @hanfang5057/co-space@latest service restart`, then reconnect the Agent.
 - Before promotion, verify that staged versioned daemon assets are installed outside the npm cache, the active service reports the intended version/protocol, and restart does not alter user data.
 - Keep the previous runtime bundle available for code rollback. Test schema compatibility and backup/restore behavior before any data-format migration.
 - Do not remove old npm versions or user runtime assets as a normal upgrade step.

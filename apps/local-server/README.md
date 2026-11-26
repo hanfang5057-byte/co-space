@@ -11,22 +11,22 @@ Add this stdio MCP server to an Agent that supports Node.js 24 or later:
   "mcpServers": {
     "cospace": {
       "command": "npx",
-      "args": ["-y", "@cospace/local-server@latest", "mcp"]
+      "args": ["-y", "@hanfang5057/co-space@latest", "mcp"]
     }
   }
 }
 ```
 
-Restart or reconnect the Agent after changing its MCP configuration. The review URL is returned by MCP and can be opened later with `npx -y @cospace/local-server@latest service open`. Publishing a newer package does not replace a running daemon: after all Agents disconnect, run `npx -y @cospace/local-server@latest service restart`, then reconnect the Agent to apply the update.
+Restart or reconnect the Agent after changing its MCP configuration. The review URL is returned by MCP and can be opened later with `npx -y @hanfang5057/co-space@latest service open`. Publishing a newer package does not replace a running daemon: after all Agents disconnect, run `npx -y @hanfang5057/co-space@latest service restart`, then reconnect the Agent to apply the update.
 
 ## Manage the local service
 
 ```sh
-npx -y @cospace/local-server@latest service status
-npx -y @cospace/local-server@latest service open
-npx -y @cospace/local-server@latest service stop
-npx -y @cospace/local-server@latest service restart
-npx -y @cospace/local-server@latest service rollback
+npx -y @hanfang5057/co-space@latest service status
+npx -y @hanfang5057/co-space@latest service open
+npx -y @hanfang5057/co-space@latest service stop
+npx -y @hanfang5057/co-space@latest service restart
+npx -y @hanfang5057/co-space@latest service rollback
 ```
 
 Stopping the service preserves user data. Uninstalling the package or removing an Agent's MCP configuration also preserves data.

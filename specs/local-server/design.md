@@ -128,7 +128,7 @@ The daemon is the only database owner. Do not rely on several app processes inde
 
 ### Package contents
 
-Publish one scoped package, tentatively `@cospace/local-server`, with a single `cospace-local` binary. Include a bundled MCP entry, daemon entry, and web assets. Bundle workspace code and runtime dependencies into the artifacts where practical; only Node built-ins should be needed at daemon runtime. Declare `engines.node >=24` and verify the Agent's configured Node runtime actually satisfies it.
+Publish one scoped package, `@hanfang5057/co-space`, with a single `cospace-local` binary. Include a bundled MCP entry, daemon entry, and web assets. Bundle workspace code and runtime dependencies into the artifacts where practical; only Node built-ins should be needed at daemon runtime. Declare `engines.node >=24` and verify the Agent's configured Node runtime actually satisfies it.
 
 ### Cache independence
 
@@ -136,7 +136,7 @@ Publish one scoped package, tentatively `@cospace/local-server`, with a single `
 
 ### Upgrade policy
 
-- Website-generated setup uses `npx -y @cospace/local-server@latest mcp`; advanced users may pin `@X.Y.Z`.
+- Website-generated setup uses `npx -y @hanfang5057/co-space@latest mcp`; advanced users may pin `@X.Y.Z`.
 - A running process is never overwritten in place. A newly launched MCP client compares package version and protocol version with the daemon.
 - If the daemon protocol is compatible, clients connect and the MCP instructions report a newer package version when applicable. If the user requests an upgrade while clients are active, refuse to stop the daemon and explain that Agents must disconnect first. After clients drain, stage the new version, atomically activate it, gracefully restart, and health-check before reporting success.
 - Retain at least the current and previous daemon bundles for rollback. Keep data untouched during code rollback.

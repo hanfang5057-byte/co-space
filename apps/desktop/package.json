@@ -17,11 +17,11 @@
   },
   "scripts": {
     "build": "node scripts/build-webapp.mjs",
-    "prepare:tauri": "npm run build --workspace @cospace/local-server && npm run build && node scripts/prepare-tauri.mjs",
+    "prepare:tauri": "npm run build --workspace @hanfang5057/co-space && npm run build && node scripts/prepare-tauri.mjs",
     "dev": "node scripts/dev.mjs",
     "package": "npm run prepare:tauri && node scripts/build-tauri.mjs && node scripts/package-release.mjs",
     "smoke": "node scripts/smoke-sidecar.mjs",
-    "web": "npm run build --workspace @cospace/local-server && npm run build && node src/server/index.js",
-    "mcp": "npm run build --workspace @cospace/local-server && node src/mcp/index.js"
+    "web": "npm run build --workspace @hanfang5057/co-space && npm run build && node src/server/index.js",
+    "mcp": "npm run build --workspace @hanfang5057/co-space && node src/mcp/index.js"
   }
 }
