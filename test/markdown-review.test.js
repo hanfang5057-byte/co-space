@@ -13,8 +13,8 @@ test('Markdown source is persisted; independent suggestions map and apply in any
  const dir=mkdtempSync(path.join(tmpdir(),'md-core-'));let store;
  try {store=new ReviewStore(path.join(dir,'review.sqlite'));const md='# Title\n\n- apple\n- pear\n';store.createDocument({id:'d',content:md,operationId:'create'});
  const a=md.indexOf('apple'),p=md.indexOf('pear');
- const s1=store.propose({docId:'d',baseVersion:0,from:a,to:a+5,expected:'apple',replacement:'plum',operationId:'s1'});
- const metadata=store.readDocument('d').suggestions[0];assert.equal(metadata.author,'Agent');assert.ok(Number.isFinite(Date.parse(metadata.createdAt)));
+ const s1=store.propose({docId:'d',baseVersion:0,from:a,to:a+5,expected:'apple',replacement:'plum',author:'Claude',explanation:'用更贴切的词语替换。',operationId:'s1'});
+ const metadata=store.readDocument('d').suggestions[0];assert.equal(metadata.author,'claude');assert.equal(metadata.explanation,'用更贴切的词语替换。');assert.ok(Number.isFinite(Date.parse(metadata.createdAt)));
  const s2=store.propose({docId:'d',baseVersion:0,from:p,to:p+4,expected:'pear',replacement:'fig',operationId:'s2'});
  assert.equal(store.readDocument('d').content,md);
  store.decide({docId:'d',suggestionId:s2.id,decision:'accept',operationId:'accept2'});
@@ -22,6 +22,16 @@ test('Markdown source is persisted; independent suggestions map and apply in any
  store.decide({docId:'d',suggestionId:s1.id,decision:'accept',operationId:'accept1'});
  assert.equal(store.readDocument('d').content,'# Title\n\n- plum\n- fig\n');
  } finally {store?.close();rmSync(dir,{recursive:true,force:true})}
+});
+
+test('suggestion metadata normalizes unknown Agents and validates concise explanations',()=>{
+ const store=new ReviewStore(':memory:');
+ try{store.createDocument({id:'d',content:'abc',operationId:'meta-create'});
+  assert.throws(()=>store.propose({docId:'d',baseVersion:0,from:0,to:1,expected:'a',replacement:'A',author:'codex',explanation:'x'.repeat(201),operationId:'too-long'}),err('INVALID_INPUT'));
+  const proposal=store.propose({docId:'d',baseVersion:0,from:0,to:1,expected:'a',replacement:'A',author:'unknown-agent',operationId:'legacy-agent'});
+  assert.equal(proposal.suggestion.author,'agent');
+  assert.equal(proposal.suggestion.explanation,'');
+ }finally{store.close()}
 });
 
 test('same-point insertions keep creation order regardless of decision order',()=>{

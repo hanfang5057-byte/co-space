@@ -2,6 +2,8 @@ import { ReviewStore } from './review-core.js';
 import { CommentStore } from './comments.js';
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
+const agentTypes = new Set(['workbuddy', 'claude', 'codex', 'deepseek', 'glm', 'agent']);
+const normalizeAgent = value => { const key = typeof value === 'string' ? value.trim().toLowerCase() : ''; return agentTypes.has(key) ? key : 'agent'; };
 
 /** Persistence boundary for document review data. All SQL stays behind this class. */
 export class SpaceRepository {
@@ -30,8 +32,8 @@ export class SpaceRepository {
     const doc = this.readDocument(id);
     const allowed = new Set(['all', 'pending', 'accepted', 'rejected', 'conflicted']);
     if (!allowed.has(status)) fail('INVALID_INPUT', 'Invalid suggestion status');
-    const rows = this.store.db.prepare('SELECT id,status,base_version,from_pos,to_pos,expected,replacement,author,created_at,created_order FROM review_suggestions WHERE doc_id=? ORDER BY created_order').all(id);
-    return { id, version: doc.version, suggestions: rows.filter(row => status === 'all' || row.status === status).map(row => ({ id: row.id, status: row.status, baseVersion: row.base_version, from: row.from_pos, to: row.to_pos, expected: row.expected, replacement: row.replacement, author: row.author, createdAt: row.created_at || null, order: row.created_order })) };
+    const rows = this.store.db.prepare('SELECT id,status,base_version,from_pos,to_pos,expected,replacement,author,explanation,created_at,created_order FROM review_suggestions WHERE doc_id=? ORDER BY created_order').all(id);
+    return { id, version: doc.version, suggestions: rows.filter(row => status === 'all' || row.status === status).map(row => ({ id: row.id, status: row.status, baseVersion: row.base_version, from: row.from_pos, to: row.to_pos, expected: row.expected, replacement: row.replacement, author: normalizeAgent(row.author), explanation: row.explanation || '', createdAt: row.created_at || null, order: row.created_order })) };
   }
   deleteDocument(id) {
     if (typeof id !== 'string' || !id) fail('INVALID_INPUT', 'Document ID is required');

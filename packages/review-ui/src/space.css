@@ -549,6 +549,12 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 .space-app .space-annotation-avatar { display: inline-grid; place-items: center; flex: none; inline-size: 34px; block-size: 34px; border-radius: 50%; background: #a66be8; color: white; font-size: 15px; font-weight: 600; overflow: hidden; }
 .space-app .space-annotation-avatar.is-image { background: var(--space-rail-surface, #f8f5ef); }
 .space-app .space-annotation-avatar img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
+.space-app .space-annotation-avatar.is-agent-workbuddy { background:#7255c7; }
+.space-app .space-annotation-avatar.is-agent-claude { background:#bd7652; }
+.space-app .space-annotation-avatar.is-agent-codex { background:#237a68; }
+.space-app .space-annotation-avatar.is-agent-deepseek { background:#3978c5; }
+.space-app .space-annotation-avatar.is-agent-glm { background:#a34f75; }
+.space-app .space-annotation-avatar.is-agent-agent { background:#777b83; }
 .space-app .space-annotation-byline { display: flex; flex-direction: column; min-inline-size: 0; line-height: 1.3; }
 .space-app .space-annotation-byline strong { overflow: hidden; color: var(--space-text); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .space-app .space-annotation-byline time { color: var(--space-muted); font-size: 11px; }
@@ -566,7 +572,7 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 .space-app .space-suggestion-actions button.is-reject:hover { color: var(--space-danger); }
 .space-app .space-suggestion-actions svg { inline-size: 20px; block-size: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .space-app .space-comment-delete-icon { inset-block-start: 15px; inset-inline-end: 13px; }
-.space-app .space-suggestion-change { display: grid; gap: 5px; margin-block-start: 12px; padding-inline-end: 8px; overflow-wrap: anywhere; }
+.space-app .space-suggestion-change { display: grid; gap: 5px; margin-block-start: 9px; padding-inline-end: 8px; overflow-wrap: anywhere; }
 .space-app .space-suggestion-change p { margin: 0; color: var(--space-text); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
 .space-app .space-suggestion-change strong { font-weight: 650; }
 .space-app .space-suggestion-change .is-inserted strong { color: var(--space-success); }

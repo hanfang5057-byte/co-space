@@ -289,24 +289,24 @@ function commentRange(comment) {
     : null);
 }
 
-function AnnotationAvatar({ name, avatarUrl }) {
+function AnnotationAvatar({ name, avatarUrl, variant = '' }) {
   const [failed,setFailed]=useState(false);
   useEffect(()=>{setFailed(false)},[avatarUrl]);
   const initial=Array.from(name.trim())[0]?.toLocaleUpperCase() || '?';
-  return <span className={`space-annotation-avatar${avatarUrl && !failed?' is-image':''}`} aria-hidden="true">
+  return <span className={`space-annotation-avatar${variant?` is-agent-${variant}`:''}${avatarUrl && !failed?' is-image':''}`} aria-hidden="true">
     {avatarUrl && !failed
       ? <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)}/>
       : initial}
   </span>;
 }
 
-function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avatarUrl = null }) {
+function AnnotationIdentity({ name, createdAt, fallback, fallbackTime = '', avatarUrl = null, avatarVariant = '' }) {
   const displayName=name || fallback;
   const time=Number.isFinite(Date.parse(createdAt))
     ? new Intl.DateTimeFormat(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(createdAt))
     : '';
   return <div className="space-annotation-identity">
-    <AnnotationAvatar name={displayName} avatarUrl={avatarUrl}/>
+    <AnnotationAvatar name={displayName} avatarUrl={avatarUrl} variant={avatarVariant}/>
     <span className="space-annotation-byline"><strong>{displayName}</strong>{(time || fallbackTime) && <time dateTime={time?createdAt:undefined}>{time || fallbackTime}</time>}</span>
   </div>;
 }
@@ -335,13 +335,10 @@ function CommentBalloon({ comment, author, active, busy, t, statusText, confirmi
 /** Render a compact decision card linked to an inline preview difference. */
 function SuggestionBalloon({ item, active, busy, t, onActivate, onDecide, setRef, style, className = '', onPointerEnter, onPointerLeave }) {
   const conflicted=item.status==='conflicted';
+  const agent=['workbuddy','claude','codex','deepseek','glm'].includes(item.author)?item.author:'agent';
   return <article className={`space-annotation-balloon space-suggestion-balloon${active?' is-active':''}${conflicted?' is-conflicted':''} ${className}`} data-suggestion-card={item.id} ref={el=>setRef(item.id,el)} style={style} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onClick={onActivate}>
-    <div className="space-suggestion-head"><AnnotationIdentity name={item.author} createdAt={item.createdAt} fallback={t('suggestion.defaultAuthor')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="space-annotation-action is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><Check size={18} strokeWidth={2} aria-hidden="true"/></button><button type="button" className="space-annotation-action is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><X size={18} strokeWidth={2} aria-hidden="true"/></button></div>}</div>
-    <div className="space-suggestion-change">
-      {item.expected && <p className="is-deleted"><strong>{t('suggestion.deletedLabel')}：</strong>{item.expected}</p>}
-      {item.replacement && <p className="is-inserted"><strong>{t('suggestion.insertedLabel')}：</strong>{item.replacement}</p>}
-      {!item.expected && !item.replacement && <p className="is-unavailable">{t('suggestion.unavailable')}</p>}
-    </div>
+    <div className="space-suggestion-head"><AnnotationIdentity name={t(`agent.${agent}`)} avatarVariant={agent} createdAt={item.createdAt} fallback={t('agent.agent')} fallbackTime={t('suggestion.unknownTime')}/>{!conflicted && <div className="space-suggestion-actions"><button type="button" className="space-annotation-action is-accept" disabled={busy} aria-label={t('action.accept')} title={t('action.accept')} onClick={event=>{event.stopPropagation();onDecide('accept')}}><Check size={18} strokeWidth={2} aria-hidden="true"/></button><button type="button" className="space-annotation-action is-reject" disabled={busy} aria-label={t('action.reject')} title={t('action.reject')} onClick={event=>{event.stopPropagation();onDecide('reject')}}><X size={18} strokeWidth={2} aria-hidden="true"/></button></div>}</div>
+    <div className="space-suggestion-change"><p>{item.explanation?.trim() || t('suggestion.noExplanation')}</p></div>
     {conflicted && <div className="space-suggestion-meta"><span className="space-suggestion-conflict">{t('suggestion.conflicted')}</span></div>}
   </article>;
 }
