@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { stopLocalDaemon } from '../../../packages/local-runtime/src/manager.js';
+import { resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
 import localServer from '../../local-server/package.json' with { type: 'json' };
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,6 +21,16 @@ const tauri = path.join(appDir, 'src-tauri');
 const resources = path.join(tauri, 'resources');
 const runtime = path.join(tauri, 'binaries', `cospace-node-${triple}${process.platform === 'win32' ? '.exe' : ''}`);
 const home = await mkdtemp(path.join(os.tmpdir(), 'cospace-desktop-smoke-'));
+const dataHome = path.join(home, 'webapp');
+const smokeEnv = {
+  ...process.env,
+  HOME: home,
+  USERPROFILE: home,
+  LOCALAPPDATA: home,
+  XDG_DATA_HOME: home,
+  COSPACE_WEB_HOME: dataHome,
+  COSPACE_RESOURCE_DIR: resources,
+};
 const source = `
   const { startWebApp } = require('./desktop/server.bundle.cjs');
   (async () => {
@@ -49,7 +61,7 @@ try {
   const webResult = await new Promise((resolve, reject) => {
     const child = spawn(runtime, ['-e', source], {
       cwd: resources,
-      env: { ...process.env, HOME: home, USERPROFILE: home, COSPACE_WEB_HOME: path.join(home, 'webapp'), COSPACE_RESOURCE_DIR: resources },
+      env: smokeEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -69,7 +81,7 @@ try {
   const mcpResult = await new Promise((resolve, reject) => {
     const child = spawn(runtime, ['desktop/mcp-entry.bundle.cjs'], {
       cwd: resources,
-      env: { ...process.env, HOME: home, USERPROFILE: home, COSPACE_WEB_HOME: path.join(home, 'webapp'), COSPACE_RESOURCE_DIR: resources },
+      env: smokeEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const lines = readline.createInterface({ input: child.stdout });
@@ -103,5 +115,17 @@ try {
   });
   console.log(`Packaged runtime smoke passed: ${webResult}; MCP handshake: ${mcpResult}`);
 } finally {
+  const envKeys = ['HOME', 'USERPROFILE', 'LOCALAPPDATA', 'XDG_DATA_HOME'];
+  const originalEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+  Object.assign(process.env, Object.fromEntries(envKeys.map(key => [key, smokeEnv[key]])));
+  try {
+    const runtimeHome = resolveRuntimeHome({ dataHome });
+    await stopLocalDaemon({ dataHome, runtimeHome });
+  } finally {
+    for (const key of envKeys) {
+      if (originalEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = originalEnv[key];
+    }
+  }
   await rm(home, { recursive: true, force: true });
 }
