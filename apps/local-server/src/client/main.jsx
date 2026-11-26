@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { SpaceApp } from '../../../../packages/review-ui/src/SpaceApp.jsx';
+import { documentIdFromUrl, documentUrlFor } from '../../../../packages/review-ui/src/document-navigation.js';
 import { api } from '../../../../packages/transport-http/client.js';
 import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../../packages/adapter-contract/src/index.js';
 import '../../../../packages/review-ui/src/space.css';
@@ -33,6 +34,13 @@ const adapter = {
   files: { saveExport },
   clipboard: { writeText: text => navigator.clipboard.writeText(text) },
   identity: { getCurrentUser: () => api('getUser') },
+  navigation: {
+    getDocumentId: () => documentIdFromUrl(window.location.href),
+    setDocumentId: (docId, { replace = false } = {}) => {
+      const url = documentUrlFor(window.location.href, docId);
+      window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
+    },
+  },
   updates: { getStatus: async () => {
     const response = await fetch('/__cospace/health', { cache: 'no-store' });
     if (!response.ok) throw new Error('Local service unavailable');

@@ -743,7 +743,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
 export function SpaceApp({ adapter, t = defaultT }) {
   const sessionId=adapter.conversation?.current?.id || null;
   const api=adapter.core.request;
-  const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
+  const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(()=>adapter.navigation?.getDocumentId?.() || null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
   const [autoEditDocId,setAutoEditDocId]=useState(null);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
@@ -764,6 +764,16 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const review=useSpaceReview(api,docId,sessionId,t,adapter,autoEditDocId);
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
+  const selectDocument=useCallback((next,{replace=false}={})=>{
+    adapter.navigation?.setDocumentId?.(next,{replace});
+    setDocId(next || null);
+  },[adapter.navigation]);
+  useEffect(()=>{
+    if(!adapter.navigation?.getDocumentId)return;
+    const onPopState=()=>setDocId(adapter.navigation.getDocumentId() || null);
+    window.addEventListener('popstate',onPopState);
+    return()=>window.removeEventListener('popstate',onPopState);
+  },[adapter.navigation]);
   const documentsSnapshot=useRef(null);
   const reloadDocs=useCallback(async()=>{const list=await call('listDocuments');const signature=JSON.stringify(list);if(signature!==documentsSnapshot.current){documentsSnapshot.current=signature;setDocuments(list)}return list;},[call]);
   useEffect(()=>{let cancelled=false;reloadDocs().catch(e=>{if(!cancelled)setMessage(errorText(e,translateNow.current))});return()=>{cancelled=true}},[reloadDocs]);
@@ -779,7 +789,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
     setBusy(true);setMessage('');
     try {
       const created=await call('createDocument',{title:t('document.untitled'),operationId:requestId()});
-      await reloadDocs();setAutoEditDocId(created.id);setDocId(created.id);
+      await reloadDocs();setAutoEditDocId(created.id);selectDocument(created.id);
     } catch (e) { setMessage(errorText(e,t)); }
     finally { setBusy(false); }
   };
@@ -790,7 +800,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
       await call('deleteDocument',{docId:deleteTarget.id});
       await reloadDocs();
       setDeleteTarget(null);
-      if(docId===deleteTarget.id) setDocId(null);
+      if(docId===deleteTarget.id) selectDocument(null);
     } catch (e) { setMessage(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
@@ -819,7 +829,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const closeCollaboration=()=>{setSettingsOpen(false)};
   const backToHome=async()=>{
     if(review.editing){const saved=await review.switchToReview();if(!saved)return;}
-    setDocId(null);
+    selectDocument(null);
   };
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
@@ -849,7 +859,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
         {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
         {shownDocuments.length ? <div className="space-home-grid">{shownDocuments.map((item,index)=><article className="space-home-card" key={item.id}>
-          <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>setDocId(item.id)}>
+          <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>selectDocument(item.id)}>
             <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">{BRAND.name.en.toUpperCase()}</span></span>
             <span className="space-home-card-copy"><strong title={item.title||item.id}>{item.title||item.id}</strong><span className="space-home-card-meta">{documentCardTime(item,t)}</span></span>
             <span className="space-home-card-footer">{item.pending>0?<span className="space-home-pending"><i aria-hidden="true"/>{t('annotations.suggestions',{count:item.pending})}</span>:<span className="space-home-clear">{t('home.noPending')}</span>}<span className="space-home-open-icon" aria-hidden="true">↗</span></span>

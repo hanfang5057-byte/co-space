@@ -32,7 +32,10 @@ test('MCP tools await asynchronous Local Server services', async () => {
     async listSuggestions(id) { return { id, suggestions: [{ id: 1, status: 'pending' }] }; },
     async completeCommentProcessing(input) { return { results: input.results, replay: false }; },
   };
-  const server = createMcpServer(service);
+  const server = createMcpServer(service, null, {
+    reviewUrl: 'http://127.0.0.1:43127/',
+    documentLinkFor: id => `dsh-resource://space/${encodeURIComponent(id)}`,
+  });
   const client = new Client({ name: 'async-test', version: '1.0.0' });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   try {
@@ -40,9 +43,17 @@ test('MCP tools await asynchronous Local Server services', async () => {
     const created = await call(client, 'space_document_create', { text: '# Async', operationId: 'async-create' });
     assert.match(created.id, /^doc-[a-f0-9]{24}$/);
     assert.equal(created.reference, `space:${created.id}`);
-    assert.equal((await call(client, 'space_document_read', { id: created.reference })).content, '# Async');
+    assert.equal(new URL(created.reviewUrl).searchParams.get('document'), created.id);
+    assert.equal(created.documentLink, `dsh-resource://space/${encodeURIComponent(created.id)}`);
+    const read = await call(client, 'space_document_read', { id: created.reference });
+    assert.equal(read.content, '# Async');
+    assert.equal(read.reviewUrl, created.reviewUrl);
+    assert.equal(read.documentLink, created.documentLink);
     assert.equal((await call(client, 'space_suggestion_list', { docId: created.reference })).reference, created.reference);
-    assert.equal((await call(client, 'space_suggest', { docId: created.reference, baseVersion: 0, from: 0, to: 0, expected: '', replacement: 'x', operationId: 'async-suggest' })).suggestion.replacement, 'x');
+    const proposed = await call(client, 'space_suggest', { docId: created.reference, baseVersion: 0, from: 0, to: 0, expected: '', replacement: 'x', operationId: 'async-suggest' });
+    assert.equal(proposed.suggestion.replacement, 'x');
+    assert.equal(proposed.reviewUrl, created.reviewUrl);
+    assert.equal(proposed.documentLink, created.documentLink);
     assert.equal((await call(client, 'space_comment_complete', { docId: created.reference, operationId: 'async-comment', results: [{ commentId: 'c1', suggestionIds: [] }] })).replay, false);
   } finally {
     await client.close().catch(() => {});
@@ -75,6 +86,7 @@ test('the Space MCP server scopes tools to named documents and processes comment
     });
     assert.match(created.id, /^doc-[a-f0-9]{24}$/);
     assert.equal(created.reference, `space:${encodeURIComponent(created.id)}`);
+    assert.equal(created.documentLink, `dsh-resource://space/${encodeURIComponent(created.id)}`);
     assert.equal(created.title, 'Agent document');
 
     // Omitting the document id is deterministic: a retry replays the same one.

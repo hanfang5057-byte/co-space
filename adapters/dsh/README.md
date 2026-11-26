@@ -15,6 +15,7 @@ Requires DSH `^0.2.2-rc.5` and Node.js 24 or later. Offline installs can use the
 
 - Open **CoSpace** in the sidebar to create a document, read the text, and decide each pending suggestion.
 - Use the composer's **+** menu to reference one or more CoSpace documents as `space:<docId>`.
+- MCP results for a specific document include a DSH resource link (`dsh-resource://space/<id>`) that opens the document in the CoSpace sidebar.
 - Select text in a document to leave a comment; **Ask the agent to handle comments** sends only the document reference and a short instruction.
 
 ## Data

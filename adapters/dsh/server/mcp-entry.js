@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { SpaceService } from '../../../packages/review-core/src/space-service.js';
 import { createMcpServer } from '../../../packages/transport-mcp/server.js';
 import { CollaborationStore } from '../../../packages/review-core/src/collaboration-store.js';
+import { dshSpaceResourceFor } from '../client/resource-reference.js';
 import packageMetadata from '../package.json' with { type: 'json' };
 
 export function resolveHome(env = process.env) {
@@ -15,7 +16,7 @@ export function resolveHome(env = process.env) {
 export async function startMcpServer({ home = resolveHome(), transport = new StdioServerTransport() } = {}) {
   const service = new SpaceService(home);
   const collaboration = new CollaborationStore(home);
-  const server = createMcpServer(service, collaboration, { serverVersion: packageMetadata.version });
+  const server = createMcpServer(service, collaboration, { documentLinkFor: dshSpaceResourceFor, serverVersion: packageMetadata.version });
   process.once('SIGTERM', () => { collaboration.close(); service.close(); process.exit(0); });
   process.once('SIGINT', () => { collaboration.close(); service.close(); process.exit(0); });
   await server.connect(transport);
