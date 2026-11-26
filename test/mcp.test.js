@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SpaceService } from '../packages/review-core/src/space-service.js';
+import { createMcpServer } from '../packages/transport-mcp/server.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 const payload = result => {
   const block = result?.content?.find(item => item.type === 'text');
@@ -20,6 +22,33 @@ const call = async (client, name, args = {}) => {
   assert.equal(result.isError, undefined, `${name}: ${JSON.stringify(body)}`);
   return body;
 };
+
+test('MCP tools await asynchronous Local Server services', async () => {
+  const documents = new Map();
+  const service = {
+    async createDocument({ id, content }) { const document = { id, content, version: 0, title: 'Async', comments: [] }; documents.set(id, document); return document; },
+    async readDocument(id) { return documents.get(id); },
+    async propose(input) { return { suggestion: input }; },
+    async listSuggestions(id) { return { id, suggestions: [{ id: 1, status: 'pending' }] }; },
+    async completeCommentProcessing(input) { return { results: input.results, replay: false }; },
+  };
+  const server = createMcpServer(service);
+  const client = new Client({ name: 'async-test', version: '1.0.0' });
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const created = await call(client, 'space_document_create', { text: '# Async', operationId: 'async-create' });
+    assert.match(created.id, /^doc-[a-f0-9]{24}$/);
+    assert.equal(created.reference, `space:${created.id}`);
+    assert.equal((await call(client, 'space_document_read', { id: created.reference })).content, '# Async');
+    assert.equal((await call(client, 'space_suggestion_list', { docId: created.reference })).reference, created.reference);
+    assert.equal((await call(client, 'space_suggest', { docId: created.reference, baseVersion: 0, from: 0, to: 0, expected: '', replacement: 'x', operationId: 'async-suggest' })).suggestion.replacement, 'x');
+    assert.equal((await call(client, 'space_comment_complete', { docId: created.reference, operationId: 'async-comment', results: [{ commentId: 'c1', suggestionIds: [] }] })).replay, false);
+  } finally {
+    await client.close().catch(() => {});
+    await server.close().catch(() => {});
+  }
+});
 
 test('the Space MCP server scopes tools to named documents and processes comments', async () => {
   const home = mkdtempSync(path.join(tmpdir(), 'space-mcp-'));

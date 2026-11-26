@@ -41,16 +41,16 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, serv
   server.registerTool('space_document_create', {
     description: 'CoSpace: create a new document only when the user explicitly asks for one; an existing-document reference is not required. Provide its complete initial content as CommonMark Markdown, including a heading if you want a title. Omit id to derive a stable id from operationId. This cannot overwrite an existing document. Returns the id and its space:<id> reference.',
     inputSchema: { id: id.optional().describe('Optional document ID; omit to derive one from operationId.'), text: z.string().describe('Complete initial Markdown content; include a heading if the document should have a title.'), operationId: opId },
-  }, wrap(({ id: requestedId, text: initialText, operationId }) => {
+  }, wrap(async ({ id: requestedId, text: initialText, operationId }) => {
     const docId = requestedId || generatedId(operationId);
-    const result = service.createDocument({ id: docId, content: documentFromMarkdown(initialText), operationId });
+    const result = await service.createDocument({ id: docId, content: documentFromMarkdown(initialText), operationId });
     return { ...result, reference: referenceFor(result.id) };
   }));
   server.registerTool('space_document_read', {
     description: 'CoSpace: read the specified document only. Returns its accepted Markdown source, current version, pending suggestions, and concise comments with quoted text, body, anchor, and status. This does not authorize processing comments. Offsets are UTF-16 code units into markdown. Use space_suggestion_list for decided suggestions.',
     inputSchema: { id: id.describe('The user-provided space:<docId> reference or its decoded document ID.') },
   }, wrap(async ({ id }) => {
-    const document = service.readDocument(resolveSpaceRef(id));
+    const document = await service.readDocument(resolveSpaceRef(id));
     const docId=resolveSpaceRef(id);
     const preferences=await collaboration?.readInstructions(docId);
     return { ...document, comments: document.comments.map(agentComment), collaboration:preferences?{instructions:[preferences.global?.content,preferences.document?.content].filter(Boolean).join('\n\n')}:null };
@@ -58,12 +58,12 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, serv
   server.registerTool('space_suggest', {
     description: 'CoSpace: propose exactly one replacement of expected Markdown source text in the given UTF-16 range. Use empty expected text for insertion and empty replacement for deletion. Submit independent changes as separate suggestions, each read against the current version. This does not change accepted content until the user accepts.',
     inputSchema: { docId: id.describe('The user-provided space:<docId> reference or its decoded document ID.'), baseVersion: z.number().int().nonnegative(), from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), expected: z.string(), replacement: z.string(), operationId: opId },
-  }, wrap(({docId,...input}) => service.propose({ ...input, docId: resolveSpaceRef(docId) })));
+  }, wrap(async ({docId,...input}) => await service.propose({ ...input, docId: resolveSpaceRef(docId) })));
   server.registerTool('space_suggestion_list', {
     description: 'CoSpace: list every suggestion for a document with its decision status (pending, accepted, rejected, conflicted). Use this after the user reviews the document to learn which changes were accepted.',
     inputSchema: { docId: id.describe('The user-provided space:<docId> reference or its decoded document ID.'), status },
-  }, wrap(({ docId, status: requestedStatus }) => {
-    const result = service.listSuggestions(resolveSpaceRef(docId), requestedStatus ?? 'all');
+  }, wrap(async ({ docId, status: requestedStatus }) => {
+    const result = await service.listSuggestions(resolveSpaceRef(docId), requestedStatus ?? 'all');
     return { ...result, reference: referenceFor(result.id) };
   }));
   server.registerTool('space_comment_complete', {
@@ -73,6 +73,6 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, serv
       operationId: opId,
       results: z.array(z.object({ commentId: id, suggestionIds: z.array(z.number().int().positive()) })).min(1),
     },
-  }, wrap(({docId,...input}) => service.completeCommentProcessing({ ...input, docId: resolveSpaceRef(docId) })));
+  }, wrap(async ({docId,...input}) => await service.completeCommentProcessing({ ...input, docId: resolveSpaceRef(docId) })));
   return server;
 }
