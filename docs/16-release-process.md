@@ -7,7 +7,7 @@ This document is the source of truth for publishing CoSpace npm packages and Des
 | Product | Publishable artifact | Version source | Staged output | Git tag |
 |---|---|---|---|---|
 | DSH plugin | `dsh-plugin-space` | `release/npm-version.json`, synchronized into `adapters/dsh/package.json`, `adapters/dsh/adapter.json`, and `package-lock.json` by the packaging script | `dist/dsh-plugin/` and `dist/npm-packages/dsh-plugin-space-X.Y.Z.tgz` | `vX.Y.Z` |
-| Local Server | `@cospace/local-server` | `apps/local-server/package.json` | `dist/local-server/` and `dist/npm-packages/cospace-local-server-X.Y.Z.tgz` | `local-server-vX.Y.Z` |
+| Local Server | `@cospace/local-server` | `apps/local-server/package.json` | `dist/npm-packages/cospace-local-server-X.Y.Z.tgz` (built package contents are under `apps/local-server/dist/`) | `local-server-vX.Y.Z` |
 | Desktop | Platform installer(s), not npm | `apps/desktop/src-tauri/tauri.conf.json` | `dist/releases/desktop/<platform>/` | No npm release tag unless explicitly coordinated with an npm release commit |
 
 The coordinated CoSpace `0.1.9` release aligns the DSH plugin, Local Server, and Desktop product versions at `0.1.9`. Their version sources remain independent, so verify all three before publishing.
@@ -19,7 +19,7 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 1. Confirm the requested artifact(s), target channel, versions, and publication authorization. This guide does not itself authorize publishing.
 2. Check the worktree and current branch. Build and publish from a clean release commit. If unrelated user changes exist, preserve them and prepare the release in a clean worktree.
 3. Run `npm run check`. Resolve unexplained failures before publishing.
-4. Build and inspect only the staged package directory. Never run `npm publish` from the private workspace root.
+4. Build and inspect only the staged package artifact. DSH publishes from `dist/dsh-plugin/`; Local Server publishes its versioned tarball from `dist/npm-packages/`. Never run `npm publish` from the private workspace root.
 5. Verify the published registry version, dist-tag, tarball integrity, and Git tag before declaring a release complete.
 6. Create and push annotated tags only after the corresponding npm package has published and its post-publish checks have passed. A partial multi-package release must be resolved before creating any tag for the combined release commit.
 7. Do not hand-edit generated files under `dist/` or generated market metadata.
