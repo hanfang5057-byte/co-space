@@ -1,6 +1,6 @@
 {
   "name": "@cospace/local-server",
-  "version": "0.1.0",
+  "version": "0.1.9",
   "description": "Local CoSpace MCP server and document review web app",
   "type": "module",
   "license": "MIT",

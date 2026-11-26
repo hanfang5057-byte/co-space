@@ -10,6 +10,8 @@ This document is the source of truth for publishing CoSpace npm packages and Des
 | Local Server | `@cospace/local-server` | `apps/local-server/package.json` | `dist/local-server/` and `dist/npm-packages/cospace-local-server-X.Y.Z.tgz` | `local-server-vX.Y.Z` |
 | Desktop | Platform installer(s), not npm | `apps/desktop/src-tauri/tauri.conf.json` | `dist/releases/desktop/<platform>/` | No npm release tag unless explicitly coordinated with an npm release commit |
 
+The coordinated CoSpace `0.1.9` release aligns the DSH plugin, Local Server, and Desktop product versions at `0.1.9`. Their version sources remain independent, so verify all three before publishing.
+
 DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefixed tag because its version is independent and can differ from DSH's version. Never move or reuse an existing release tag.
 
 ## Shared release rules

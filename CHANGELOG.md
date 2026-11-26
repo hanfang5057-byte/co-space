@@ -2,6 +2,14 @@
 
 All notable changes to the DSH plugin `dsh-plugin-space` are recorded here. The plugin follows Semantic Versioning.
 
+## 0.1.9
+
+Coordinated CoSpace release across DSH, Local Server, and Desktop; all three product versions are aligned at `0.1.9`.
+
+- Use host-provided navigation for document links across integrations.
+- Refine document list and review editing, and preserve Markdown styles in DOCX exports.
+- Add the Local Server and Desktop delivery options alongside the DSH plugin.
+
 ## 0.1.8
 
 Security and distribution update.

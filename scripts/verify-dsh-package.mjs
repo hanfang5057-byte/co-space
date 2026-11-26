@@ -38,6 +38,8 @@ const bundledEntries = await Promise.all(['index.js', 'server/mcp-entry.js'].map
 for (const source of bundledEntries) {
   assert.doesNotMatch(source, /(?:from\s*|import\s*)["'](?:\.\.?\/|(?:packages|adapters)\/)/, 'release entries must not depend on monorepo source paths');
 }
+assert.match(bundledEntries[1], /serverVersion:\s*[A-Za-z_$][\w$]*\.version/);
+assert.ok(bundledEntries[1].includes(`version: ${JSON.stringify(manifest.version)}`), 'the DSH MCP server version must match the package version');
 
 const home = await mkdtemp(path.join(tmpdir(), 'space-pack-check-'));
 const previousHome = process.env.DSH_SPACE_HOME;

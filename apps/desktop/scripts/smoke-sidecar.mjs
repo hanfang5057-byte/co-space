@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import localServer from '../../local-server/package.json' with { type: 'json' };
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(appDir, '../..');
@@ -90,8 +91,8 @@ try {
       try {
         const message = JSON.parse(line);
         if (message.id !== 1) return;
-        if (message.error || message.result?.serverInfo?.name !== 'CoSpace') throw new Error('Unexpected packaged MCP initialize response');
-        finish(null, message.result.serverInfo.name);
+        if (message.error || message.result?.serverInfo?.name !== 'CoSpace' || message.result?.serverInfo?.version !== localServer.version) throw new Error('Unexpected packaged MCP initialize response');
+        finish(null, `${message.result.serverInfo.name}@${message.result.serverInfo.version}`);
       } catch (error) { finish(error); }
     });
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'cospace-smoke', version: '1' } } })}\n`);
