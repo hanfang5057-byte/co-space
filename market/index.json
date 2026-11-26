@@ -79,7 +79,7 @@
           "markdown"
         ],
         "sortKeys": {
-          "npm_weekly_downloads": 1173,
+          "npm_weekly_downloads": 1523,
           "github_stars": 0
         }
       },
@@ -157,6 +157,16 @@
         {
           "version": "0.1.8",
           "publishTimestamp": 1795568557,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": "^0.2.2-rc.5"
+          }
+        },
+        {
+          "version": "0.1.9",
+          "publishTimestamp": 1795672092,
           "source": {
             "type": "npm"
           },
