@@ -8,7 +8,7 @@ CoSpace lets you review the exact edits an agent proposes for your personal docu
 
 ## Status
 
-This repository is a private npm workspace for CoSpace. It contains the shared review core and service facade, shared review UI, adapter contract, host-independent transports, the DSH plugin, and a Tauri desktop app. The DSH plugin lives in `adapters/dsh/`; the desktop product, Node sidecar, Agent integration, and Tauri shell live together in `apps/desktop/`. Shared packages do not depend on a specific host. See the [adapter integration guide](docs/14-adapter-integration.md) and [system architecture](docs/09-host-adapters-architecture.md).
+This repository is a private npm workspace for CoSpace. It contains the shared review core and service facade, shared review UI, adapter contract, host-independent transports, the DSH plugin, Local Server, and a Tauri desktop app. The DSH plugin lives in `adapters/dsh/`; the Local Server CLI lives in `apps/local-server/`; the desktop product, Node sidecar, Agent integration, and Tauri shell live together in `apps/desktop/`. Shared packages do not depend on a specific host. See the [adapter integration guide](docs/14-adapter-integration.md) and [system architecture](docs/09-host-adapters-architecture.md).
 
 Document text is stored and reviewed as Markdown source. The agent submits replacement suggestions with a document version and UTF-16 source ranges; paragraphs, headings, lists, tables, and links are all changed through ordinary text replacement. See the [review core notes](docs/07-review-core.md) for the full interface, coordinates, and safety limits.
 
@@ -22,6 +22,12 @@ The DSH plugin package is `dsh-plugin-space`, published on npm.
 - **Offline / internal**: download `dsh-plugin-space-<version>.tgz` from [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases) and run `dsh plugin add ./dsh-plugin-space-<version>.tgz`.
 
 The plugin declares `engines.dsh = ^0.2.2-rc.5` and Node.js 24 or later; recheck compatibility after a DSH major release. `adapters/dsh/client.js` is generated: run `npm run build:client` after changing `packages/review-ui/src/` or `adapters/dsh/client/`; do not edit generated files by hand. React is provided by the host and stays external in the client bundle.
+
+### Local Server and Desktop
+
+The coordinated product version is `0.1.9`; the three version sources remain independent. For this release preparation, the DSH npm `latest` tag is still `0.1.8`; the DSH and Local Server `0.1.9` tarballs are staged and verified but not yet published. Do not use the Local Server `@latest` commands in [`apps/local-server/README.md`](apps/local-server/README.md) until `@cospace/local-server@0.1.9` is published.
+
+The Desktop `0.1.9` macOS arm64 DMG has been built and package-checked with ad-hoc signing. It has no Developer ID signature or notarization. Windows and Linux artifacts still need target-system or CI acceptance before release; the macOS package is not Gatekeeper-approved for general public distribution. See [`apps/desktop/README.md`](apps/desktop/README.md).
 
 ## Entry points
 
@@ -59,15 +65,16 @@ The test suite covers real MCP stdio, SQLite storage, suggestion decisions, simu
 
 ### Desktop development and packaging
 
-The desktop app requires Node.js 24 or later, stable Rust, and the Tauri system dependencies for the current platform. Run `npm run desktop:dev` to launch it, `npm run desktop:package` to build the current platform installers, and `npm run desktop:smoke` to check the packaged Node sidecar's HTTP and MCP startup. Final artifacts are collected under `dist/releases/desktop/<platform>/`.
+The desktop app requires Node.js 24 or later, stable Rust, and the Tauri system dependencies for the current platform. Run `npm run desktop:dev` to launch it, `npm run desktop:package` to build the current platform installers, and `npm run desktop:smoke` to check the packaged Node sidecar's HTTP and MCP startup. Final artifacts are collected under `dist/releases/desktop/<platform>/`. The GitHub Actions workflow builds macOS, Windows, and Ubuntu artifacts on matching pull requests and `desktop-v*` tags.
 
 ### Build and release
 
 - `npm run build:dsh` compiles the client bundle and assembles `dist/dsh-plugin/`, then refreshes the market index and icon from `packages/brand/metadata.json`.
 - `npm run verify:dsh-package` rebuilds, validates the package, market index, and brand fields, and runs `npm pack --dry-run`.
 - `npm run pack:dsh` writes the npm tarball to `dist/npm-packages/`.
+- `npm run local-server:pack` writes and verifies the `@cospace/local-server` tarball under `dist/npm-packages/`.
 - Before a release, run `node scripts/sync-market.mjs` to refresh published versions, timestamps, engines, and sort metrics from npm. `node scripts/sync-market.mjs --check` validates the index without network access. The index is mirrored on GitHub raw (`https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json`), jsDelivr (`https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json`), and GitHub Pages (`https://hanfang5057-byte.github.io/co-space/market/index.json`); the landing page is deployed by Pages.
-- Release order: bump versions, build and verify, `npm publish ./dist/dsh-plugin`, sync and commit the index, then create and push the `vX.Y.Z` tag and attach the tarball to the GitHub Release.
+- Release order: build and verify each requested npm package, publish and verify the packages, sync the DSH market index, then push the site/index changes and create package-specific tags and GitHub Release assets. A `main` push changing `apps/site/` deploys Pages automatically; do not deploy site commands for a package that is not yet published.
 
 See the [Chinese README](README.md) for the complete development notes and document list.
 
