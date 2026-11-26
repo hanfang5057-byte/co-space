@@ -77,7 +77,12 @@ function AgentSetup() {
       <section className="agent-result-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-result-title" aria-describedby="agent-result-description">
         <span className="agent-result-icon" aria-hidden="true">✓</span>
         <h2 id="agent-result-title">WorkBuddy 接入完成</h2>
-        <p id="agent-result-description">CoSpace MCP 和协作 Skill 已安装。重启 WorkBuddy 后即可使用。</p>
+        <p id="agent-result-description">CoSpace MCP 和协作 Skill 已写入。还需在 WorkBuddy 连接器中启用 CoSpace 的信任开关，完成后重启 WorkBuddy。</p>
+        <ol className="agent-result-steps">
+          <li>打开 WorkBuddy 的 <strong>连接器</strong> 页面，找到 <strong>cospace</strong>。</li>
+          <li>打开该连接器右侧的信任开关（显示“启用”）。</li>
+          <li>重启 WorkBuddy，即可开始使用 CoSpace。</li>
+        </ol>
         <dl className="agent-result-paths"><div><dt>MCP 配置</dt><dd>{resultDialog.mcpPath}</dd></div><div><dt>Skill</dt><dd>~/.workbuddy/skills/cospace-review/</dd></div></dl>
         <button ref={resultButton} className="agent-result-confirm" type="button" onClick={() => setResultDialog(null)}>知道了</button>
       </section>

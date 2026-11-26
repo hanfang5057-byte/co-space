@@ -225,6 +225,8 @@ body {
 }
 .agent-result-dialog h2 { margin: 18px 0 8px; color: #28291f; font-size: 21px; font-weight: 650; letter-spacing: -.025em; }
 .agent-result-dialog > p { margin: 0; color: #74746b; font-size: 14px; line-height: 1.7; }
+.agent-result-steps { display: grid; gap: 9px; margin: 17px 0 0; padding: 14px 14px 14px 34px; border: 1px solid #e6e4d9; border-radius: 11px; background: #f6f7f1; color: #5f6055; font-size: 13px; line-height: 1.6; }
+.agent-result-steps strong { color: #3d3e34; font-weight: 650; }
 .agent-result-paths { display: grid; gap: 12px; margin: 22px 0 24px; padding: 15px; border: 1px solid #ece7de; border-radius: 11px; background: #faf9f5; }
 .agent-result-paths div { min-inline-size: 0; }
 .agent-result-paths dt { margin-block-end: 4px; color: #8a887d; font-size: 11px; font-weight: 650; }
