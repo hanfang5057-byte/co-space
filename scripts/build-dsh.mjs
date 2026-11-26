@@ -24,7 +24,8 @@ await build({
   format: 'esm',
   platform: 'node',
   target: 'node24',
-  packages: 'external',
+  packages: 'bundle',
+  external: ['@modelcontextprotocol/sdk', 'zod'],
   sourcemap: false,
   logLevel: 'info',
 });

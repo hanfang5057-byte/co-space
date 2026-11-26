@@ -1,0 +1,56 @@
+name: Build CoSpace Desktop
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/build-desktop.yml'
+      - 'apps/desktop/**'
+      - 'apps/local-server/**'
+      - 'packages/local-runtime/**'
+      - 'packages/review-core/**'
+      - 'packages/host-api/**'
+      - 'packages/review-ui/**'
+      - 'packages/adapter-contract/**'
+      - 'packages/transport-mcp/**'
+      - 'packages/transport-http/**'
+      - 'packages/brand/**'
+      - 'assets/**'
+      - 'test/**'
+      - 'scripts/verify-adapter-boundaries.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: windows-latest
+          - os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: npm run check
+      - run: npm run verify:architecture
+      - run: npm run desktop:package
+      - run: npm run desktop:smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cospace-desktop-${{ runner.os }}-${{ runner.arch }}
+          path: dist/releases/desktop/**
+          if-no-files-found: error

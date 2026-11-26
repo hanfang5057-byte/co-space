@@ -1,6 +1,6 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft } from 'lucide-react';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
@@ -10,10 +10,23 @@ import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
 import { supportsCapability } from '../../adapter-contract/src/index.js';
+import { autonomousReviewPrompt, commentProcessingPrompt } from '../../adapter-contract/src/prompts.js';
 import './space.css';
 
 const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
+function HomeSelect({ label, value, options, onChange }) {
+  const [open,setOpen]=useState(false);
+  const root=useRef(null);
+  useEffect(()=>{if(!open)return;const close=event=>{if(!root.current?.contains(event.target))setOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[open]);
+  const current=options.findIndex(option=>option.value===value);
+  return <div className="space-home-select" ref={root}>
+    <button type="button" className="space-home-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const direction=event.key==='ArrowDown'?1:-1;onChange(options[(current+direction+options.length)%options.length].value)}}}>
+      <span>{options[current]?.label}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
+    </button>
+    {open&&<div className="space-home-select-menu" role="listbox" aria-label={label}>{options.map(option=><button type="button" role="option" aria-selected={value===option.value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false)}}>{option.label}{value===option.value&&<span aria-hidden="true">✓</span>}</button>)}</div>}
+  </div>;
+}
 function scrollToSourceOffset(surface, offset, markdownSource) {
   if (!surface) return false;
   if (scrollSourceRange(surface, offset, offset, markdownSource)) return true;
@@ -36,6 +49,7 @@ const documentCardTime = (item,t) => {
 /** Fallback translator keeps the panel renderable outside a locale seat, as in the DOM smoke test. */
 const defaultT = (key, vars) => translate(zh, key, vars);
 const localBuildVersion = typeof __COSPACE_BUILD_VERSION__ === 'undefined' ? 'development' : __COSPACE_BUILD_VERSION__;
+const displayVersion = localBuildVersion.split('+', 1)[0];
 
 export function CospaceMark({ className = '' }) {
   return <img className={className} src={cospaceIcon} alt="" aria-hidden="true"/>;
@@ -53,34 +67,32 @@ function IconButton({ label, children, ...props }) {
   return <button type="button" aria-label={label} title={label} {...props}>{children}</button>;
 }
 
-function ExportMenu({ exporting, onExport, t }) {
+function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, onOpenAgents, canExport, t }) {
   const [open,setOpen]=useState(false);
-  const rootRef=useRef(null), triggerRef=useRef(null), closeTimer=useRef(null);
+  const rootRef=useRef(null), triggerRef=useRef(null);
   const panelId=useId();
-  const cancelClose=()=>{clearTimeout(closeTimer.current);closeTimer.current=null;};
   useEffect(()=>{
     if(!open) return;
     const dismiss=event=>{if(!rootRef.current?.contains(event.target)) setOpen(false);};
+    const keydown=event=>{if(event.key==='Escape'){setOpen(false);triggerRef.current?.focus();}};
     document.addEventListener('pointerdown',dismiss);
-    return ()=>document.removeEventListener('pointerdown',dismiss);
+    document.addEventListener('keydown',keydown);
+    return ()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('keydown',keydown);};
   },[open]);
-  useEffect(()=>()=>clearTimeout(closeTimer.current),[]);
-  const leave=event=>{
-    if(event.pointerType==='touch') return;
-    cancelClose();
-    closeTimer.current=setTimeout(()=>{
-      closeTimer.current=null;
-      if(!rootRef.current?.contains(document.activeElement)) setOpen(false);
-    },180);
-  };
-  const select=format=>{cancelClose();setOpen(false);void onExport(format);};
-  return <div className="space-export-menu" ref={rootRef}
-    onPointerEnter={event=>{if(event.pointerType!=='touch'){cancelClose();setOpen(true);}}}
-    onPointerLeave={leave}
-    onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget)){cancelClose();setOpen(false);}}}
-    onKeyDown={event=>{if(event.key==='Escape' && open){event.preventDefault();event.stopPropagation();cancelClose();setOpen(false);triggerRef.current?.focus();}}}>
-    <button ref={triggerRef} type="button" className="space-export-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{cancelClose();setOpen(value=>!value);}}>{exporting?t('export.busy'):t('export.button')}</button>
-    {open && <div id={panelId} className="space-export-panel"><p>{t('export.note')}</p><button type="button" disabled={exporting} onClick={()=>select('md')}>Markdown <span>.md</span></button><button type="button" disabled={exporting} onClick={()=>select('docx')}>Word <span>.docx</span></button></div>}
+  const run=action=>{setOpen(false);action?.();};
+  return <div className="space-tools-menu" ref={rootRef}>
+    <button ref={triggerRef} type="button" className="space-tools-menu-trigger" aria-label={t('toolbar.more')} title={t('toolbar.more')} aria-haspopup="true" aria-expanded={open} aria-controls={panelId} onClick={()=>setOpen(value=>!value)}><MoreHorizontal size={19} aria-hidden="true"/></button>
+    {open&&<div id={panelId} className="space-tools-menu-panel">
+      {onOpenAgents&&<button type="button" onClick={()=>run(onOpenAgents)}>Agent 接入</button>}
+      {onReview&&<button type="button" onClick={()=>run(onReview)}>让 Agent 审阅</button>}
+      {onPreferences&&<button type="button" onClick={()=>run(onPreferences)}>{t('collab.open')}</button>}
+      {canExport&&<>
+        <div className="space-tools-menu-divider" role="separator"/>
+        <p>{t('export.button')}</p>
+        <button type="button" disabled={exporting} onClick={()=>run(()=>onExport('md'))}>Markdown <span>.md</span></button>
+        <button type="button" disabled={exporting} onClick={()=>run(()=>onExport('docx'))}>Word <span>.docx</span></button>
+      </>}
+    </div>}
   </div>;
 }
 
@@ -128,7 +140,7 @@ function SpaceDialog({ open, onClose, labelledBy, title, closeLabel, className =
  * @param {{mode?: 'copy', canCreate?: boolean, openSession?: (sessionId: string) => void} | null} sendTarget - optional comment processing action mode.
  * @returns {object} review state and the actions that change it.
  */
-export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = null) {
+export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = null, autoEditDocId = null) {
   const sendTarget=adapter?.conversation || null;
   const [doc,setDoc]=useState(null);
   const [comments,setComments]=useState([]);
@@ -154,6 +166,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     const sequence=++loadSequence.current;
     const next=await call('readDocument',{docId:id});
     if (sequence!==loadSequence.current) return;
+    if(id===autoEditDocId){setEditing(true);setEditBaseVersion(next?.version??null);setEditDirty(false)}
     const nextComments=next?.comments || [];
     const signature=JSON.stringify(next);
     const contentChanged=!snapshot.current || snapshot.current.content!==next?.content || snapshot.current.version!==next?.version;
@@ -161,7 +174,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     snapshot.current={signature,content:next?.content,version:next?.version};
     if(contentChanged) setSelection(null);
     if (next?.title) rememberDocumentTitle(id,next.title,api);
-  },[call]);
+  },[call,autoEditDocId]);
   useEffect(()=>{
     setEditing(false);setEditBaseVersion(null);setEditDirty(false);editorRef.current=null;
     if (!docId) {
@@ -193,7 +206,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     && !suggestions.some(item=>['pending','conflicted'].includes(item.status))
     && !comments.some(item=>['pending','sending','failed','unknown'].includes(item.status));
   const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
-  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollToSourceOffset(surface.current,item.from,doc?.content?.length||0))setMessage(t('suggestion.unavailable'));};
+  const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollToSourceOffset(surface.current,item.from,doc?.content||''))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
   const decide=(suggestionId,decision)=>perform(async()=>{await call('decide',{docId,suggestionId,decision,operationId:requestId()});await reload(docId)});
@@ -226,7 +239,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     if(mode==='copy') {
       if(!canCopy) throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
       if(typeof adapter?.clipboard?.writeText!=='function') throw Object.assign(new Error(t('send.clipboardUnavailable')),{code:'CLIPBOARD_UNAVAILABLE'});
-      const text=`space:${encodeURIComponent(docId)}\n${t('send.processingPrompt')}`;
+      const text=commentProcessingPrompt(`space:${encodeURIComponent(docId)}`,ids);
       await adapter.clipboard.writeText(text);
       setMessage(t('send.copied'));
       setActiveComment(null);
@@ -253,7 +266,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,editSaveError,dismissEditSaveError,editorRef,startEditing,switchToReview,markEditDirty:()=>setEditDirty(true)};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,dismissEditSaveError,editorRef,startEditing,switchToReview,markEditDirty:()=>setEditDirty(true)};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -576,6 +589,15 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     hoverTimer.current=setTimeout(()=>{hoverTimer.current=null;setHoverPreview(null);},180);
   };
   const trackHover=event=>{
+    // Insertions are rendered as widgets/ins nodes outside the source text
+    // spans, so map their explicit suggestion id before trying source offsets.
+    const suggestionId=event.target?.closest?.('[data-suggestion-id]')?.getAttribute('data-suggestion-id');
+    const insertedAnnotation=suggestionId==null?null:suggestionItems.find(item=>String(item.id)===suggestionId);
+    if(insertedAnnotation){
+      keepHover();
+      setHoverPreview(previous=>previous?.key===insertedAnnotation.key ? previous : {key:insertedAnnotation.key,left:event.clientX,top:event.clientY});
+      return;
+    }
     const range=document.caretRangeFromPoint?.(event.clientX,event.clientY);
     const point=range
       ? {node:range.startContainer,offset:range.startOffset}
@@ -593,12 +615,37 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     }
     else closeHover();
   };
+  const handleMarkdownLinkClick=event=>{
+    const link=event.target?.closest?.('a[href]');
+    if(!link||!surface.current?.contains(link)) return;
+    const href=link.getAttribute('href')?.trim();
+    if(!href) return;
+    let destination;
+    try { destination=new URL(href,window.location.href); }
+    catch { event.preventDefault();return; }
+    const current=new URL(window.location.href);
+    if(href.startsWith('#')&&destination.origin===current.origin&&destination.pathname===current.pathname&&destination.search===current.search) return;
+    if(['http:','https:','mailto:','tel:'].includes(destination.protocol)) {
+      // Tauri's shell plugin opens external links with target="_blank" in the
+      // system browser; regular browsers keep the CoSpace tab and open a tab.
+      link.target='_blank';
+      link.rel='noopener noreferrer';
+      return;
+    }
+    const documentId=adapter.navigation?.parseDocumentLink?.(href);
+    if(documentId) {
+      event.preventDefault();
+      adapter.navigation?.openDocument?.(documentId);
+      return;
+    }
+    event.preventDefault();
+  };
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
-      <div ref={surface} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} t={t} readOnly={!editing}/></div>
+      <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.deleted?' is-deleted':''}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
@@ -636,19 +683,20 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   </section>;
 }
 
-export function SpaceApp({ adapter, t = defaultT }) {
+export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
   const sessionId=adapter.conversation?.current?.id || null;
   const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
+  const [autoEditDocId,setAutoEditDocId]=useState(null);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(null),[settingsError,setSettingsError]=useState(''),[settingsScope,setSettingsScope]=useState('document'),[instructionText,setInstructionText]=useState(''),[instructionSaveState,setInstructionSaveState]=useState('idle'),[settingsBusy,setSettingsBusy]=useState(false);
-  const instructionSaveTimer=useRef(null);
   const [exporting,setExporting]=useState(false);
+  const [promptTask,setPromptTask]=useState(null),[copiedPrompt,setCopiedPrompt]=useState(false);
   const deleteTitleId=useId();
   const editUnavailableTipId=useId();
   const user=useCurrentUser(adapter.identity?.getCurrentUser);
-  const review=useSpaceReview(api,docId,sessionId,t,adapter);
+  const review=useSpaceReview(api,docId,sessionId,t,adapter,autoEditDocId);
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
   const documentsSnapshot=useRef(null);
@@ -666,7 +714,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
     setBusy(true);setMessage('');
     try {
       const created=await call('createDocument',{title:t('document.untitled'),operationId:requestId()});
-      await reloadDocs();setDocId(created.id);
+      await reloadDocs();setAutoEditDocId(created.id);setDocId(created.id);
     } catch (e) { setMessage(errorText(e,t)); }
     finally { setBusy(false); }
   };
@@ -702,15 +750,16 @@ export function SpaceApp({ adapter, t = defaultT }) {
   };
   const openCollaboration=async(scope)=>{setSettings(null);setSettingsError('');setSettingsScope(scope);setInstructionText('');setInstructionSaveState('idle');setSettingsOpen(true);setSettingsBusy(true);try{const next=await call('readCollaboration',{docId:scope==='document'?docId:undefined});setSettings(next);setInstructionText((scope==='global'?next.global:next.document)?.content||'')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t))}finally{setSettingsBusy(false)}};
   const saveCollaboration=useCallback(async(content)=>{const current=settingsScope==='global'?settings?.global:settings?.document;setInstructionSaveState('saving');try{await call('saveInstructions',{scope:settingsScope,docId:settingsScope==='document'?docId:undefined,content,baseVersion:current?.version||0,operationId:requestId()});const next=await call('readCollaboration',{docId:settingsScope==='document'?docId:undefined});setSettings(next);setInstructionSaveState('saved')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t));setInstructionSaveState('error')}},[call,docId,settingsScope,settings,t]);
-  useEffect(()=>{if(!settingsOpen||!settings||settingsError)return;const current=settingsScope==='global'?settings.global:settings.document;if(instructionText===(current?.content||''))return;const timer=setTimeout(()=>{instructionSaveTimer.current=null;saveCollaboration(instructionText)},450);instructionSaveTimer.current=timer;return()=>{clearTimeout(timer);if(instructionSaveTimer.current===timer)instructionSaveTimer.current=null}},[settingsOpen,settings,settingsError,settingsScope,instructionText,saveCollaboration]);
-  const saveInstructionNow=async()=>{if(instructionSaveTimer.current){clearTimeout(instructionSaveTimer.current);instructionSaveTimer.current=null}await saveCollaboration(instructionText)};
-  const closeCollaboration=async()=>{const current=settingsScope==='global'?settings?.global:settings?.document;if(settings&&instructionText!==(current?.content||''))await saveInstructionNow();setSettingsOpen(false)};
+  const saveInstructionNow=async()=>{await saveCollaboration(instructionText)};
+  const closeCollaboration=()=>{setSettingsOpen(false)};
   const backToHome=async()=>{
     if(review.editing){const saved=await review.switchToReview();if(!saved)return;}
     setDocId(null);
   };
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
+  const promptText=promptTask ? (promptTask.docId ? autonomousReviewPrompt(`space:${encodeURIComponent(promptTask.docId)}`) : '请根据我的要求，通过 CoSpace MCP 创建一份新文档并提交完整初稿。') : '';
+  const copyPrompt=async()=>{try{await navigator.clipboard.writeText(promptText);setCopiedPrompt(true)}catch{setCopiedPrompt(false)}};
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const shownDocuments=useMemo(()=>{
     const needle=query.trim().toLocaleLowerCase();
@@ -723,10 +772,10 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const instructionDirty=Boolean(settings)&&instructionText!==(savedInstruction?.content||'');
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
-      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')}</small></span><small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></div><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></header>
+      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')} <span className="space-build-version" title={t('build.versionTitle')}>v{displayVersion}</span></small></span></div><div className="space-header-tools">{onOpenAgents&&<button type="button" className="space-collab-trigger" onClick={onOpenAgents}>Agent 接入</button>}{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
-        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><label><span className="space-visually-hidden">{t('home.filter')}</span><select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">{t('home.filterAll')}</option><option value="pending">{t('home.filterPending')}</option></select></label><label><span className="space-visually-hidden">{t('home.sort')}</span><select value={sort} onChange={event=>setSort(event.target.value)}><option value="recent">{t('home.sortRecent')}</option><option value="title">{t('home.sortTitle')}</option></select></label></div>}
+        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
         {shownDocuments.length ? <div className="space-home-grid">{shownDocuments.map((item,index)=><article className="space-home-card" key={item.id}>
           <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>setDocId(item.id)}>
             <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">{BRAND.name.en.toUpperCase()}</span></span>
@@ -737,11 +786,20 @@ export function SpaceApp({ adapter, t = defaultT }) {
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
       <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
-            <div className="space-header-tools">{review.doc&&<button type="button" className="space-collab-trigger" onClick={()=>openCollaboration('document')}>{t('collab.open')}</button>}{review.doc&&<div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>}{review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>} {review.doc&&<><ReviewZoomControls review={review} t={t}/>{supportsCapability(adapter.capabilities,'files.export.save')&&<ExportMenu exporting={exporting} onExport={exportDocument} t={t}/>} {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}</>}</div>
+            <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
+              {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} onOpenAgents={onOpenAgents} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
+              {review.doc&&<div className="space-toolbar-group is-view">
+                <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
+                <ReviewZoomControls review={review} t={t}/>
+              </div>}
+              {review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>}
+              {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}
+            </div>
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}
     {!home&&<div className="space-message" role="status" aria-live="polite">{review.editSaveError ? '' : message || (review.doc ? review.message : '')}</div>}
+    <SpaceDialog open={Boolean(promptTask)} onClose={()=>{setPromptTask(null);setCopiedPrompt(false)}} labelledBy="space-agent-prompt-title" title="发送给 Agent 的提示词" closeLabel={t('dialog.close')} actions={<><button type="button" onClick={()=>{setPromptTask(null);setCopiedPrompt(false)}}>{t('dialog.close')}</button><button type="button" className="is-primary" onClick={copyPrompt}>{copiedPrompt?'已复制':'复制提示词'}</button></>}>{adapter.prompts?.mcpReady===false&&<p>请先在 Agent 接入设置中配置 CoSpace MCP。</p>}<textarea readOnly rows="8" value={promptText}/></SpaceDialog>
     <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} title={t('document.deleteTitle')} closeLabel={t('dialog.close')} className="space-delete-dialog" actions={<><button type="button" autoFocus disabled={busy} onClick={()=>setDeleteTarget(null)}>{t('document.deleteCancel')}</button><button type="button" className="is-danger" disabled={busy} onClick={deleteDocument}>{t('document.deleteConfirm')}</button></>}>
       <p>{t('document.deleteDescription',{title:deleteTarget?.title || deleteTarget?.id || ''})}</p>
     </SpaceDialog>

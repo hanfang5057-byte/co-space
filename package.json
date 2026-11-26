@@ -6,11 +6,15 @@
   "license": "MIT",
   "workspaces": [
     "packages/review-core",
+    "packages/host-api",
     "packages/review-ui",
     "packages/adapter-contract",
     "packages/transport-mcp",
     "packages/transport-http",
-    "adapters/dsh"
+    "packages/local-runtime",
+    "adapters/dsh",
+    "apps/desktop",
+    "apps/local-server"
   ],
   "engines": {
     "node": ">=24"
@@ -23,6 +27,17 @@
     "build:dsh": "npm run build:client && node scripts/build-dsh.mjs && node scripts/build-market.mjs",
     "dev:dsh": "node scripts/dev-dsh.mjs",
     "build:site": "node scripts/build-site.mjs",
+    "desktop:build": "npm run build --workspace @cospace/desktop",
+    "desktop:dev": "npm run dev --workspace @cospace/desktop",
+    "desktop:package": "npm run package --workspace @cospace/desktop",
+    "desktop:smoke": "npm run smoke --workspace @cospace/desktop",
+    "desktop:web": "npm run web --workspace @cospace/desktop",
+    "desktop:mcp": "npm run mcp --workspace @cospace/desktop",
+    "local-server:build": "npm run build --workspace @cospace/local-server",
+    "local-server:pack": "npm run pack --workspace @cospace/local-server",
+    "local-server:verify-package": "npm run verify-package --workspace @cospace/local-server",
+    "local-server:mcp": "npm run mcp --workspace @cospace/local-server",
+    "local-server:web": "npm run web --workspace @cospace/local-server",
     "verify:architecture": "node scripts/verify-adapter-boundaries.mjs",
     "pack:npm": "node scripts/pack-dsh.mjs",
     "pack:dsh": "node scripts/pack-dsh.mjs",

@@ -1,0 +1,16 @@
+[package]
+name = "cospace-desktop"
+version = "0.1.9"
+description = "CoSpace local review workbench"
+authors = ["CoSpace"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+url = "2"

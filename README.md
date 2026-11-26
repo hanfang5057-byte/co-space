@@ -8,7 +8,7 @@ CoSpace 让用户在个人文档中审阅 Agent 提出的具体修改：用户�
 
 ## 当前状态
 
-本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享审阅 UI、适配器契约、通用传输层和 DSH 适配器。适配器负责将核心能力接入宿主；核心不依赖任何宿主。适配器能力契约和新增流程见[适配器接入规范](docs/14-adapter-integration.md)。
+本仓库是智联文档空间（CoSpace）的私有 npm workspace，包含共享审阅核心、共享服务接口、共享审阅 UI、适配器契约、通用传输层、DSH 插件、Local Server 和 Tauri 桌面应用。DSH 插件位于 `adapters/dsh/`；Local Server CLI 位于 `apps/local-server/`；桌面产品、Node sidecar、Agent 接入和 Tauri 壳统一位于 `apps/desktop/`。共享核心不依赖具体宿主。目录边界和新增接入流程见[适配器接入规范](docs/14-adapter-integration.md)及[系统架构记录](docs/09-host-adapters-architecture.md)。
 
 正文以 Markdown 源文本保存和审阅。Agent 提交带版本和 UTF-16 源码区间的替换建议；段落、标题、列表、表格、链接等 Markdown 结构都通过普通文本替换修改。完整接口、坐标和安全限制见[审阅内核说明](docs/07-review-core.md)。
 
@@ -25,6 +25,12 @@ DSH 插件包名为 `dsh-plugin-space`，已发布到 npm。
 - `adapters/dsh/client.js` 是 DSH 客户端生成产物；修改 `packages/review-ui/src/` 或 `adapters/dsh/client/` 后运行 `npm run build:client`，不要手工编辑生成文件。
 - React 由宿主提供：构建保持 `react`、`react-dom`、`react/jsx-runtime` 外置，`npm run build:client` 会在发现 React 被打包进 `client.js` 时直接失败；插件不声明自己的 React 依赖。
 - 启用后，左侧栏出现 **CoSpace** 入口；对话输入框的 **+** 菜单出现 **CoSpace 文档**。
+
+### Local Server 和 Desktop
+
+本次协调版本为 `0.1.9`，三端产品版本已对齐，版本来源仍各自独立。当前发布准备状态：DSH npm `latest` 仍为 `0.1.8`，awesome-dsh-plugin 外部目录也仍指向 `v0.1.8`；DSH `0.1.9` 和 Local Server `0.1.9` tarball 已完成打包验收，但尚未发布到 npm。Local Server 的配置和本地服务命令见 [`apps/local-server/README.md`](apps/local-server/README.md)；请在 `@cospace/local-server@0.1.9` 发布后再使用其中的 `@latest` 命令。
+
+Desktop `0.1.9` 的 macOS arm64 DMG 已生成并通过包校验，目前使用 ad-hoc 签名，未使用 Developer ID 或公证。Windows/Linux 产物需要在对应构建机或 CI 完成验收后再发布；当前 macOS 包不代表已通过 Gatekeeper 的公开分发验收。桌面构建说明见 [`apps/desktop/README.md`](apps/desktop/README.md)。
 
 ## 使用入口
 
@@ -85,11 +91,15 @@ npm run build:dsh
 npm run check
 ```
 
-测试包含真实 MCP stdio、SQLite 存储、建议决策、评论处理模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。可用 `sh scripts/test-ui.sh` 运行模拟 DOM 的界面测试，该脚本在临时目录安装测试依赖。
+测试包含真实 MCP stdio、SQLite 存储、建议决策、评论处理模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。宿主界面仍需在实际支持的 DSH 环境中验收。
+
+## 桌面版开发与打包
+
+桌面版需要 Node.js 24 或更高版本、Rust stable，以及当前平台的 Tauri 系统依赖。运行 `npm run desktop:dev` 启动开发版，运行 `npm run desktop:package` 构建当前平台安装包，最终产物写入 `dist/releases/desktop/<平台>/`。运行 `npm run desktop:smoke` 可检查打包 Node sidecar 的 HTTP 与 MCP 启动。
 
 ## 打包
 
-根目录是私有 npm workspace，不直接发布。当前仅发布 DSH 插件。发布前运行 `npm run pack:npm`（与 `npm run pack:dsh` 等价），构建、校验 DSH 包并将 tarball 放进 `dist/npm-packages/`。
+根目录是私有 npm workspace，不直接发布。DSH 插件和 Local Server 是两个独立 npm 包；Desktop 使用各平台安装包。三端产品可协调版本发布，但版本来源和发布步骤独立。发布前按[统一发布流程](docs/16-release-process.md)构建、校验并查看 `dist/npm-packages/` 和 `dist/releases/desktop/` 中的暂存产物；不得从 workspace 根目录发布。
 
 ### DSH 插件
 
@@ -128,7 +138,9 @@ npm run pack:dsh
 
 `npm run pack:dsh` 产出 DSH tarball 到 `dist/npm-packages/`。本地安装或交给 DSH 测试时可使用 `dist/dsh-plugin/`。
 
-### 发布新版本
+### DSH 插件发布
+
+以下步骤仅涵盖 DSH 插件。Local Server 与 Desktop 的发布步骤以及三端协调发布时序见[统一发布流程](docs/16-release-process.md)。
 
 1. 更新 `release/npm-version.json` 和 `adapters/dsh/package.json` 的版本号。
 2. 运行 `npm run pack:dsh` 构建并校验发布包。

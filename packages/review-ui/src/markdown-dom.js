@@ -36,7 +36,7 @@ export function readSourceSpans(surface, markdownSource = '') {
 
   const actualMap = [], walker = document.createTreeWalker(root, 4, {
     acceptNode(node) {
-      return node.parentElement?.closest('.label-wrapper,.milkdown-toolbar,.milkdown-block-handle,.milkdown-slash-menu,.milkdown-table-block .handle,.milkdown-table-block .line-handle,.milkdown-table-block .cell-handle,.milkdown-table-block .add-button,.milkdown-table-block .button-group,.milkdown-code-block .language-picker,.milkdown-code-block .tools') ? 2 : 1;
+      return node.parentElement?.closest('.space-suggestion-insert,.label-wrapper,.milkdown-toolbar,.milkdown-block-handle,.milkdown-slash-menu,.milkdown-table-block .handle,.milkdown-table-block .line-handle,.milkdown-table-block .cell-handle,.milkdown-table-block .add-button,.milkdown-table-block .button-group,.milkdown-code-block .language-picker,.milkdown-code-block .tools') ? 2 : 1;
     },
   });
   let actualText = '', node;

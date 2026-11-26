@@ -1,0 +1,10 @@
+{
+  "name": "@cospace/host-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cospace/adapter-contract": "0.0.0"
+  },
+  "exports": "./src/index.js"
+}

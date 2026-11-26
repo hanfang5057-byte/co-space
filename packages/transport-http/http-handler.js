@@ -1,8 +1,11 @@
 /** Host-neutral JSON HTTP transport for the review UI. */
 export const COSPACE_API_PATH = '/cospace-api';
 
-export function createHttpHandler(api) {
+export function createHttpHandler(api, { token } = {}) {
   return async (req,res) => {
+    if (token && req.headers?.['x-cospace-token'] !== token) { res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'FORBIDDEN',message:'Invalid local session'}}));return; }
+    if (req.headers?.origin && req.headers.origin !== `http://${req.headers.host}`) { res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'FORBIDDEN',message:'Cross-origin request denied'}}));return; }
+    if (req.url !== undefined && req.url !== COSPACE_API_PATH) { res.writeHead(404);res.end();return; }
     if (req.method !== 'POST') { res.writeHead(405,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'METHOD_NOT_ALLOWED',message:'仅支持 POST'}}));return; }
     try {
       let size=0;const chunks=[];

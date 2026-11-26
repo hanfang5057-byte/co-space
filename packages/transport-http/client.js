@@ -1,10 +1,11 @@
 /** Browser transport to the CoSpace Host HTTP route; every surface shares it. */
-import { COSPACE_API_PATH } from '../../transport-http/http-handler.js';
+import { COSPACE_API_PATH } from './http-handler.js';
 
 export async function api(method, args = {}, options = {}) {
+  const token = window.__COSPACE_LOCAL_TOKEN__;
   const response = await fetch(COSPACE_API_PATH, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(token ? { 'x-cospace-token': token } : {}) },
     body: JSON.stringify({ method, args }),
     ...(options.signal ? { signal: options.signal } : {}),
   });

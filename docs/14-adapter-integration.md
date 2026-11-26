@@ -1,6 +1,6 @@
 # 14 · Adapter Integration Contract
 
-This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The standalone local WebApp is a reference for the widest capability set; it is not part of the current implementation. Every adapter, including that future WebApp and the current DSH plugin, uses the same contract and declares only the host capabilities it can provide.
+This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The Tauri Desktop app in `apps/desktop/` is the local product that exercises the widest capability set. It hosts the shared UI in a Tauri WebView and runs Node HTTP/MCP services as a managed sidecar. The DSH plugin in `adapters/dsh/` and Desktop app use the same adapter contract and declare only the host capabilities they provide. Product shells and their build scripts belong under `apps/<product>/`; host-specific integrations and plugin metadata belong under `adapters/<host>/`.
 
 ## Dependency direction
 
@@ -21,7 +21,7 @@ The contract package describes the boundary. It is not a service locator, plugin
 
 ## Core API and host capabilities are separate
 
-The core API is the stable set of product operations: list and create documents, read content and review state, submit suggestions, decide suggestions, and manage comments. MCP, HTTP, and any future in-process transport expose the same domain semantics. Adding a host must not require changing `review-core.js` or adding host-specific branches to the core.
+The core API is the stable set of product operations: list and create documents, read content and review state, submit suggestions, decide suggestions, and manage comments. MCP, HTTP, and any future in-process transport expose the same domain semantics. Adding a host must not require changing `review-core.js` or adding host-specific branches to the core. `packages/host-api/` composes the shared service facade for DSH and Desktop; optional host callbacks are passed into it by the product edge.
 
 Host capabilities are optional actions around those domain operations. The current contract registry is in `packages/adapter-contract/src/index.js` and the matching TypeScript declarations are in `packages/adapter-contract/src/index.d.ts`.
 
@@ -103,7 +103,7 @@ Capability negotiation must not weaken core invariants. Suggestion decisions rem
 
 `adapters/dsh/adapter.json` declares the DSH integration surface. `adapters/dsh/client/index.jsx` adapts DSH APIs into the neutral `adapter` value passed to `SpaceApp` and sidebar review surfaces. DSH-specific Cordis registration, `dsh-resource://` references, account lookup, session selection, workspace lookup, and opening the right sidebar stay under `adapters/dsh/`.
 
-The shared UI receives `{ capabilities, conversation }` for optional conversation actions and a core API function for domain operations. It does not inspect DSH SDK objects, resource URI schemes, or host names. If DSH lacks a feature at runtime, the corresponding operation is omitted or disabled; current DSH document and review operations continue to use the existing shared HTTP/MCP facade.
+The shared UI receives `{ capabilities, conversation }` for optional conversation actions and a core API function for domain operations. It does not inspect DSH SDK objects, resource URI schemes, host names, or transport implementations. Adapters provide the request function; shared UI packages do not import HTTP or MCP transports directly. If DSH lacks a feature at runtime, the corresponding operation is omitted or disabled; current DSH document and review operations continue to use the shared service facade.
 
 ## Adding an adapter
 

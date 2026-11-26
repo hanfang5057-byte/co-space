@@ -1,6 +1,6 @@
 {
   "id": "dsh",
-  "version": "0.1.6",
+  "version": "0.1.9",
   "contractVersion": 1,
   "capabilities": [
     "conversation.current.read",

@@ -1,0 +1,16 @@
+{
+  "name": "@cospace/local-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cospace/host-api": "0.0.0",
+    "@cospace/review-core": "0.0.0",
+    "@cospace/transport-http": "0.0.0"
+  },
+  "exports": {
+    "./paths": "./src/paths.js",
+    "./service": "./src/service.js",
+    "./manager": "./src/manager.js"
+  }
+}

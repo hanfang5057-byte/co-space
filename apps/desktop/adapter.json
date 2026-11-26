@@ -1,0 +1,11 @@
+{
+  "id": "desktop",
+  "version": "0.1.9",
+  "contractVersion": 1,
+  "capabilities": [
+    "identity.current.read",
+    "navigation.document.open",
+    "files.export.save",
+    "clipboard.write"
+  ]
+}

@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {createHostApi} from '../adapters/dsh/server/host.js';
+import {createHostApi} from '../packages/host-api/src/index.js';
 import {createHttpHandler} from '../packages/transport-http/http-handler.js';
 import {documentFromMarkdown, SpaceService} from '../packages/review-core/src/space-service.js';
 
@@ -19,7 +19,7 @@ test('host comment bridge requires explicit action and treats unconfirmed receip
    assert.equal(sent.length,0);
    const payload={docId:'d',sessionId:'session-1',commentIds:[note.id],operationId:'send-1'};
    assert.equal((await host.dispatch('sendComments',payload)).status,'unknown');
-   assert.equal(sent.length,1);assert.equal(sent[0].sessionId,'session-1');assert.match(sent[0].content[0].text,/^space:d\n/);assert.match(sent[0].content[0].text,/space_document_read/);assert.match(sent[0].content[0].text,/space_comment_complete/);assert.doesNotMatch(sent[0].content[0].text,/clarify/);assert.doesNotMatch(sent[0].content[0].text,new RegExp(note.id));
+   assert.equal(sent.length,1);assert.equal(sent[0].sessionId,'session-1');assert.match(sent[0].content[0].text,/^space:d\n/);assert.match(sent[0].content[0].text,/space_document_read/);assert.match(sent[0].content[0].text,/space_comment_complete/);assert.doesNotMatch(sent[0].content[0].text,/clarify/);assert.match(sent[0].content[0].text,new RegExp(note.id));
    assert.equal((await host.dispatch('sendComments',payload)).status,'unknown');assert.equal(sent.length,1);
  } finally {host.close();rmSync(home,{recursive:true,force:true});}
 });
@@ -49,7 +49,7 @@ test('UI creates an untitled document with an empty body and replays its operati
    assert.equal(first.id,'doc-ui-create-1');assert.equal(first.title,'未命名文档');
    const list=await host.dispatch('listDocuments');assert.equal(list.length,1);assert.equal(list[0].title,'未命名文档');
    const doc=await host.dispatch('readDocument',{docId:first.id});
-   assert.equal(doc.content,'# 未命名文档\n\n');
+   assert.equal(doc.content,'# 未命名文档\n\n\n');
    const again=await host.dispatch('createDocument',{title:'未命名文档',operationId:'ui-create-1'});
    assert.equal(again.id,first.id);assert.equal((await host.dispatch('listDocuments')).length,1);
    const second=await host.dispatch('createDocument',{title:'未命名文档',operationId:'ui-create-2'});
@@ -61,7 +61,7 @@ test('UI creates an untitled document with an empty body and replays its operati
 test('client bundle registers Space panel, picker action, and reference serialization',async()=>{
  const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
  const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
- const context={window:{__ModuleLoader__:{load:value=>{descriptor=value}}},document:{createElement:()=>({}),head:{append:()=>{}}},console};
+ const context={window:{__ModuleLoader__:{load:value=>{descriptor=value}}},document:{createElement:()=>({}),documentElement:{style:{}},body:{style:{}},head:{append:()=>{}}},console};
  vm.runInNewContext(bundle,context);
  const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
  const plugin=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
@@ -76,7 +76,7 @@ test('client bundle registers Space panel, picker action, and reference serializ
  assert.equal(tabTypes[0].kind,'space-document');
  assert.equal(tabTypes[0].patterns[0],'dsh-resource://space/**');
  const card=registrations.find(x=>x.options.name==='conversation.user.text.node'&&x.options.key==='space-document');
- card.options.inject().openDocument('doc-1');
+ card.options.inject().adapter.navigation.openDocument('doc-1');
  assert.deepEqual(opened,['dsh-resource://space/doc-1']);
  const rule=rules.find(x=>x.id==='space-document');assert.ok(rule);
  const node=rule.match('space:doc-1 请改写',0);assert.equal(node.id,'space-document');assert.equal(node.start,0);assert.equal(node.end,11);assert.equal(node.data.docId,'doc-1');
@@ -100,9 +100,10 @@ test('document picker inserts the checked documents into the bound conversation'
    querySelectorAll(){return [];}
  }
  const elements=[];const modalRoot=[];const document={
+   documentElement:{style:{}},
    createElement(tag){const element=new Element(tag);elements.push(element);return element;},
    createTextNode(text){return {textContent:text};},
-   body:{append(element){modalRoot.push(element);}},
+   body:{style:{},append(element){modalRoot.push(element);}},
    head:{append(){}},
  };
  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
@@ -139,9 +140,10 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
     querySelectorAll(){return [];}
   }
   const elements=[];const modalRoot=[];const document={
+    documentElement:{style:{}},
     createElement(tag){const element=new Element(tag);elements.push(element);return element;},
     createTextNode(text){return {textContent:text};},
-    body:{append(element){modalRoot.push(element);}},
+    body:{style:{},append(element){modalRoot.push(element);}},
     head:{append(){}},
   };
   const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
@@ -163,10 +165,35 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
 });
 
 test('plugin registers MCP and web route against the same home and disposes them', async () => {
- const {apply}=await import('../adapters/dsh/index.js'); const home=mkdtempSync(path.join(tmpdir(),'space-apply-')); const old=process.env.DSH_SPACE_HOME;process.env.DSH_SPACE_HOME=home;
- const regs=[],disposers=[];const ctx={get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>{disposers.push(fn());},mcpManager:{register:(name,config)=>{regs.push({name,config});return()=>{};}},webServer:{register:route=>{regs.push({route});return()=>{};}}};
- try {apply(ctx);assert.equal(regs[0].name,'space');assert.equal(regs[0].config.env.DSH_SPACE_HOME,home);assert.equal(regs[0].config.toolLoading,'eager');assert.match(regs[0].config.args[0],/server\/mcp-entry\.js$/);assert.equal(regs[1].route.path,'/cospace-api');}
- finally {for(const d of disposers.reverse())d?.(); if(old===undefined)delete process.env.DSH_SPACE_HOME;else process.env.DSH_SPACE_HOME=old;rmSync(home,{recursive:true,force:true});}
+  const { apply } = await import('../adapters/dsh/index.js');
+  const home = mkdtempSync(path.join(tmpdir(), 'space-apply-'));
+  const old = process.env.DSH_SPACE_HOME;
+  process.env.DSH_SPACE_HOME = home;
+  const regs = [];
+  const disposers = [];
+  const ctx = {
+    get: () => undefined,
+    inject: (_deps, fn) => fn(ctx),
+    effect: fn => { disposers.push(fn()); },
+    mcpManager: { register: (name, config) => { regs.push({ name, config }); return () => {}; } },
+    webServer: { register: route => { regs.push({ route }); return () => {}; } },
+  };
+
+  try {
+    apply(ctx);
+    assert.equal(regs[0].name, 'space');
+    assert.equal(regs[0].config.env.DSH_SPACE_HOME, home);
+    assert.equal(regs[0].config.toolLoading, 'eager');
+    const mcpEntry = regs[0].config.args[0];
+    assert.equal(path.basename(path.dirname(mcpEntry)), 'server');
+    assert.equal(path.basename(mcpEntry), 'mcp-entry.js');
+    assert.equal(regs[1].route.path, '/cospace-api');
+  } finally {
+    for (const dispose of disposers.reverse()) dispose?.();
+    if (old === undefined) delete process.env.DSH_SPACE_HOME;
+    else process.env.DSH_SPACE_HOME = old;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('the UI can read the signed-in account without exposing credentials', async () => {

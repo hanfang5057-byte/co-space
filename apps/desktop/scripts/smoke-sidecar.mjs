@@ -1,0 +1,133 @@
+import { spawn } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import readline from 'node:readline';
+import { fileURLToPath } from 'node:url';
+import { stopLocalDaemon } from '../../../packages/local-runtime/src/manager.js';
+import { resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
+import localServer from '../../local-server/package.json' with { type: 'json' };
+
+const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(appDir, '../..');
+const triples = {
+  darwin: { arm64: 'aarch64-apple-darwin', x64: 'x86_64-apple-darwin' },
+  win32: { arm64: 'aarch64-pc-windows-msvc', x64: 'x86_64-pc-windows-msvc' },
+  linux: { arm64: 'aarch64-unknown-linux-gnu', x64: 'x86_64-unknown-linux-gnu' },
+};
+const triple = triples[process.platform]?.[process.arch];
+if (!triple) throw new Error(`Unsupported smoke target: ${process.platform}-${process.arch}`);
+const tauri = path.join(appDir, 'src-tauri');
+const resources = path.join(tauri, 'resources');
+const runtime = path.join(tauri, 'binaries', `cospace-node-${triple}${process.platform === 'win32' ? '.exe' : ''}`);
+const home = await mkdtemp(path.join(os.tmpdir(), 'cospace-desktop-smoke-'));
+const dataHome = path.join(home, 'webapp');
+const smokeEnv = {
+  ...process.env,
+  HOME: home,
+  USERPROFILE: home,
+  LOCALAPPDATA: home,
+  XDG_DATA_HOME: home,
+  COSPACE_WEB_HOME: dataHome,
+  COSPACE_RESOURCE_DIR: resources,
+};
+const source = `
+  const { startWebApp } = require('./desktop/server.bundle.cjs');
+  (async () => {
+    const app = await startWebApp({ home: process.env.COSPACE_WEB_HOME });
+    try {
+      const page = await fetch(app.url);
+      const html = await page.text();
+      const tokenMatch = html.match(/__COSPACE_LOCAL_TOKEN__=(".*?")/);
+      if (page.status !== 200 || !tokenMatch) throw new Error('Desktop page or local token missing');
+      const token = JSON.parse(tokenMatch[1]);
+      const denied = await fetch(new URL('/cospace-api', app.url), {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ method: 'listDocuments', args: {} }),
+      });
+      if (denied.status !== 403) throw new Error('API accepted a request without the local token');
+      const response = await fetch(new URL('/cospace-api', app.url), {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-cospace-token': token },
+        body: JSON.stringify({ method: 'listDocuments', args: {} }),
+      });
+      const body = await response.json();
+      if (response.status !== 200 || !Array.isArray(body.result)) throw new Error('Document API smoke check failed');
+      console.log(JSON.stringify({ page: page.status, unauthorized: denied.status, api: response.status }));
+    } finally { await app.close(); }
+  })().catch(error => { console.error(error); process.exitCode = 1; });
+`;
+
+try {
+  const webResult = await new Promise((resolve, reject) => {
+    const child = spawn(runtime, ['-e', source], {
+      cwd: resources,
+      env: smokeEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    const timeout = setTimeout(() => { child.kill(); reject(new Error('Packaged desktop smoke timed out')); }, 30_000);
+    child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
+    child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
+    child.once('error', error => { clearTimeout(timeout); reject(error); });
+    child.once('exit', async code => {
+      clearTimeout(timeout);
+      if (code === 0) return resolve(stdout.trim());
+      let daemonLog = '';
+      try { daemonLog = await readFile(path.join(home, 'Library', 'Application Support', 'CoSpace', 'local-server', 'profiles', (await import('node:crypto')).createHash('sha256').update(path.join(home, 'webapp')).digest('hex').slice(0, 16), 'daemon.log'), 'utf8'); } catch {}
+      reject(new Error([stderr, daemonLog && `Daemon log:\n${daemonLog}`, `Packaged runtime exited with ${code}`].filter(Boolean).join('\n')));
+    });
+  });
+  const mcpResult = await new Promise((resolve, reject) => {
+    const child = spawn(runtime, ['desktop/mcp-entry.bundle.cjs'], {
+      cwd: resources,
+      env: smokeEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const lines = readline.createInterface({ input: child.stdout });
+    let stderr = '';
+    let settled = false;
+    const finish = async (error, response) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      lines.close();
+      if (child.exitCode === null && child.signalCode === null) {
+        const closed = new Promise(resolve => child.once('close', resolve));
+        const killTimer = setTimeout(() => child.kill(), 5_000);
+        child.stdin.end();
+        await closed;
+        clearTimeout(killTimer);
+      }
+      error ? reject(error) : resolve(response);
+    };
+    const timeout = setTimeout(() => finish(new Error('Packaged MCP handshake timed out')), 10_000);
+    child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
+    child.once('error', error => finish(error));
+    child.once('exit', code => finish(new Error(stderr || `Packaged MCP exited with ${code}`)));
+    lines.on('line', line => {
+      try {
+        const message = JSON.parse(line);
+        if (message.id !== 1) return;
+        if (message.error || message.result?.serverInfo?.name !== 'CoSpace' || message.result?.serverInfo?.version !== localServer.version) throw new Error('Unexpected packaged MCP initialize response');
+        finish(null, `${message.result.serverInfo.name}@${message.result.serverInfo.version}`);
+      } catch (error) { finish(error); }
+    });
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'cospace-smoke', version: '1' } } })}\n`);
+  });
+  console.log(`Packaged runtime smoke passed: ${webResult}; MCP handshake: ${mcpResult}`);
+} finally {
+  const envKeys = ['HOME', 'USERPROFILE', 'LOCALAPPDATA', 'XDG_DATA_HOME'];
+  const originalEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+  Object.assign(process.env, Object.fromEntries(envKeys.map(key => [key, smokeEnv[key]])));
+  try {
+    const runtimeHome = resolveRuntimeHome({ dataHome });
+    await stopLocalDaemon({ dataHome, runtimeHome });
+  } finally {
+    for (const key of envKeys) {
+      if (originalEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = originalEnv[key];
+    }
+  }
+  await rm(home, { recursive: true, force: true });
+}

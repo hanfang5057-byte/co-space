@@ -32,7 +32,7 @@
 
 Connector 负责向 Agent 暴露受控的 CoSpace 文档工具。它不是 WorkBuddy 内的面板插件，也不会读取或操作 WorkBuddy 对话数据库、账号资料、会话文件或 UI。WorkBuddy 的“连接器”是宿主加载 MCP 工具的产品能力；用户看到的市场 Connector 元数据与其底层 MCP Server 是两个不同层次。
 
-当前实现提供文档、建议和评论处理工作流。评论保存在本机；`space_document_read` 对用户指定文档默认返回评论。用户点击审阅页的处理按钮后，WorkBuddy 只复制包含文档引用的短提示词，用户手动粘贴到对话；Agent 通过工具读取评论、提交建议并调用 `space_comment_complete` 记录结果。没有受支持的会话注入、会话引用卡片或 WorkBuddy 身份资料 API。用户仍在审阅 UI 接受/拒绝建议，Agent 不能直接覆盖已有正文。
+当前实现提供文档、建议和评论处理工作流。评论保存在本机；`space_document_read` 对用户指定文档默认返回评论。用户点击审阅页的处理按钮后，WorkBuddy 只复制包含文档引用的短提示词，用户手动粘贴到对话；Agent 通过工具读取评论、提交建议并调用 `space_comment_complete` 记录结果。手动要求处理评论时，提供评论 ID 则只处理指定评论；未提供时处理读取结果中的全部待处理评论。没有受支持的会话注入、会话引用卡片或 WorkBuddy 身份资料 API。用户仍在审阅 UI 接受/拒绝建议，Agent 不能直接覆盖已有正文。
 
 ## 现有代码映射
 

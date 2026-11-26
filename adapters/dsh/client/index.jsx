@@ -3,7 +3,7 @@ import { SpaceApp } from '../../../packages/review-ui/src/SpaceApp.jsx';
 import './theme.css';
 import { SpaceDocumentReference } from '../../../packages/review-ui/src/SpaceReference.jsx';
 import { SpaceSidebarDocument, SpaceSidebarTitle } from '../../../packages/review-ui/src/SpaceSidebar.jsx';
-import { api as request } from '../../../packages/review-ui/src/api.js';
+import { api as request } from '../../../packages/transport-http/client.js';
 import { NS, en, errorText, zh } from '../../../packages/review-ui/src/locale.js';
 import { documentIdFromReference, matchSpaceReference, spaceReferenceFor } from '../../../packages/review-ui/src/space-reference.js';
 import { documentTitle } from '../../../packages/review-ui/src/document-titles.js';
