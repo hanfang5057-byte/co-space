@@ -50,10 +50,12 @@ export async function startStdioMcp(endpoint, { packageVersion = endpoint?.versi
   let closing;
   const release = () => {
     clearInterval(heartbeat);
+    process.stdin.off('end', close);
     void sessionRequest(endpoint, 'close', sessionId).catch(() => {});
   };
   server.onclose = release;
   const close = () => closing ??= server.close().catch(() => {}).finally(release);
+  process.stdin.once('end', close);
   process.once('SIGINT', close);
   process.once('SIGTERM', close);
   return server;

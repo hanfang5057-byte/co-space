@@ -94,8 +94,10 @@ try {
       lines.close();
       if (child.exitCode === null && child.signalCode === null) {
         const closed = new Promise(resolve => child.once('close', resolve));
-        child.kill();
+        const killTimer = setTimeout(() => child.kill(), 5_000);
+        child.stdin.end();
         await closed;
+        clearTimeout(killTimer);
       }
       error ? reject(error) : resolve(response);
     };
