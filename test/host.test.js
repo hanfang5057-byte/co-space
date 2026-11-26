@@ -165,10 +165,35 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
 });
 
 test('plugin registers MCP and web route against the same home and disposes them', async () => {
- const {apply}=await import('../adapters/dsh/index.js'); const home=mkdtempSync(path.join(tmpdir(),'space-apply-')); const old=process.env.DSH_SPACE_HOME;process.env.DSH_SPACE_HOME=home;
- const regs=[],disposers=[];const ctx={get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>{disposers.push(fn());},mcpManager:{register:(name,config)=>{regs.push({name,config});return()=>{};}},webServer:{register:route=>{regs.push({route});return()=>{};}}};
- try {apply(ctx);assert.equal(regs[0].name,'space');assert.equal(regs[0].config.env.DSH_SPACE_HOME,home);assert.equal(regs[0].config.toolLoading,'eager');assert.match(regs[0].config.args[0],/server\/mcp-entry\.js$/);assert.equal(regs[1].route.path,'/cospace-api');}
- finally {for(const d of disposers.reverse())d?.(); if(old===undefined)delete process.env.DSH_SPACE_HOME;else process.env.DSH_SPACE_HOME=old;rmSync(home,{recursive:true,force:true});}
+  const { apply } = await import('../adapters/dsh/index.js');
+  const home = mkdtempSync(path.join(tmpdir(), 'space-apply-'));
+  const old = process.env.DSH_SPACE_HOME;
+  process.env.DSH_SPACE_HOME = home;
+  const regs = [];
+  const disposers = [];
+  const ctx = {
+    get: () => undefined,
+    inject: (_deps, fn) => fn(ctx),
+    effect: fn => { disposers.push(fn()); },
+    mcpManager: { register: (name, config) => { regs.push({ name, config }); return () => {}; } },
+    webServer: { register: route => { regs.push({ route }); return () => {}; } },
+  };
+
+  try {
+    apply(ctx);
+    assert.equal(regs[0].name, 'space');
+    assert.equal(regs[0].config.env.DSH_SPACE_HOME, home);
+    assert.equal(regs[0].config.toolLoading, 'eager');
+    const mcpEntry = regs[0].config.args[0];
+    assert.equal(path.basename(path.dirname(mcpEntry)), 'server');
+    assert.equal(path.basename(mcpEntry), 'mcp-entry.js');
+    assert.equal(regs[1].route.path, '/cospace-api');
+  } finally {
+    for (const dispose of disposers.reverse()) dispose?.();
+    if (old === undefined) delete process.env.DSH_SPACE_HOME;
+    else process.env.DSH_SPACE_HOME = old;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('the UI can read the signed-in account without exposing credentials', async () => {
