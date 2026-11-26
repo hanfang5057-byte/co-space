@@ -75,12 +75,16 @@ try {
     const lines = readline.createInterface({ input: child.stdout });
     let stderr = '';
     let settled = false;
-    const finish = (error, response) => {
+    const finish = async (error, response) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       lines.close();
-      child.kill();
+      if (child.exitCode === null && child.signalCode === null) {
+        const closed = new Promise(resolve => child.once('close', resolve));
+        child.kill();
+        await closed;
+      }
       error ? reject(error) : resolve(response);
     };
     const timeout = setTimeout(() => finish(new Error('Packaged MCP handshake timed out')), 10_000);
