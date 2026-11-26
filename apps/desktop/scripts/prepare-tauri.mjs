@@ -49,7 +49,7 @@ await cp(path.join(repoRoot, 'apps/local-server/dist/daemon.cjs'), path.join(res
 await cp(path.join(repoRoot, 'apps/local-server/dist/web'), path.join(resources, 'desktop/local-server/web'), { recursive: true });
 await cp(path.join(repoRoot, 'node_modules/jsonc-parser'), path.join(resources, 'node_modules/jsonc-parser'), { recursive: true });
 await cp(path.join(appDir, 'build/webapp'), path.join(resources, 'dist/webapp'), { recursive: true });
-const runtime = process.platform === 'win32' ? 'cospace-node.exe' : 'cospace-node';
+const runtime = 'cospace-node';
 await cp(process.execPath, path.join(binaries, `${runtime}-${target}${suffix}`));
 if (process.platform !== 'win32') await chmod(path.join(binaries, `${runtime}-${target}`), 0o755);
 console.log(`Prepared Tauri resources for ${target}`);
