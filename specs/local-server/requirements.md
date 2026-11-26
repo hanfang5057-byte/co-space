@@ -1,5 +1,7 @@
 # CoSpace Local Server Requirements
 
+> Historical planning record: Desktop has been removed; see current architecture and release documentation for supported products.
+
 ## Problem and goal
 
 CoSpace needs a generic local integration for Agents that support stdio MCP. An Agent must be able to propose document changes through MCP while the user can review those proposals in a local web app after the Agent disconnects. Desktop and the generic Agent integration must share the same local service and data. The DSH plugin remains independent and keeps its own data and lifecycle.

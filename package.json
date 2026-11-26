@@ -13,7 +13,6 @@
     "packages/transport-http",
     "packages/local-runtime",
     "adapters/dsh",
-    "apps/desktop",
     "apps/local-server"
   ],
   "engines": {
@@ -27,12 +26,6 @@
     "build:dsh": "npm run build:client && node scripts/build-dsh.mjs && node scripts/build-market.mjs",
     "dev:dsh": "node scripts/dev-dsh.mjs",
     "build:site": "node scripts/build-site.mjs",
-    "desktop:build": "npm run build --workspace @cospace/desktop",
-    "desktop:dev": "npm run dev --workspace @cospace/desktop",
-    "desktop:package": "npm run package --workspace @cospace/desktop",
-    "desktop:smoke": "npm run smoke --workspace @cospace/desktop",
-    "desktop:web": "npm run web --workspace @cospace/desktop",
-    "desktop:mcp": "npm run mcp --workspace @cospace/desktop",
     "local-server:build": "npm run build --workspace @hanfang5057/co-space",
     "local-server:pack": "npm run pack --workspace @hanfang5057/co-space",
     "local-server:verify-package": "npm run verify-package --workspace @hanfang5057/co-space",

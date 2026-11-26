@@ -67,7 +67,7 @@ function IconButton({ label, children, ...props }) {
   return <button type="button" aria-label={label} title={label} {...props}>{children}</button>;
 }
 
-function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, onOpenAgents, canExport, t }) {
+function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, canExport, t }) {
   const [open,setOpen]=useState(false);
   const rootRef=useRef(null), triggerRef=useRef(null);
   const panelId=useId();
@@ -83,7 +83,6 @@ function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, onOpenA
   return <div className="space-tools-menu" ref={rootRef}>
     <button ref={triggerRef} type="button" className="space-tools-menu-trigger" aria-label={t('toolbar.more')} title={t('toolbar.more')} aria-haspopup="true" aria-expanded={open} aria-controls={panelId} onClick={()=>setOpen(value=>!value)}><MoreHorizontal size={19} aria-hidden="true"/></button>
     {open&&<div id={panelId} className="space-tools-menu-panel">
-      {onOpenAgents&&<button type="button" onClick={()=>run(onOpenAgents)}>Agent 接入</button>}
       {onReview&&<button type="button" onClick={()=>run(onReview)}>让 Agent 审阅</button>}
       {onPreferences&&<button type="button" onClick={()=>run(onPreferences)}>{t('collab.open')}</button>}
       {canExport&&<>
@@ -626,8 +625,6 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     const current=new URL(window.location.href);
     if(href.startsWith('#')&&destination.origin===current.origin&&destination.pathname===current.pathname&&destination.search===current.search) return;
     if(['http:','https:','mailto:','tel:'].includes(destination.protocol)) {
-      // Tauri's shell plugin opens external links with target="_blank" in the
-      // system browser; regular browsers keep the CoSpace tab and open a tab.
       link.target='_blank';
       link.rel='noopener noreferrer';
       return;
@@ -683,7 +680,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   </section>;
 }
 
-export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
+export function SpaceApp({ adapter, t = defaultT }) {
   const sessionId=adapter.conversation?.current?.id || null;
   const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
@@ -772,7 +769,7 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
   const instructionDirty=Boolean(settings)&&instructionText!==(savedInstruction?.content||'');
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
-      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')} <span className="space-build-version" title={t('build.versionTitle')}>v{displayVersion}</span></small></span></div><div className="space-header-tools">{onOpenAgents&&<button type="button" className="space-collab-trigger" onClick={onOpenAgents}>Agent 接入</button>}{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
+      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')} <span className="space-build-version" title={t('build.versionTitle')}>v{displayVersion}</span></small></span></div><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
         {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
@@ -787,7 +784,7 @@ export function SpaceApp({ adapter, onOpenAgents, t = defaultT }) {
     </main> : <>
       <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} <small className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</small></span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
             <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
-              {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} onOpenAgents={onOpenAgents} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
+              {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
               {review.doc&&<div className="space-toolbar-group is-view">
                 <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
                 <ReviewZoomControls review={review} t={t}/>

@@ -1,5 +1,7 @@
 # CoSpace Local Server Implementation Plan
 
+> Historical planning record: Desktop has been removed; see current architecture and release documentation for supported products.
+
 Tasks are ordered to validate the process/data model before adding broad Agent support. Implementation checks below refer to code and build artifacts; a checked item does not imply real Agent/OS acceptance unless stated.
 
 - [ ] 1. Validate runtime and storage assumptions

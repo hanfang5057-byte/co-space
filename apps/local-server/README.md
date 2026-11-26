@@ -34,4 +34,4 @@ Stop or restart is refused while an Agent is actively connected; disconnect the 
 
 ## Local data
 
-By default, CoSpace uses the existing Desktop data directory `~/.cospace/webapp`. Set `COSPACE_WEB_HOME` to select another profile. Desktop and all generic Agent integrations using the same profile share one service and dataset. The DSH plugin remains isolated under its DSH-specific data home.
+By default, CoSpace uses `~/.cospace/webapp`. Set `COSPACE_WEB_HOME` to select another profile. Agent integrations using the same profile share one service and dataset. The DSH plugin remains isolated under its DSH-specific data home.

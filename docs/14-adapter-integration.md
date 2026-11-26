@@ -1,6 +1,6 @@
 # 14 · Adapter Integration Contract
 
-This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The Tauri Desktop app in `apps/desktop/` is the local product that exercises the widest capability set. It hosts the shared UI in a Tauri WebView and runs Node HTTP/MCP services as a managed sidecar. The DSH plugin in `adapters/dsh/` and Desktop app use the same adapter contract and declare only the host capabilities they provide. Product shells and their build scripts belong under `apps/<product>/`; host-specific integrations and plugin metadata belong under `adapters/<host>/`.
+This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The DSH plugin in `adapters/dsh/` declares the host capabilities it provides. Local Server provides a browser review UI and MCP service through the shared runtime. Product shells and their build scripts belong under `apps/<product>/`; host-specific integrations and plugin metadata belong under `adapters/<host>/`.
 
 ## Dependency direction
 
@@ -21,7 +21,7 @@ The contract package describes the boundary. It is not a service locator, plugin
 
 ## Core API and host capabilities are separate
 
-The core API is the stable set of product operations: list and create documents, read content and review state, submit suggestions, decide suggestions, and manage comments. MCP, HTTP, and any future in-process transport expose the same domain semantics. Adding a host must not require changing `review-core.js` or adding host-specific branches to the core. `packages/host-api/` composes the shared service facade for DSH and Desktop; optional host callbacks are passed into it by the product edge.
+The core API is the stable set of product operations: list and create documents, read content and review state, submit suggestions, decide suggestions, and manage comments. MCP, HTTP, and any future in-process transport expose the same domain semantics. Adding a host must not require changing `review-core.js` or adding host-specific branches to the core. `packages/host-api/` composes the shared service facade for DSH and Local Server; optional host callbacks are passed into it by the product edge.
 
 Host capabilities are optional actions around those domain operations. The current contract registry is in `packages/adapter-contract/src/index.js` and the matching TypeScript declarations are in `packages/adapter-contract/src/index.d.ts`.
 

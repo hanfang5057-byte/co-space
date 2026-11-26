@@ -1,4 +1,4 @@
-/** Canonical agent prompts shared by DSH delivery and WorkBuddy copy flows. */
+/** Canonical agent prompts shared by host integrations and the local review UI. */
 export function autonomousReviewPrompt(documentReference) {
   return `请通过 CoSpace MCP 读取文档引用 ${documentReference}，仅根据已接受的正文自主审阅并提交具体修改建议。此操作不是按评论修改：不要把评论当作修改指令，不要处理或完成评论，也不要把审阅范围扩展到评论要求之外。不要直接覆盖已接受内容；所有修改以建议提交，等待我在 CoSpace 中接受或拒绝。不要替我发送评论。`;
 }

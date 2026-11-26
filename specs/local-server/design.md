@@ -1,5 +1,7 @@
 # CoSpace Local Server Design
 
+> Historical planning record: Desktop has been removed; see current architecture and release documentation for supported products.
+
 ## Summary
 
 CoSpace Local Server is the generic local runtime for stdio MCP Agents. It is shipped as a public npm package and can be launched with `npx`. A long-lived daemon owns the local database, HTTP APIs, and review web app. A stdio MCP process is a short-lived protocol client of that daemon. Desktop is another client and uses the same runtime and data. DSH remains a separate adapter and data boundary.

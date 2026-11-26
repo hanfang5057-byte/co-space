@@ -1,6 +1,6 @@
 # Unified Release Process
 
-This document is the source of truth for publishing CoSpace npm packages and Desktop installers. The root workspace is private and must never be published. DSH and CoSpace Local Server are separate npm artifacts with separate versions and release tracks. A release may publish one artifact or both; complete and verify each artifact's release steps before creating its tag.
+This document is the source of truth for publishing CoSpace npm packages. The root workspace is private and must never be published. DSH and CoSpace Local Server are separate npm artifacts with separate versions and release tracks. A release may publish one artifact or both; complete and verify each artifact's release steps before creating its tag.
 
 ## Release tracks
 
@@ -8,9 +8,6 @@ This document is the source of truth for publishing CoSpace npm packages and Des
 |---|---|---|---|---|
 | DSH plugin | `dsh-plugin-space` | `release/npm-version.json`, synchronized into `adapters/dsh/package.json`, `adapters/dsh/adapter.json`, and `package-lock.json` by the packaging script | `dist/dsh-plugin/` and `dist/npm-packages/dsh-plugin-space-X.Y.Z.tgz` | `vX.Y.Z` |
 | Local Server | `@hanfang5057/co-space` | `apps/local-server/package.json` | `dist/npm-packages/hanfang5057-co-space-X.Y.Z.tgz` (built package contents are under `apps/local-server/dist/`) | `local-server-vX.Y.Z` |
-| Desktop | Platform installer(s), not npm | `apps/desktop/src-tauri/tauri.conf.json` | `dist/releases/desktop/<platform>/` | No npm release tag unless explicitly coordinated with an npm release commit |
-
-The coordinated CoSpace `0.1.9` release aligns the DSH plugin, Local Server, and Desktop product versions at `0.1.9`. Their version sources remain independent, so verify all three before publishing.
 
 DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefixed tag because its version is independent and can differ from DSH's version. Never move or reuse an existing release tag.
 
@@ -80,7 +77,3 @@ DSH and Local Server may be published from one clean release commit, but they ar
 3. Complete the DSH market-index commit/push when DSH is included.
 4. Only after every requested npm package and market update succeeds, create each applicable tag on the release commit: `v<dsh-version>` and/or `local-server-v<local-server-version>`.
 5. If one publish fails, do not create tags for the coordinated release. Resolve the partial publish or explicitly complete a separately verified package release before tagging.
-
-## Desktop release
-
-Desktop packaging is separate from npm publishing. Run `npm run desktop:package`; inspect installers under `dist/releases/desktop/<platform>/`. Local macOS packages use ad-hoc signing. Public macOS distribution requires Developer ID signing and notarization. Record the packaged Local Server runtime/protocol compatibility and shared data behavior when Desktop includes or connects to the Local Server daemon.
