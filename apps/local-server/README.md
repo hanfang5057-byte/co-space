@@ -17,7 +17,7 @@ Add this stdio MCP server to an Agent that supports Node.js 24 or later:
 }
 ```
 
-Restart or reconnect the Agent after changing its MCP configuration. The review URL is returned by MCP and can be opened later with `npx -y @hanfang5057/co-space@latest service open`. Publishing a newer package does not replace a running daemon: after all Agents disconnect, run `npx -y @hanfang5057/co-space@latest service restart`, then reconnect the Agent to apply the update.
+Restart or reconnect the Agent after changing its MCP configuration. The review URL is returned by MCP and can be opened later with `npx -y @hanfang5057/co-space@latest service open`. Starting with the first release that includes automatic updates, the background service checks npm's `latest` release periodically, downloads and verifies it in the background, and switches versions when no Agent MCP connection is active. The first upgrade to that release still requires `npx -y @hanfang5057/co-space@latest service restart`; older daemons cannot update themselves. A service restart briefly disconnects the review page, which reconnects when reopened or refreshed. User data is kept in its existing data directory.
 
 ## Manage the local service
 

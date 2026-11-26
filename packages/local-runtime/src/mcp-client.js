@@ -22,6 +22,9 @@ async function sessionRequest(endpoint, action, id) {
     body: JSON.stringify({ action, id }),
     signal: AbortSignal.timeout(3000),
   });
+  if (response.status === 404) {
+    throw Object.assign(new Error('The running CoSpace Local Server does not support MCP sessions. Run `npx -y @hanfang5057/co-space@latest service restart`, then reconnect the Agent.'), { code: 'LOCAL_SERVER_UPGRADE_REQUIRED' });
+  }
   const body = await response.json();
   if (!response.ok || body.error) throw Object.assign(new Error(body.error?.message || 'Local Server session failed'), body.error || { code: 'LOCAL_SERVER_SESSION_FAILED' });
   return body.result;
@@ -39,7 +42,9 @@ export async function startStdioMcp(endpoint, { packageVersion = endpoint?.versi
   };
   const collaboration = { readInstructions: docId => call('readInstructions', { docId }) };
   const versionNotice = endpoint.version && endpoint.version !== packageVersion
-    ? `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version}. To upgrade the background service, run: npx -y @hanfang5057/co-space@latest service restart, then reconnect the Agent.`
+    ? endpoint.updaterEnabled
+      ? `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version}. The background service checks for updates and switches versions when no Agent connections are active. Current service status: npx -y @hanfang5057/co-space@latest service status.`
+      : `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version} and does not support automatic updates. After all Agents disconnect, run: npx -y @hanfang5057/co-space@latest service restart.`
     : undefined;
   const server = createMcpServer(space, collaboration, { reviewUrl: endpoint.url, serverVersion: packageVersion, versionNotice });
   const sessionId = randomUUID();

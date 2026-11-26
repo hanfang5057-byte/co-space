@@ -2,7 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ensureLocalDaemon, installRuntimeVersion, localServiceStatus, stopLocalDaemon } from '../../../packages/local-runtime/src/manager.js';
+import { ensureLocalDaemon, installRuntimeVersion, localServiceStatus, stopLocalDaemon, enableLocalUpdater } from '../../../packages/local-runtime/src/manager.js';
 import { resolveDataHome, resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
 
 const distRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +28,9 @@ async function currentPaths() {
 
 async function ensureService() {
   const paths = await currentPaths();
-  return ensureLocalDaemon({ ...paths, version: metadata.version });
+  const endpoint = await ensureLocalDaemon({ ...paths, version: metadata.version, autoUpdate: true });
+  await enableLocalUpdater(paths.runtimeHome);
+  return endpoint;
 }
 
 async function rollbackService(targetVersion) {
@@ -51,7 +53,7 @@ async function rollbackService(targetVersion) {
   if (!target || !installed.includes(target)) throw new Error(targetVersion ? `Local Server runtime ${targetVersion} is not installed` : 'No previous Local Server runtime is available to roll back to');
   const sourceVersionHome = path.join(versionsRoot, target);
   const versionHome = await installRuntimeVersion({ sourceVersionHome, runtimeHome, version: target });
-  const endpoint = await ensureLocalDaemon({ dataHome, runtimeHome, versionHome, version: target });
+  const endpoint = await ensureLocalDaemon({ dataHome, runtimeHome, versionHome, version: target, autoUpdate: true });
   return endpoint;
 }
 

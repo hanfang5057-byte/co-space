@@ -65,7 +65,7 @@ async function reachableEndpoint(runtimeHome) {
     const response = await fetch(`http://${endpoint.host}:${endpoint.port}/__cospace/health`, { signal: AbortSignal.timeout(700) });
     const health = await response.json();
     if (!response.ok || health.ready !== true || health.runtimeId !== endpoint.runtimeId) return null;
-    return { ...endpoint, version: health.version, protocolVersion: health.protocolVersion, activeMcpClients: health.activeMcpClients || 0 };
+    return { ...endpoint, version: health.version, protocolVersion: health.protocolVersion, updaterEnabled: health.updaterEnabled === true, activeMcpClients: health.activeMcpClients || 0 };
   } catch { return null; }
 }
 
@@ -75,7 +75,7 @@ function assertCompatible(endpoint) {
   }
 }
 
-export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeHome = resolveRuntimeHome({ dataHome }), versionHome, sourceVersionHome, version = '0.0.0', node = process.execPath, timeoutMs = 20000 } = {}) {
+export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeHome = resolveRuntimeHome({ dataHome }), versionHome, sourceVersionHome, version = '0.0.0', autoUpdate = false, node = process.execPath, timeoutMs = 20000 } = {}) {
   if (!versionHome) versionHome = await installRuntimeVersion({ sourceVersionHome, runtimeHome, version });
   await mkdir(runtimeHome, { recursive: true, mode: 0o700 });
   await ensureSecrets(runtimeHome);
@@ -137,6 +137,7 @@ export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeH
           COSPACE_RUNTIME_HOME: runtimeHome,
           COSPACE_VERSION_HOME: versionHome,
           COSPACE_PACKAGE_VERSION: version,
+          COSPACE_AUTO_UPDATE: autoUpdate ? '1' : '0',
         },
       });
       child.unref();
@@ -186,6 +187,32 @@ export async function stopLocalDaemon({ dataHome = resolveDataHome(), runtimeHom
     await sleep(150);
   }
   throw Object.assign(new Error('CoSpace Local Server did not stop before the timeout'), { code: 'LOCAL_SERVER_STOP_TIMEOUT' });
+}
+
+// Called by the daemon after a newer, verified runtime has been staged. The
+// daemon itself only accepts this request when no MCP sessions are active.
+export async function requestRuntimeUpgrade(runtimeHome, version) {
+  const endpoint = await reachableEndpoint(runtimeHome);
+  if (!endpoint) return { scheduled: false, reason: 'service-unavailable' };
+  const secrets = await readSecrets(runtimeHome);
+  const response = await fetch(`http://${endpoint.host}:${endpoint.port}/__cospace/control/upgrade`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-cospace-rpc-token': secrets?.rpcToken || '' },
+    body: JSON.stringify({ version }), signal: AbortSignal.timeout(1500),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) return { scheduled: false, reason: body.error?.code || 'upgrade-rejected' };
+  return body.result;
+}
+
+export async function enableLocalUpdater(runtimeHome) {
+  const endpoint = await reachableEndpoint(runtimeHome);
+  if (!endpoint) return false;
+  if (endpoint.updaterEnabled) return true;
+  const secrets = await readSecrets(runtimeHome);
+  const response = await fetch(`http://${endpoint.host}:${endpoint.port}/__cospace/control/updater/enable`, {
+    method: 'POST', headers: { 'x-cospace-rpc-token': secrets?.rpcToken || '' }, signal: AbortSignal.timeout(2000),
+  });
+  return response.ok;
 }
 
 export async function ensureSecrets(runtimeHome, { randomBytesFn = randomBytes } = {}) {
