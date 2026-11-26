@@ -742,7 +742,7 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 /* Preview toolbar: keep frequent controls visible and tuck secondary tools away. */
 .space-preview-top .space-header-tools { justify-content: flex-end; margin-inline-start: auto; gap: 8px; min-block-size: 48px; padding: 4px 6px; border: 1px solid var(--space-border); border-radius: 14px; background: var(--space-card); box-shadow: 0 2px 8px color-mix(in srgb, var(--space-text) 5%, transparent); }
 .space-preview-top .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 38px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.space-preview-top .space-mode-switch { display: inline-flex; align-items: center; min-block-size: 30px; block-size: 30px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 8px; background: transparent; }
+.space-preview-top .space-mode-switch { display: inline-flex; align-items: center; column-gap: 3px; min-block-size: 30px; block-size: 30px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 8px; background: transparent; }
 .space-app .space-preview-top .space-mode-switch button { min-block-size: 28px; padding-inline: 12px; border-radius: 7px; font-size: 13px; line-height: 1; }
 .space-preview-top .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--space-border); border-radius: 0; background: transparent; }
 .space-app .space-preview-top .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
@@ -799,6 +799,8 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 .space-mode-switch { display:inline-flex; align-items:center; padding:2px; border:1px solid var(--space-border); border-radius:999px; background:var(--space-card); }
 .space-app .space-mode-switch button { min-block-size:28px; padding:0 11px; border:0; border-radius:999px; background:transparent; color:var(--space-muted); font-size:12px; cursor:pointer; }
 .space-app .space-mode-switch button[aria-pressed="true"] { background:var(--space-text); color:var(--space-paper); }
+.space-app .space-preview-top .space-mode-switch button:hover:not(:disabled):not([aria-pressed="true"]),
+.space-app .space-preview-top .space-zoom-tools button:hover:not(:disabled) { background:color-mix(in srgb,var(--space-text) 5%,var(--space-card)); color:var(--space-text); }
 .space-app .space-mode-switch button:disabled { cursor:not-allowed; opacity:.48; }
 .space-edit-mode-option { position:relative; display:inline-flex; }
 .space-edit-mode-option.is-unavailable { cursor:not-allowed; }
@@ -806,6 +808,9 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 .space-edit-tooltip::before { position:absolute; inset-block-start:-5px; inset-inline-start:calc(50% - 4px); inline-size:8px; block-size:8px; border-block-start:1px solid color-mix(in srgb,var(--space-text) 12%,transparent); border-inline-start:1px solid color-mix(in srgb,var(--space-text) 12%,transparent); background:var(--space-text); content:""; transform:rotate(45deg); }
 .space-edit-mode-option.is-unavailable:hover .space-edit-tooltip,.space-edit-mode-option.is-unavailable:focus .space-edit-tooltip { opacity:1; visibility:visible; transform:translate(-50%,0); }
 .space-edit-status { color:var(--space-muted); font-size:11px; white-space:nowrap; }
+.space-edit-status.is-saving { color:var(--space-muted); }
+.space-edit-status.is-unsaved,.space-edit-status.is-error { color:#995c51; }
+.space-edit-status.is-saved { color:#527456; }
 .space-milkdown-root { min-height:900px; }
 .space-paper-wrap.is-editing .space-comment-layer,.space-paper-wrap.is-editing .space-anchor-layer { display:none; }
 .space-app .space-paper { padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }

@@ -23,6 +23,8 @@ import '@milkdown/crepe/theme/common/table.css';
 import '@milkdown/crepe/theme/classic.css';
 import { readSourceSpans, sourceRangeToDom } from './markdown-dom.js';
 
+const NO_SUGGESTIONS = [];
+
 function suggestionPlugin(surface, markdown, suggestions, onReady) {
   let decorations = DecorationSet.empty;
   let destroyed = false;
@@ -72,6 +74,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
   const rootRef = useRef(null);
   const callbacksRef = useRef({ onChange, onDecorationsReady, t });
   callbacksRef.current = { onChange, onDecorationsReady, t };
+  const activeSuggestions = readOnly ? suggestions : NO_SUGGESTIONS;
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +85,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
     const initialize = async () => {
       builder = new CrepeBuilder({ root: rootRef.current, defaultValue: markdown });
       builder.setReadonly(readOnly);
-      if (readOnly && suggestions.length) builder.editor.use($prose(() => suggestionPlugin(rootRef.current, markdown, suggestions, () => callbacksRef.current.onDecorationsReady?.())));
+      if (activeSuggestions.length) builder.editor.use($prose(() => suggestionPlugin(rootRef.current, markdown, activeSuggestions, () => callbacksRef.current.onDecorationsReady?.())));
       builder
         .addFeature(cursor)
         .addFeature(listItem)
@@ -136,7 +139,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
       if (editorRef.current === builder) editorRef.current = null;
       if (builder && created) void builder.destroy();
     };
-  }, [readOnly, markdown, suggestions, autoFocus]);
+  }, [readOnly, markdown, activeSuggestions, autoFocus]);
 
   return <div ref={rootRef} className={`space-milkdown-root${readOnly ? ' is-readonly' : ''}`} aria-label={t('edit.contentLabel')} />;
 }

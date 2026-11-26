@@ -152,10 +152,14 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
   const [message,setMessage]=useState('');
   const [editing,setEditing]=useState(false);
   const [editSaveError,setEditSaveError]=useState('');
-  const [editBaseVersion,setEditBaseVersion]=useState(null);
   const [editDirty,setEditDirty]=useState(false);
+  const [editRevision,setEditRevision]=useState(0);
+  const [editInitialContent,setEditInitialContent]=useState(null);
+  const [editSaveState,setEditSaveState]=useState('idle');
   const surface=useRef(null), cardRefs=useRef(new Map()), commentRefs=useRef(new Map()), loadSequence=useRef(0);
   const editorRef=useRef(null);
+  const editSessionRef=useRef(null);
+  const autoEditInitialized=useRef(new Set());
   const snapshot=useRef(null), busyRef=useRef(false);
   // Async callbacks may outlive a render; read the active locale at completion time.
   const translateNow=useRef(t); translateNow.current=t;
@@ -165,7 +169,18 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     const sequence=++loadSequence.current;
     const next=await call('readDocument',{docId:id});
     if (sequence!==loadSequence.current) return;
-    if(id===autoEditDocId){setEditing(true);setEditBaseVersion(next?.version??null);setEditDirty(false)}
+    if(id===autoEditDocId&&!autoEditInitialized.current.has(id)){
+      autoEditInitialized.current.add(id);
+      editSessionRef.current={docId:id,baseVersion:next?.version??null,baseContent:next?.content??'',revision:0,dirty:false,saving:null};
+      setEditing(true);setEditInitialContent(next?.content??'');setEditDirty(false);setEditRevision(0);setEditSaveState('idle');
+    }
+    const session=editSessionRef.current;
+    if(session?.docId===id&&next?.version!==session.baseVersion){
+      if(!session.dirty&&!session.saving){
+        session.baseVersion=next?.version??null;session.baseContent=next?.content??'';
+        setEditInitialContent(next?.content??'');setEditSaveState('idle');
+      }else session.remoteVersion=next?.version??null;
+    }
     const nextComments=next?.comments || [];
     const signature=JSON.stringify(next);
     const contentChanged=!snapshot.current || snapshot.current.content!==next?.content || snapshot.current.version!==next?.version;
@@ -173,9 +188,10 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     snapshot.current={signature,content:next?.content,version:next?.version};
     if(contentChanged) setSelection(null);
     if (next?.title) rememberDocumentTitle(id,next.title,api);
+    return next;
   },[call,autoEditDocId]);
   useEffect(()=>{
-    setEditing(false);setEditBaseVersion(null);setEditDirty(false);editorRef.current=null;
+    setEditing(false);editSessionRef.current=null;setEditInitialContent(null);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');editorRef.current=null;
     if (!docId) {
       loadSequence.current++;
       snapshot.current=null;
@@ -209,20 +225,67 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
   const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
   const decide=(suggestionId,decision)=>perform(async()=>{await call('decide',{docId,suggestionId,decision,operationId:requestId()});await reload(docId)});
-  const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}setMessage('');setEditSaveError('');setSelection(null);setEditBaseVersion(doc.version);setEditDirty(false);setEditing(true)};
-  const switchToReview=()=>perform(async()=>{
-    if(editBaseVersion===null) throw Object.assign(new Error(t('edit.unavailable')),{code:'EDIT_REQUIRES_UNANNOTATED_DOCUMENT'});
-    const content=editorRef.current?.getMarkdown();
-    const changed=editDirty&&typeof content==='string'&&content!==doc?.content;
-    if(changed) {
-      try { await call('updateDocument',{docId,baseVersion:editBaseVersion,content,operationId:requestId()}); }
-      catch(error) { setEditSaveError(errorText(error,translateNow.current)); throw error; }
+  const markEditDirty=()=>{
+    const session=editSessionRef.current;
+    if(!session||session.docId!==docId)return;
+    session.revision+=1;session.dirty=true;
+    setEditDirty(true);setEditRevision(session.revision);setEditSaveState(session.saving?'saving':'unsaved');
+  };
+  const persistEdit=useCallback(async({showError=false}={})=>{
+    while(true){
+      const session=editSessionRef.current;
+      if(!session||session.docId!==docId||session.baseVersion===null) throw Object.assign(new Error(t('edit.unavailable')),{code:'EDIT_REQUIRES_UNANNOTATED_DOCUMENT'});
+      if(session.saving){
+        try{await session.saving;}catch(error){if(showError)setEditSaveError(errorText(error,translateNow.current));throw error;}
+        if(!session.dirty)return true;
+        continue;
+      }
+      const content=editorRef.current?.getMarkdown();
+      if(typeof content!=='string') throw Object.assign(new Error(t('edit.editorNotReady')),{code:'EDITOR_NOT_READY'});
+      if(content===session.baseContent){session.dirty=false;setEditDirty(false);setEditSaveState('saved');return true;}
+      const revision=session.revision;
+      setEditSaveState('saving');
+      const saving=(async()=>{
+        try{
+          const result=await call('updateDocument',{docId:session.docId,baseVersion:session.baseVersion,content,operationId:requestId()});
+          if(editSessionRef.current!==session)return true;
+          session.baseVersion=result?.version??session.baseVersion+1;session.baseContent=content;
+          session.dirty=session.revision!==revision||editorRef.current?.getMarkdown()!==content;
+          setEditDirty(session.dirty);setEditSaveState(session.dirty?'unsaved':'saved');
+          void reload(session.docId).catch(()=>{});
+          return true;
+        }catch(error){
+          if(editSessionRef.current===session){session.dirty=true;setEditDirty(true);setEditSaveState('error');if(showError)setEditSaveError(errorText(error,translateNow.current));}
+          throw error;
+        }finally{session.saving=null;}
+      })();
+      session.saving=saving;
+      await saving;
+      if(!session.dirty)return true;
     }
-    setEditing(false);setEditBaseVersion(null);setEditDirty(false);editorRef.current=null;
+  },[call,docId,reload,t]);
+  useEffect(()=>{
+    if(!editing||!editDirty)return;
+    const timer=setTimeout(()=>{persistEdit().catch(()=>{});},700);
+    return()=>clearTimeout(timer);
+  },[editing,editDirty,editRevision,persistEdit]);
+  const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}setMessage('');setEditSaveError('');setSelection(null);editSessionRef.current={docId,baseVersion:doc.version,baseContent:doc.content,revision:0,dirty:false,saving:null};setEditInitialContent(doc.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditing(true)};
+  const switchToReview=()=>perform(async()=>{
+    await persistEdit({showError:true});
+    setEditing(false);editSessionRef.current=null;setEditInitialContent(null);setEditDirty(false);setEditSaveState('idle');editorRef.current=null;
     setEditSaveError('');
-    if(changed) await reload(docId);
+    await reload(docId);
     return true;
   });
+  const discardEditDraftAndReload=async()=>{
+    try{
+      const latest=await reload(docId);
+      if(!latest)return false;
+      editSessionRef.current={docId,baseVersion:latest.version,baseContent:latest.content,revision:0,dirty:false,saving:null};
+      setEditInitialContent(latest.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditSaveError('');
+      return true;
+    }catch(error){setMessage(errorText(error,translateNow.current));return false;}
+  };
   const dismissEditSaveError=()=>{setEditSaveError('');setMessage('')};
   const addComment=()=>perform(async()=>{
     if(!selection || !draft.trim()) throw Error(t('comment.required'));
@@ -265,7 +328,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,dismissEditSaveError,editorRef,startEditing,switchToReview,markEditDirty:()=>setEditDirty(true)};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,markEditDirty};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -425,7 +488,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const [layout,setLayout]=useState({positions:{},lines:[],highlights:[],height:0,minHeight:0});
   const commentFieldId=useId(), commentTitleId=useId(), editSaveErrorTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null), fabRef=useRef(null);
   const [fabPosition,setFabPosition]=useState(null);
-  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,editing,editorRef,markEditDirty}=review;
+  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,editing,editInitialContent,editorRef,markEditDirty}=review;
   const visibleComments=useMemo(()=>comments.filter(comment=>!['sent','processed'].includes(comment.status)),[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
   const staleComments=useMemo(()=>visibleComments.filter(comment=>!commentRange(comment)),[visibleComments]);
@@ -639,7 +702,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
   return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
-      <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
+      <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={editing?(editInitialContent??doc.content):doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.deleted?' is-deleted':''}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />
@@ -668,7 +731,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
           {message && <p className="space-comment-error" role="alert">{message}</p>}
         </>}
       </SpaceDialog>
-      <SpaceDialog open={Boolean(review.editSaveError)} onClose={review.dismissEditSaveError} labelledBy={editSaveErrorTitleId} title={t('edit.saveErrorTitle')} closeLabel={t('dialog.close')} className="space-comment-dialog" actions={<button type="button" autoFocus onClick={review.dismissEditSaveError}>{t('edit.keepEditing')}</button>}>
+      <SpaceDialog open={Boolean(review.editSaveError)} onClose={review.dismissEditSaveError} labelledBy={editSaveErrorTitleId} title={t('edit.saveErrorTitle')} closeLabel={t('dialog.close')} className="space-comment-dialog" actions={<><button type="button" autoFocus onClick={review.dismissEditSaveError}>{t('edit.keepEditing')}</button><button type="button" className="is-danger" onClick={async()=>{if(await review.discardEditDraftAndReload())review.dismissEditSaveError()}}>{t('edit.discardAndReload')}</button></>}>
         <p role="alert">{review.editSaveError}</p>
         <p className="space-muted">{t('edit.saveErrorKeepEditing')}</p>
       </SpaceDialog>
@@ -801,7 +864,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
                 <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
                 <ReviewZoomControls review={review} t={t}/>
               </div>}
-              {review.editing&&review.busy&&<span className="space-edit-status" role="status">{t('edit.saving')}</span>}
+              {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} role="status">{t(`edit.${review.editSaveState==='error'?'autoSaveFailed':review.editSaveState}`)}</span>}
               {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}
             </div>
       </header>
