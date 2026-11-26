@@ -58,5 +58,5 @@ Tasks are ordered to validate the process/data model before adding broad Agent s
   - Verify two Agents and Desktop see the same document/suggestion state through one daemon.
   - Verify DSH remains isolated and works with Local Server stopped.
   - Verify Agent exit, daemon restart, port collision, stale lock, cache cleanup, version upgrade/rollback, and package uninstall retention.
-  - Run repository checks, UI smoke, package verification, and supported OS/Agent acceptance; publish only from a clean release commit.
+  - Run repository checks, package verification, and supported OS/Agent acceptance; publish only from a clean release commit.
   - _Requirement: all_

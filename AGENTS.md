@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-This repository is a private npm workspace for CoSpace (智联文档空间). `assets/cospace-icon.svg` is the shared brand icon source copied into the DSH package at build time. `packages/review-core/` contains SQLite persistence and review semantics; `packages/host-api/` composes the shared service API; `packages/review-ui/` contains shared review components; `packages/adapter-contract/` defines host capabilities; `packages/transport-mcp/` and `packages/transport-http/` contain host-independent transports; `packages/local-runtime/` owns the shared local daemon, endpoint protocol, and lifecycle manager used by Desktop and Local Server. `adapters/dsh/` owns the independent DSH plugin runtime, host bridge, locale, capability declaration, and plugin metadata. `apps/desktop/` owns the Tauri desktop product, desktop web shell, Agent setup, and platform packaging. `apps/local-server/` owns the public `@cospace/local-server` npm CLI and bundles the shared runtime plus review web assets. Both Desktop and Local Server use the same local data home; DSH remains isolated. `apps/site/` contains the public install site. `scripts/build-client.mjs` builds the DSH client bundle and `scripts/build-dsh.mjs` assembles the npm package under `dist/dsh-plugin/`. `dist/` contains generated build and release artifacts and must not be edited by hand. `docs/` holds product, integration, and unified release specifications. `test/` contains Node tests and MCP/host integration tests; `scripts/test-ui.sh` provides the simulated DOM UI flow.
+This repository is a private npm workspace for CoSpace (智联文档空间). `assets/cospace-icon.svg` is the shared brand icon source copied into the DSH package at build time. `packages/review-core/` contains SQLite persistence and review semantics; `packages/host-api/` composes the shared service API; `packages/review-ui/` contains shared review components; `packages/adapter-contract/` defines host capabilities; `packages/transport-mcp/` and `packages/transport-http/` contain host-independent transports; `packages/local-runtime/` owns the shared local daemon, endpoint protocol, and lifecycle manager used by Desktop and Local Server. `adapters/dsh/` owns the independent DSH plugin runtime, host bridge, locale, capability declaration, and plugin metadata. `apps/desktop/` owns the Tauri desktop product, desktop web shell, Agent setup, and platform packaging. `apps/local-server/` owns the public `@cospace/local-server` npm CLI and bundles the shared runtime plus review web assets. Both Desktop and Local Server use the same local data home; DSH remains isolated. `apps/site/` contains the public install site. `scripts/build-client.mjs` builds the DSH client bundle and `scripts/build-dsh.mjs` assembles the npm package under `dist/dsh-plugin/`. `dist/` contains generated build and release artifacts and must not be edited by hand. `docs/` holds product, integration, and unified release specifications. `test/` contains Node tests and MCP/host integration tests.
 
 ## Build and Development
 
@@ -10,7 +10,7 @@ Use Node.js 24 or later and Rust stable for desktop builds. Run `npm install` to
 
 ## Code and Test Conventions
 
-Follow nearby JavaScript conventions: ES modules, two-space indentation, semicolons, descriptive camelCase names, and explicit error codes for expected failures. Keep UI text and accessible labels clear; preserve the current document-selection, review, and manual comment-send behavior. Add or update focused tests for behavioral changes, especially persistence, conflicts, restart recovery, and host message outcomes. Changes to the host HTTP route need tests covering rejected, missing-service, and admitted requests. Tests use Node’s built-in test runner; the UI smoke test is a separate shell script.
+Follow nearby JavaScript conventions: ES modules, two-space indentation, semicolons, descriptive camelCase names, and explicit error codes for expected failures. Keep UI text and accessible labels clear; preserve the current document-selection, review, and manual comment-send behavior. Add or update focused tests for behavioral changes, especially persistence, conflicts, restart recovery, and host message outcomes. Changes to the host HTTP route need tests covering rejected, missing-service, and admitted requests. Tests use Node’s built-in test runner.
 
 ## Architecture and Safety
 
@@ -22,7 +22,7 @@ Do not modify `packages/review-core/src/review-core.js` or change review-core be
 
 ## Commits and Pull Requests
 
-Recent history uses short, imperative commit subjects, often with a scope such as `docs:` or `feat:`. Follow that style when preparing commits. Pull requests should summarize user-visible behavior, list relevant checks (`npm run build:client`, `npm run check`, and UI smoke test when applicable), identify unverified host integration, and include screenshots for visual changes when available.
+Recent history uses short, imperative commit subjects, often with a scope such as `docs:` or `feat:`. Follow that style when preparing commits. Pull requests should summarize user-visible behavior, list relevant checks (`npm run build:client` and `npm run check`), identify unverified host integration, and include screenshots for visual changes when available.
 
 ## Distribution and Compatibility
 

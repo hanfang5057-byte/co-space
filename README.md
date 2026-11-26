@@ -85,7 +85,7 @@ npm run build:dsh
 npm run check
 ```
 
-测试包含真实 MCP stdio、SQLite 存储、建议决策、评论处理模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。可用 `sh scripts/test-ui.sh` 运行模拟 DOM 的界面测试，该脚本在临时目录安装测试依赖。
+测试包含真实 MCP stdio、SQLite 存储、建议决策、评论处理模拟、重启、冲突及进程并发；它们不是 DSH 宿主界面的端到端验证。宿主界面仍需在实际支持的 DSH 环境中验收。
 
 ## 桌面版开发与打包
 

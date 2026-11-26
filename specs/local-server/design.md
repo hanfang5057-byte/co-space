@@ -158,7 +158,7 @@ Publish one scoped package, tentatively `@cospace/local-server`, with a single `
 - Build Local Server artifacts from a clean commit; package only generated runtime bundles and web assets.
 - `npm pack --dry-run` must show the expected files and exclude secrets, databases, source maps if not intended, and unrelated workspaces.
 - Add focused tests for daemon single-instance/race behavior, stale metadata, concurrent MCP clients, RPC allowlists, authentication, cache independence, restart recovery, version mismatch, and data migration/retention.
-- Verify existing Node checks and UI smoke in implementation. Add end-to-end manual acceptance on supported OS/Agent combinations for install via npx, MCP connection, proposal creation, Agent exit, browser review, Desktop shared data, restart, upgrade, rollback, and uninstall retention.
+- Verify existing Node checks in implementation. Add end-to-end manual acceptance on supported OS/Agent combinations for install via npx, MCP connection, proposal creation, Agent exit, browser review, Desktop shared data, restart, upgrade, rollback, and uninstall retention.
 - Release only after package verification and clean-worktree checks. Use npm provenance when the public repository and CI publishing setup permit it.
 
 ## Decisions deferred until implementation spike

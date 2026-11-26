@@ -55,7 +55,7 @@ npm run build:dsh
 npm run check
 ```
 
-The test suite covers real MCP stdio, SQLite storage, suggestion decisions, simulated comment handling, restart, conflicts, and process concurrency; it is not an end-to-end test of the DSH host UI. `sh scripts/test-ui.sh` runs the simulated-DOM UI flow.
+The test suite covers real MCP stdio, SQLite storage, suggestion decisions, simulated comment handling, restart, conflicts, and process concurrency; it is not an end-to-end test of the DSH host UI. Host UI acceptance must be performed in a supported DSH environment.
 
 ### Desktop development and packaging
 
