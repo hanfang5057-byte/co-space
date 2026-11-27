@@ -20,7 +20,7 @@ body:
     attributes:
       label: DSH version
       description: The DSH version shown in the app, or the CLI output of `dsh --version`.
-      placeholder: "0.2.2-rc.5"
+      placeholder: "0.2.3-alpha.2"
     validations:
       required: true
   - type: dropdown

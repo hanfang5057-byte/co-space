@@ -9,7 +9,7 @@ Review agent-proposed Markdown edits in DeepSeek Harness: the agent proposes cha
 - **DSH Desktop / Web**: open **Plugins**, choose **Add plugin**, enter `dsh-plugin-space`, then enable it. A **CoSpace** entry appears in the sidebar.
 - **CLI**: `dsh plugin add dsh-plugin-space`
 
-Requires DSH `^0.2.2-rc.5` and Node.js 24 or later. Offline installs can use the `dsh-plugin-space-<version>.tgz` attached to each [GitHub Release](https://github.com/hanfang5057-byte/co-space/releases).
+Requires DSH `0.2.3-alpha.2` or later and Node.js 24 or later. Offline installs can use the `dsh-plugin-space-<version>.tgz` attached to each [GitHub Release](https://github.com/hanfang5057-byte/co-space/releases).
 
 ## Use
 

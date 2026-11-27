@@ -27,6 +27,6 @@ body:
     id: dsh-version
     attributes:
       label: DSH version
-      placeholder: "0.2.2-rc.5"
+      placeholder: "0.2.3-alpha.2"
     validations:
       required: false
