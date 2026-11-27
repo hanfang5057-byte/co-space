@@ -59,7 +59,7 @@ Download and inspect every artifact and `SHA256SUMS`. On clean target systems, t
 
 ### After the desktop release is published
 
-Dispatch `Promote desktop release` with the `desktop-vX.Y.Z` tag. It builds the update verifier, runs `prepare-promotion` — which downloads the published release, checks checksums, signatures and signed versions, re-downloads each updater URL, and prepares `apps/site/desktop/latest.json` — and opens a pull request with that change. Review the pull request, verify all npm packages still referenced by the site are published, and merge it under the appropriate authorization. The Pages deployment publishes the website and the desktop update manifest together; verify the deployed manifest and its URLs from the networks users actually use.
+Dispatch `Promote desktop release` on the `desktop-vX.Y.Z` tag; the `desktop-release` environment's tag policy rejects branch refs, and the workflow cuts its promotion branch from `main` so the pull request contains only the manifest change. It builds the update verifier, runs `prepare-promotion` — which downloads the published release, checks checksums, signatures and signed versions, re-downloads each updater URL, and prepares `apps/site/desktop/latest.json` — and opens a pull request with that change. Review the pull request, verify all npm packages still referenced by the site are published, and merge it under the appropriate authorization. The Pages deployment publishes the website and the desktop update manifest together; verify the deployed manifest and its URLs from the networks users actually use.
 
 ### Failed or partial releases
 

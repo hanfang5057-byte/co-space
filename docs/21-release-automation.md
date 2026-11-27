@@ -29,7 +29,7 @@ The mapping to industry practice:
 | DSH prerelease preview | push with `release/npm-version.json` = `X.Y.Z-rc.n` | `Publish DSH plugin` | npm dist-tag `rc` + prerelease GitHub Release; `latest` untouched |
 | DSH stable release | push with `release/npm-version.json` = `X.Y.Z` | `Publish DSH plugin` | npm `latest` + market sync commit + tag `vX.Y.Z` + GitHub Release |
 | Desktop release | push bumping the six desktop version sources | `Build CoSpace Desktop` verify → authorize tag → `Stage signed desktop release` | Signed draft GitHub Release behind `desktop-release` environment |
-| Desktop promotion | manual dispatch of `Promote desktop release` | verifier build + `prepare-promotion` | PR updating `apps/site/desktop/latest.json`; merging deploys Pages |
+| Desktop promotion | manual dispatch of `Promote desktop release` on the tag | verifier build + `prepare-promotion` | PR updating `apps/site/desktop/latest.json`; merging deploys Pages |
 
 Version-source contracts:
 
@@ -73,7 +73,7 @@ Unchanged staged pipeline, dispatched automatically on the release tag by `Build
 
 ### `Promote desktop release` (promote-desktop.yml)
 
-Manual dispatch with a published `desktop-vX.Y.Z` tag, inside the `desktop-release` environment. It builds the update verifier, runs `prepare-promotion` (which itself verifies the published release, checksums, signatures, and re-downloads every updater URL), confirms `dsh-plugin-space` still resolves on npm, and opens a pull request updating `apps/site/desktop/latest.json`. The PR is the review surface required by 16-release-process.md; merging it triggers the Pages deployment that publishes the live update manifest.
+Manual dispatch on the published `desktop-vX.Y.Z` tag, inside the `desktop-release` environment — the environment's tag policy rejects branch refs, so the release tag is both the dispatch ref and the operation's target. The workflow cuts its promotion branch from `origin/main`, builds the update verifier, runs `prepare-promotion` (which itself verifies the published release, checksums, signatures, and re-downloads every updater URL), confirms `dsh-plugin-space` still resolves on npm, and opens a pull request updating `apps/site/desktop/latest.json`. The PR is the review surface required by 16-release-process.md; merging it triggers the Pages deployment that publishes the live update manifest.
 
 ### `Deploy site and plugin index` (pages.yml)
 
