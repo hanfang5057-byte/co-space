@@ -12,6 +12,7 @@ import { workspaceNameForSession } from './workspace-name.js';
 import { BRAND } from '../../../packages/brand/brand.js';
 import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../packages/adapter-contract/src/index.js';
 import adapterDeclaration from '../adapter.json' with { type: 'json' };
+import { SpaceIcon } from './brand-icon.jsx';
 
 export const name = 'dsh-space-client';
 /** Client services: slots, the current Session, copy, conversation text, and the right Sidebar. */
@@ -26,8 +27,6 @@ const SIDEBAR_PATTERN = 'dsh-resource://space/**';
 function DshSpaceSidebarTitle(props) {
   return <SpaceSidebarTitle {...props}/>;
 }
-
-function SpaceIcon({size=16}) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M9 9v11"/></svg>; }
 
 /**
  * Send navigation: the Host resolves or creates the conversation; the client
