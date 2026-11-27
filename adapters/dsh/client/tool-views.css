@@ -114,7 +114,9 @@
 
 .space-review-card-head {
   display: flex;
-  align-items: flex-start;
+  /* Center the logo on the title + status column, not on the title's line box:
+     flex-start leaves the 28px mark above the two-line block's optical center. */
+  align-items: center;
   gap: 10px;
 }
 
