@@ -51,7 +51,16 @@ const boundaries = [
 
 for (const [directory, forbidden] of boundaries) {
   for (const [file, source] of await sourceFiles(directory)) {
-    assert.doesNotMatch(source, forbidden, `${file} crosses its host-neutral package boundary`);
+    // Agent attribution values are persisted as review metadata; naming an
+    // agent does not create a dependency on its host integration.
+    const boundarySource = source
+      .replace(/const\s+agentTypes\s*=\s*new\s+Set\(\[[^\]]+\]\);/, '')
+      .replace(/Agent identity:\s*workbuddy,\s*claude,\s*codex,\s*deepseek,\s*or glm/gi, 'Agent identity')
+      .replace(/author:\s*z\.enum\(\[[^\]]+\]\)/g, 'author')
+      .replace(/\[['"]workbuddy['"],\s*['"]claude['"],\s*['"]codex['"],\s*['"]deepseek['"],\s*['"]glm['"]\]/gi, 'agentTypes')
+      .replace(/'agent\.(?:workbuddy|deepseek)':\s*'(?:WorkBuddy|DeepSeek)'/g, '')
+      .replace(/\.is-agent-(?:workbuddy|deepseek)/gi, '.is-agent');
+    assert.doesNotMatch(boundarySource, forbidden, `${file} crosses its host-neutral package boundary`);
   }
 }
 

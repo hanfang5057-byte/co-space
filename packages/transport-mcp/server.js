@@ -29,7 +29,7 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
   const instructions = [
     INSTRUCTIONS,
     reviewUrl ? `The local review UI is available at ${reviewUrl}. When a tool returns a reviewUrl, include it as a Markdown link. The user reviews and decides every suggestion there.` : '',
-    documentLinkFor ? 'When a tool returns documentLink, include it as a Markdown link. It opens that document in this DSH Space sidebar.' : '',
+    documentLinkFor ? 'When a tool returns documentLink, include it as a Markdown link. It opens that document in the host document sidebar.' : '',
     versionNotice || '',
   ].filter(Boolean).join('\n\n');
   const server = new McpServer({ name: 'CoSpace', version: serverVersion }, { instructions });
@@ -37,7 +37,8 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
     try {
       let result = await fn(args);
       if (result && typeof result === 'object' && !Array.isArray(result)) {
-        const docId = result.id ?? result.docId ?? args.docId ?? args.id;
+        const documentReference = result.id ?? result.docId ?? args.docId ?? args.id;
+        const docId = typeof documentReference === 'string' ? resolveSpaceRef(documentReference) : documentReference;
         if (typeof docId === 'string' && docId.length > 0) {
           result = { ...result, reference: result.reference || referenceFor(docId) };
           if (reviewUrl) {
