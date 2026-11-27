@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toolArgs, toolCardModel, toolResultPayload } from '../adapters/dsh/client/tool-view-model.js';
+import { cardMeta, toolArgs, toolCardModel, toolResultPayload } from '../adapters/dsh/client/tool-view-model.js';
 
 const textBlock = value => [{ type: 'text', text: JSON.stringify(value) }];
 
@@ -28,13 +28,23 @@ test('a suggestion card renders the call arguments as a diff', () => {
   });
 });
 
-test('a suggestion list card counts only open suggestions', () => {
+test('a suggestion list card counts only open suggestions and keeps the version', () => {
   const model = toolCardModel('mcp__space__space_suggestion_list', {
     argsRaw: '{"docId":"doc-1"}',
-    content: textBlock({ suggestions: [{ status: 'pending' }, { status: 'rejected' }] }),
+    content: textBlock({ id: 'doc-1', version: 4, suggestions: [{ status: 'pending' }, { status: 'rejected' }] }),
   });
+  assert.equal(model.version, 4);
   assert.equal(model.pending, 1);
   assert.equal(model.total, 2);
+});
+
+test('a card without a numeric version reports null so the row hides it', () => {
+  const model = toolCardModel('mcp__space__space_suggestion_list', {
+    argsRaw: '{"docId":"doc-1"}',
+    content: textBlock({ suggestions: [] }),
+  });
+  assert.equal(model.version, null);
+  assert.notEqual(model.version, undefined);
 });
 
 test('unreadable data falls back without throwing', () => {
@@ -52,4 +62,41 @@ test('unreadable data falls back without throwing', () => {
 test('a failed call shows a failure title instead of document fields', () => {
   const model = toolCardModel('mcp__space__space_document_read', { argsRaw: '{}', isError: true });
   assert.deepEqual(model, { kind: 'document', titleKey: 'tool.read.failed', failed: true });
+});
+
+test('meta chips never fill a placeholder with an undefined value', () => {
+  const payloads = [
+    ['mcp__space__space_document_read', { argsRaw: '{"docId":"doc-1"}', content: textBlock({ id: 'doc-1', title: 'T', version: 6, suggestions: [{ status: 'pending' }], comments: [{}, {}] }) }],
+    ['mcp__space__space_suggestion_list', { argsRaw: '{"docId":"doc-1"}', content: textBlock({ id: 'doc-1', version: 6, suggestions: [{ status: 'accepted' }] }) }],
+    // A kind that carries no numeric field at all must not invent one.
+    ['mcp__space__space_suggest', { argsRaw: '{"docId":"doc-1","expected":"a","replacement":"b"}', content: textBlock({ id: 'sug-1' }) }],
+    // An unreadable result leaves every count unknown.
+    ['mcp__space__space_document_read', { argsRaw: '{', content: [] }],
+    ['mcp__space__space_document_read', { argsRaw: '{}', isError: true }],
+  ];
+  for (const [tool, data] of payloads) {
+    const model = toolCardModel(tool, data);
+    for (const { key, vars } of cardMeta(model)) {
+      for (const value of Object.values(vars)) {
+        assert.equal(typeof value, 'number', `${tool} ${key} must carry a number`);
+        assert.ok(Number.isFinite(value), `${tool} ${key} must be finite`);
+        // A `{placeholder}` template stringifies its argument, so any value that
+        // reaches it becomes literal text in the card.
+        assert.notEqual(String(value), 'undefined', `${tool} ${key}`);
+      }
+    }
+  }
+});
+
+test('a card with nothing to report renders no meta row', () => {
+  const model = toolCardModel('mcp__space__space_suggest', {
+    argsRaw: '{"docId":"doc-1","expected":"a","replacement":"b"}',
+    content: textBlock({ id: 'sug-1' }),
+  });
+  assert.deepEqual(cardMeta(model), []);
+});
+
+test('a failed card never renders meta chips', () => {
+  const model = toolCardModel('mcp__space__space_document_read', { argsRaw: '{}', isError: true });
+  assert.deepEqual(cardMeta(model), []);
 });

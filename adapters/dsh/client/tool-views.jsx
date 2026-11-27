@@ -1,7 +1,7 @@
 /** Conversation cards for CoSpace MCP tool calls, keyed by model-facing tool name. */
 import { themeRootProps } from '../../../packages/review-ui/src/theme/index.js';
 import { NS } from '../../../packages/review-ui/src/locale.js';
-import { toolCardModel } from './tool-view-model.js';
+import { cardMeta, toolCardModel } from './tool-view-model.js';
 import './tool-views.css';
 
 /** The MCP tool names `mcpManager.register('space', …)` exposes to the model. */
@@ -34,17 +34,15 @@ export function SpaceToolCard({ toolName, phase, block, t }) {
     return <div {...cardProps()}><span className="space-tool-title">{toolName}</span></div>;
   }
   const className = `space-tool-card${model.failed ? ' is-failed' : ''}`;
+  const meta = cardMeta(model);
   return <div {...themeRootProps('inline', { className })}>
     <div className="space-tool-head">
       <span className="space-tool-title">{t(model.titleKey)}</span>
       {model.title && <span className="space-tool-target" title={model.title}>{model.title}</span>}
       {model.docId && !model.title && <span className="space-tool-target" title={model.docId}>{model.docId}</span>}
     </div>
-    {!model.failed && <div className="space-tool-meta">
-      {model.version !== null && <span>{t('tool.version', { version: model.version })}</span>}
-      {model.pending !== null && model.pending !== undefined && <span>{t('tool.pending', { count: model.pending })}</span>}
-      {model.comments !== null && model.comments !== undefined && <span>{t('tool.comments', { count: model.comments })}</span>}
-      {model.total !== null && model.total !== undefined && <span>{t('tool.total', { count: model.total })}</span>}
+    {meta.length > 0 && <div className="space-tool-meta">
+      {meta.map(({ key, vars }) => <span key={key}>{t(key, vars)}</span>)}
     </div>}
     {model.kind === 'suggestion' && (model.expected !== null || model.replacement !== null) && <div className="space-tool-diff">
       <span className="space-tool-expected">{model.expected === null ? t('tool.insert') : model.expected}</span>

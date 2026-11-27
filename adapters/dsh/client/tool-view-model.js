@@ -46,6 +46,26 @@ export function toolArgs(argsRaw) {
 const visibleText = value => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
 const pendingCount = value => (Array.isArray(value) ? value.filter(item => item && PENDING.has(item.status)).length : null);
 const versionOf = value => (Number.isFinite(value) ? value : null);
+const present = value => value !== null && value !== undefined;
+
+/**
+ * Build a card's meta chips in display order.
+ *
+ * A reader reports `null` for "unknown", and a card kind may not carry a field
+ * at all; both must be dropped here, because a `{placeholder}` template turns
+ * an `undefined` argument into the literal text "undefined".
+ * @param {object|null} model - card model.
+ * @returns {Array<{key: string, vars: object}>} chips to render, possibly empty.
+ */
+export function cardMeta(model) {
+  if (!model || model.failed) return [];
+  return [
+    present(model.version) && { key: 'tool.version', vars: { version: model.version } },
+    present(model.pending) && { key: 'tool.pending', vars: { count: model.pending } },
+    present(model.comments) && { key: 'tool.comments', vars: { count: model.comments } },
+    present(model.total) && { key: 'tool.total', vars: { count: model.total } },
+  ].filter(Boolean);
+}
 
 /**
  * Read a document call into its card fields.
@@ -96,6 +116,7 @@ export function suggestionListCard({ args, payload, isError = false }) {
     kind: 'suggestion-list',
     titleKey: 'tool.list.title',
     docId: visibleText(args?.docId) ?? visibleText(payload?.docId) ?? null,
+    version: versionOf(payload?.version),
     pending: pendingCount(suggestions),
     total: suggestions === null ? null : suggestions.length,
   };
