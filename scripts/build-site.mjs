@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import brand from '../packages/brand/metadata.json' with { type: 'json' };
 import { fileURLToPath } from 'node:url';
@@ -14,10 +14,15 @@ await Promise.all([
   cp(path.join(root, brand.icon), path.join(output, 'assets/cospace-icon.svg')),
   cp(path.join(root, 'assets/preview.png'), path.join(output, 'assets/preview.png')),
 ]);
+const desktopMetadata = path.join(root, 'apps/site/desktop/latest.json');
+if (await stat(desktopMetadata).then(info => info.isFile()).catch(error => { if (error.code === 'ENOENT') return false; throw error; })) {
+  await mkdir(path.join(output, 'desktop'), { recursive: true });
+  await cp(desktopMetadata, path.join(output, 'desktop/latest.json'));
+}
 const [installerShell, installerJs, skill] = await Promise.all([
-  readFile(path.join(root, 'apps/local-server/installer/install.sh'), 'utf8'),
-  readFile(path.join(root, 'apps/local-server/installer/install.cjs'), 'utf8'),
-  readFile(path.join(root, 'apps/local-server/skills/cospace-review/SKILL.md'), 'utf8'),
+  readFile(path.join(root, 'apps/site/legacy-local/install.sh'), 'utf8'),
+  readFile(path.join(root, 'apps/site/legacy-local/install.cjs'), 'utf8'),
+  readFile(path.join(root, 'apps/site/legacy-local/SKILL.md'), 'utf8'),
 ]);
 const installer = installerShell.replace('/* COSPACE_INSTALLER_SOURCE */', () => installerJs.replace('/* COSPACE_SKILL_CONTENT */', () => JSON.stringify(skill)));
 await writeFile(path.join(output, 'install.sh'), installer);

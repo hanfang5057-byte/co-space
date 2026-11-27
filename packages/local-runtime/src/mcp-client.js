@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from '../../transport-mcp/server.js';
-import { enableLocalUpdater, requestRuntimeUpgrade } from './manager.js';
 
 function remoteCall({ url, rpcToken }, method, args) {
   return fetch(`${url.replace(/\/$/, '')}/__cospace/mcp/rpc`, {
@@ -24,7 +23,7 @@ async function sessionRequest(endpoint, action, id) {
     signal: AbortSignal.timeout(3000),
   });
   if (response.status === 404) {
-    throw Object.assign(new Error('The running CoSpace Local Server does not support MCP sessions. Run `npx -y @hanfang5057/co-space@latest service restart`, then reconnect the Agent.'), { code: 'LOCAL_SERVER_UPGRADE_REQUIRED' });
+    throw Object.assign(new Error('The running CoSpace service does not support MCP sessions. Restart the desktop app and reconnect the Agent.'), { code: 'LOCAL_SERVER_UPGRADE_REQUIRED' });
   }
   const body = await response.json();
   if (!response.ok || body.error) throw Object.assign(new Error(body.error?.message || 'Local Server session failed'), body.error || { code: 'LOCAL_SERVER_SESSION_FAILED' });
@@ -51,18 +50,8 @@ export async function startStdioMcp(endpoint, { packageVersion = endpoint?.versi
   if (!endpoint?.url || !endpoint?.rpcToken) throw new TypeError('A ready Local Server endpoint is required');
   const sessionId = randomUUID();
   await sessionRequest(endpoint, 'open', sessionId);
-  if (endpoint.runtimeHome && /^\d+\.\d+\.\d+$/.test(packageVersion) && /^\d+\.\d+\.\d+$/.test(endpoint.version || '') && packageVersion.localeCompare(endpoint.version, 'en', { numeric: true }) > 0) {
-    try { const result = await requestRuntimeUpgrade(endpoint.runtimeHome, packageVersion); endpoint.upgradeNotice = result.scheduled ? 'scheduled' : 'restart-required'; }
-    catch { endpoint.upgradeNotice = 'restart-required'; }
-  }
-  if (endpoint.runtimeHome) await enableLocalUpdater(endpoint.runtimeHome).catch(() => false);
   const { space, collaboration } = createRemoteServices(endpoint);
-  const versionNotice = endpoint.version && endpoint.version !== packageVersion
-    ? endpoint.upgradeNotice === 'scheduled' || endpoint.updaterEnabled
-      ? `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version}. The update waits until review pages and Agent connections close. Current service status: npx -y @hanfang5057/co-space@latest service status.`
-      : `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version} and does not support automatic updates. After all Agents disconnect, run: npx -y @hanfang5057/co-space@latest service restart.`
-    : undefined;
-  const server = createMcpServer(space, collaboration, { reviewUrl: endpoint.url, serverVersion: packageVersion, versionNotice });
+  const server = createMcpServer(space, collaboration, { reviewUrl: endpoint.url, serverVersion: packageVersion });
   await server.connect(new StdioServerTransport());
   const heartbeat = setInterval(() => { void sessionRequest(endpoint, 'heartbeat', sessionId).catch(error => { if (error.code === 'INVALID_SESSION') return sessionRequest(endpoint, 'open', sessionId); }).catch(() => {}); }, 20_000);
   heartbeat.unref?.();

@@ -6,8 +6,6 @@ on:
       - main
     paths:
       - 'apps/site/**'
-      - 'apps/local-server/installer/**'
-      - 'apps/local-server/skills/**'
       - 'assets/**'
       - 'docs/preview.svg'
       - 'market/**'

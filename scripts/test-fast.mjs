@@ -3,9 +3,6 @@ import { spawnSync } from 'node:child_process';
 
 // The full suite covers these slower process, update, and recovery scenarios.
 const integrationTests = new Set([
-  'dev-local.test.js',
-  'local-runtime-updater-e2e.test.js',
-  'local-runtime-upgrade.test.js',
 ]);
 const files = readdirSync('test')
   .filter(name => name.endsWith('.test.js') && !integrationTests.has(name))

@@ -7,14 +7,14 @@ This page records the current architecture. The normative adapter contract is [1
 ```mermaid
 flowchart LR
   HOST[DSH host] --> DSH[adapters/dsh]
-  LOCAL[Local Server] --> RUNTIME[packages/local-runtime]
+  DESKTOP[Desktop] --> RUNTIME[packages/local-runtime]
+  DESKTOP --> CONTRACT[adapter-contract]
+  DESKTOP --> UI[review-ui]
   DSH --> CONTRACT[adapter-contract]
-  RUNTIME --> CONTRACT
   DSH --> HOSTAPI[host-api]
   RUNTIME --> HOSTAPI
   HOSTAPI --> CORE[review-core]
   DSH --> UI[review-ui]
-  RUNTIME --> UI
   DSH --> MCP[transport-mcp]
   RUNTIME --> MCP
   DSH --> HTTP[transport-http]
@@ -24,7 +24,7 @@ flowchart LR
   HTTP --> CORE
 ```
 
-The dependency direction is inward from each product edge. The review core does not know which host is using it. DSH owns plugin registration, its resource URI, account lookup, conversation and workspace integration, service lifecycle, and plugin packaging. Local Server owns its CLI and packaging; the shared local runtime owns its daemon, HTTP/MCP services, and browser review UI. The core owns document and review semantics. Shared UI receives a neutral adapter context and does not inspect DSH SDK objects or transport implementations.
+The dependency direction is inward from each product edge. The review core does not know which host is using it. DSH owns plugin registration, its resource URI, account lookup, conversation and workspace integration, service lifecycle, and plugin packaging. Desktop owns its Tauri shell, bundled Node runtime, MCP launcher, updates and packaging; the shared local runtime owns its daemon, HTTP/MCP services and endpoint protocol. The core owns document and review semantics. Shared UI receives a neutral adapter context and does not inspect DSH SDK objects or transport implementations.
 
 ## Package responsibilities
 
@@ -38,7 +38,7 @@ The dependency direction is inward from each product edge. The review core does 
 | `packages/transport-http/` | Host-independent HTTP handler over core operations |
 | `adapters/dsh/` | DSH runtime composition, host bridge, capability declaration and distribution |
 | `packages/local-runtime/` | Local daemon, lifecycle and endpoint protocol |
-| `apps/local-server/` | Local Server CLI and npm distribution |
+| `apps/desktop/` | Tauri desktop workbench, bundled runtime and platform distribution |
 | `apps/site/` | Public installation site |
 | `dist/` | Generated package builds and final platform release artifacts; never edit by hand |
 
@@ -46,7 +46,7 @@ The dependency direction is inward from each product edge. The review core does 
 
 WorkBuddy Connector was removed as an active product and adapter. Its implementation, build paths, website install flow, and current-product documentation are no longer part of the workspace. `docs/10-workbuddy-connector-development-plan.md` is retained only as a historical record and must not be treated as an implementation or release plan. Historical references do not participate in builds or runtime behavior.
 
-CoSpace Desktop has been removed from the active product. DSH declares its supported host integration and degrades optional UI actions based on the resolved runtime capability set.
+The independent Local Server npm product has been retired from the workspace. Already published packages and user data remain available; the legacy website installer is retained until the desktop release and migration guidance are available. Desktop development and platform acceptance are tracked in [20 · Desktop Product Plan](20-desktop-product-plan.md).
 
 ## Core boundary
 
@@ -54,7 +54,7 @@ Do not modify the behavior of `packages/review-core/src/review-core.js` without 
 
 ## Local runtime protocol compatibility
 
-The Local Server CLI, MCP proxy and daemon can run different package versions. `LOCAL_PROTOCOL_VERSION` in `packages/local-runtime/src/paths.js` is the single source for the endpoint health response, installed runtime marker and bundled package metadata. Clients require an exact protocol match before connecting; an absent or different version fails with `LOCAL_SERVER_PROTOCOL_MISMATCH` and requires the service to be stopped or upgraded before reconnecting. The status command can still report an incompatible service.
+Desktop's MCP proxy and daemon require the same app version and protocol. `LOCAL_PROTOCOL_VERSION` in `packages/local-runtime/src/paths.js` is the single source for the endpoint health response, installed runtime marker and bundled metadata. Clients require an exact protocol match before connecting; an absent or different version fails with `LOCAL_SERVER_PROTOCOL_MISMATCH`. The local runtime profile directory retains its historical `local-server` component so a desktop process cannot bypass an existing legacy profile's lock when pointed at the same data directory.
 
 Increment the protocol version whenever an existing RPC, session, authentication, endpoint or response contract changes incompatibly, including removals or changes to error semantics. Additive operations may retain the version only when both old clients and new clients can safely operate with the other side; otherwise increment it or explicitly negotiate the capability. Exercise matching, older, newer and missing protocol versions and the shared MCP behavior before releasing. A version mismatch must never silently start a second daemon over the same data home.
 

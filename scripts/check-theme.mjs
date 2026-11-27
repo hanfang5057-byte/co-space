@@ -37,7 +37,6 @@ const ROOT_COMPONENTS = [
 /** Files that a host owns and that must stay tokens-only. */
 const HOST_PACK_CANDIDATES = [
   path.join(ROOT, 'adapters/dsh/client/theme.css'),
-  path.join(ROOT, 'apps/local-server/src/client/theme.css'),
 ];
 
 const NAMED_COLORS = /\b(?:white|black|red|blue|green|gray|grey|orange|purple|yellow|pink|brown|silver|maroon|navy|teal|olive|lime|aqua|fuchsia)\b/;

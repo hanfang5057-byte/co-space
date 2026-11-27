@@ -4,12 +4,16 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { DATA_LAYOUT_VERSION } from '../../review-core/src/data-layout.js';
 
-// Version 2 requires the shared review/collaboration database layout.
-export const LOCAL_PROTOCOL_VERSION = 2;
+// Version 3 removes the former npm upgrade control endpoints.
+export const LOCAL_PROTOCOL_VERSION = 3;
 // Increment when a runtime changes the on-disk layout incompatibly.
 export const LOCAL_DATA_LAYOUT_VERSION = DATA_LAYOUT_VERSION;
 
 export function resolveDataHome(env = process.env) {
+  return path.resolve(env.COSPACE_DESKTOP_HOME || path.join(homedir(), '.cospace', 'desktop'));
+}
+
+export function resolveLegacyDataHome(env = process.env) {
   return path.resolve(env.COSPACE_WEB_HOME || path.join(homedir(), '.cospace', 'webapp'));
 }
 
@@ -43,3 +47,4 @@ export function resolveRuntimeHome({ dataHome = resolveDataHome(), env = process
 
 export const endpointFile = runtimeHome => path.join(runtimeHome, 'endpoint.json');
 export const secretFile = runtimeHome => path.join(runtimeHome, 'secrets.json');
+export const desktopUpdateFile = runtimeHome => path.join(runtimeHome, 'desktop-update.json');

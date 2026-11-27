@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-save-export"
+description = "Allows the workbench to open a save dialog and write the selected export file"
+commands.allow = ["save_export"]
+
+[[permission]]
+identifier = "allow-desktop-update"
+description = "Allows the trusted workbench to check and install verified updates"
+commands.allow = ["prepare_update", "install_prepared_update"]

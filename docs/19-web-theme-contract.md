@@ -2,15 +2,15 @@
 
 本文档是 CoSpace Web 界面的样式规范。它定义共享样式与宿主之间唯一的接口：一组 `--cospace-*` CSS 自定义属性。任何新宿主接入视觉（或既有宿主调整外观）都以本文为准。
 
-适用：`packages/review-ui/`（共享界面）、`adapters/dsh/`（DSH 插件）、`apps/local-server/`（本地服务），以及未来的宿主适配器。
+适用：`packages/review-ui/`（共享界面）、`adapters/dsh/`（DSH 插件）、`apps/desktop/`（桌面端），以及未来的宿主适配器。
 
 ## 1. 目标与非目标
 
 目标：
 
-1. 共享界面只有一份样式；Local Server 与 DSH 不各自 fork CSS。
+1. 共享界面只有一份样式；Desktop 与 DSH 不各自 fork CSS。
 2. 宿主可以把 CoSpace 融进自己的配色、深浅色、字体与圆角，但**只通过 token**。
-3. 宿主之间互不影响：DSH 的规则不可能命中 Local Server 的页面，也不可能命中 DSH 自己的其它插件。
+3. 宿主之间互不影响：DSH 的规则不可能命中 Desktop 的页面，也不可能命中 DSH 自己的其它插件。
 4. 机制不依赖样式加载顺序，不需要 `!important` 参与宿主覆盖。
 5. 契约可机器校验，文档与代码不会各说一套。
 
@@ -126,7 +126,7 @@
 
 共享样式**不读取** `prefers-color-scheme`：颜色完全由宿主 token 决定。因此：
 
-- 只有浅色的宿主（当前 Local Server）不需要任何暗色分支，也不会被系统偏好意外改暗。
+- 只有浅色的宿主（当前 Desktop）不需要任何暗色分支，也不会被系统偏好意外改暗。
 - DSH 把 alias token 映射过来后，暗色自动跟随（alias token 自身随主题切换）；只有身份色与阴影需要显式暗色值，见 `theme.css` 末尾的 `body[data-ds-dark-theme] .cospace-theme` 块。
 - 第三方 DSH 主题只要改 alias token，CoSpace 自动跟随，无需为本插件单独适配。
 
@@ -142,7 +142,7 @@
 
 视觉验收（改动样式时必须附截图）：
 
-| 场景 | Local Server | DSH |
+| 场景 | Desktop | DSH |
 |---|---|---|
 | 浅色 | 默认外观 | 跟随 DSH 调色板 |
 | 暗色 | 不适用（保持浅色） | 面板 / 右栏 / 对话卡片 / 弹层一致 |

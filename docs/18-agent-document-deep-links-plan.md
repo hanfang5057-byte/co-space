@@ -1,4 +1,6 @@
-# Agent 单篇文档直达链接方案（Local Server + DSH）
+# Agent 单篇文档直达链接方案（历史：Local Server + DSH）
+
+本文保留旧版设计记录；当前桌面端使用共享本地运行时，最新产品边界见 [09](09-host-adapters-architecture.md) 和 [20](20-desktop-product-plan.md)。
 
 ## 目标
 

@@ -1,26 +1,34 @@
 # Unified Release Process
 
-This document is the source of truth for publishing CoSpace npm packages. The root workspace is private and must never be published. DSH and CoSpace Local Server are separate npm artifacts with separate versions and release tracks. A release may publish one artifact or both; complete and verify each artifact's release steps before creating its tag.
+## Desktop release staging (not yet published)
 
-## Release tracks
+Desktop replaces the retired Local Server npm product. Existing npm artifacts and user data remain available; do not publish a new Local Server package. Staging does not authorize publication.
 
-| Product | Publishable artifact | Version source | Staged output | Git tag |
-|---|---|---|---|---|
-| DSH plugin | `dsh-plugin-space` | `release/npm-version.json`, synchronized into `adapters/dsh/package.json`, `adapters/dsh/adapter.json`, and `package-lock.json` by the packaging script | `dist/dsh-plugin/` and `dist/npm-packages/dsh-plugin-space-X.Y.Z.tgz` | `vX.Y.Z` |
-| Local Server | `@hanfang5057/co-space` | `apps/local-server/package.json` | `dist/npm-packages/hanfang5057-co-space-X.Y.Z.tgz` (built package contents are under `apps/local-server/dist/`) | `local-server-vX.Y.Z` |
+For local desktop development, run `npm run dev:desktop`; UI changes rebuild and reload the page, while Node service/MCP changes require restarting the command. To build and open a locally runnable package for the current OS, run `npm run package:desktop:local` from the workspace root. This selects macOS `.app`, Windows MSI and NSIS (opening the NSIS installer), or Linux AppImage; it does not sign or publish a release. The Linux local path intentionally builds AppImage only. The current GitHub release matrix includes macOS arm64/x64 and Linux deb/AppImage. Windows local packaging remains available, but Windows is temporarily excluded from formal build and release workflows.
 
-DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefixed tag because its version is independent and can differ from DSH's version. Never move or reuse an existing release tag.
+1. Configure a protected GitHub environment named `desktop-release`, restrict it to approved release tags, and require reviewers. Store the persistent Tauri updater public key in the `COSPACE_UPDATER_PUBLIC_KEY` environment variable; store `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as environment secrets. Protect and back up the private key outside the repository. Windows signing secrets are not required while Windows is excluded; add the code-signing PFX and password before re-enabling its release target. macOS currently uses ad-hoc signing and is not notarized.
+2. On a reviewed release commit, synchronize `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`, the desktop adapter declaration, and both lockfiles to the intended stable version. After the required checks pass, create the unique annotated tag `desktop-vX.Y.Z` according to the release authorization; do not reuse or move a tag.
+3. Manually run `Stage signed desktop release` on that tag. The workflow checks matching versions, runs the shared checks, builds macOS arm64/x64 and Linux deb/AppImage, verifies both Linux MCP launchers, and validates each updater signature against the configured public key and its signed version. It creates a **draft** GitHub Release only after all jobs succeed. The `latest.json` in the draft is not the live update channel. Windows is excluded from both build matrices and the staged updater manifest until explicitly re-enabled.
+4. Download and inspect every artifact and `SHA256SUMS`. On clean target systems, test installation, first-run migration, Agent connection, review, and real A→B updates and interrupted recovery. For macOS, record ad-hoc Gatekeeper behavior for first launch and updates; for Linux, test both deb and AppImage, and use the package manager or manual installation for deb updates. Do not describe untested architectures or environments as supported. Publish the draft only after acceptance and explicit release authorization.
+5. After the release is published, build the local verifier with `cargo build --locked --release --manifest-path apps/desktop/tools/verify-update/Cargo.toml`. Set `COSPACE_UPDATER_PUBLIC_KEY` to the same public key and `COSPACE_VERIFY_UPDATE` to the resulting executable, then run `node apps/desktop/scripts/prepare-promotion.mjs desktop-vX.Y.Z`. It requires `gh` authentication, downloads the published release, checks checksums, signatures and signed versions, re-downloads each updater URL, and prepares `apps/site/desktop/latest.json`. Review this file, verify all npm packages still referenced by the site are published, and only then commit and push the site change under the appropriate authorization. The existing Pages deployment publishes the website and independent desktop update manifest together; verify the deployed manifest and its URLs from the networks users actually use.
+6. On a failed/partial release, do not promote the manifest. Preserve installed user data and backups. An older executable must not open a newer incompatible data layout. Revoke or rotate a compromised signing key through an explicitly planned migration; the updater does not trust an arbitrary replacement key.
 
-## Shared release rules
+Windows can be restored by adding `windows-x64` to both workflow matrices and the `COSPACE_RELEASE_TARGETS` value in the draft job, then restoring the Windows certificate import and signature verification steps. Add `WINDOWS_CERTIFICATE_PFX` and `WINDOWS_CERTIFICATE_PASSWORD` to the `desktop-release` environment and verify signed MSI/NSIS installers before staging that platform.
 
-1. Confirm the requested artifact(s), target channel, versions, and publication authorization. This guide does not itself authorize publishing.
-2. Check the worktree and current branch. Build and publish from a clean release commit. If unrelated user changes exist, preserve them and prepare the release in a clean worktree.
-3. Run `npm run check`. Resolve unexplained failures before publishing.
-4. Build and inspect only the staged package artifact. DSH publishes from `dist/dsh-plugin/`; Local Server publishes its versioned tarball from `dist/npm-packages/`. Never run `npm publish` from the private workspace root.
-5. Verify the published registry version, dist-tag, tarball integrity, and Git tag before declaring a release complete.
-6. Create and push annotated tags only after the corresponding npm package has published and its post-publish checks have passed. A partial multi-package release must be resolved before creating any tag for the combined release commit.
-7. Do not hand-edit generated files under `dist/` or generated market metadata.
-8. Before pushing a `main` commit that changes `apps/site/`, publish and verify every npm package named in the site's install commands. The Pages workflow deploys automatically on that push; keep unpublished product instructions off the live site until their package is available.
+## Release tracks and shared rules
+
+The workspace root is private and must never be published. DSH and Desktop keep independent version sources, tags, artifacts and release gates. A coordinated release may intentionally assign the same version to both products (the current preparation uses `0.1.20`), but each product still follows its own publish or release sequence; never move or reuse a tag. A matching number does not mean the artifacts must ship together.
+
+| Product | Artifact | Version source | Git tag |
+| --- | --- | --- | --- |
+| DSH plugin | `dsh-plugin-space` npm package | `release/npm-version.json` | `vX.Y.Z` |
+| Desktop | Signed platform installers and updater assets | Desktop package, Tauri configuration and Cargo manifest | `desktop-vX.Y.Z` |
+
+1. Confirm the artifact, version, target channel, and publication authorization. This guide does not authorize publishing.
+2. Build and publish from a clean release commit, preserving unrelated worktree changes. Run `npm run check` and resolve unexplained failures.
+3. Publish DSH only from `dist/dsh-plugin/`, never the private workspace root. Desktop uses the protected GitHub Actions workflow above.
+4. Do not hand-edit generated files under `dist/` or generated market metadata. Verify published artifacts and tags before declaring a release complete.
+5. Before pushing a `main` commit that changes `apps/site/`, publish and verify every npm package referenced by the site; Pages deploys automatically. Do not advertise unpublished desktop downloads.
 
 ## DSH plugin release
 
@@ -42,40 +50,6 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 6. Attach the staged tarball to the GitHub Release and verify its digest matches the staged tarball.
 7. Update the [awesome-dsh-plugin listing](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/hanfang5057-byte__co-space--adapters-dsh.yml) in a PR. Keep its URL at `https://github.com/hanfang5057-byte/co-space/tree/main/adapters/dsh`, tarball at the new GitHub Release asset, and description/icon aligned with the verified package. Verify the listing after the PR merges.
 
-## Local Server npm release
+## Retired Local Server
 
-### Prepare and verify
-
-1. Set the intended semver version in `apps/local-server/package.json` and the Local Server adapter declaration in `apps/local-server/src/client/main.jsx`, and synchronize `package-lock.json`; keep the Local Server version independent from `release/npm-version.json`.
-2. Build the runtime bundle, daemon bundle, and review web assets using the Local Server build script. The resulting package must contain the executable MCP entry, daemon entry, and static web assets, but no user databases, runtime credentials, npm tokens, unrelated workspaces, or generated release artifacts.
-3. Run `npm run check` and `npm run local-server:verify-package`.
-4. Inspect `npm pack --dry-run` for the Local Server package and install the staged tarball into a clean temporary directory. Verify the declared Node engine, `bin`, `files`, CLI modes, npx invocation, cache-independent daemon copy, and `service status` output.
-5. Validate the target channel: stable versions use `latest`; prereleases use `next` until promoted.
-
-### Publish and finish
-
-1. Publish only the staged tarball, never the private root workspace: `npm publish ./dist/npm-packages/hanfang5057-co-space-X.Y.Z.tgz --access public --tag latest` (use `--tag next` for prereleases).
-2. Verify `@hanfang5057/co-space@X.Y.Z` in the registry, tarball integrity, and intended `latest` or `next` dist-tag.
-3. Verify npm provenance when the configured public CI publishing flow supports it.
-4. Create annotated tag `local-server-vX.Y.Z` on the commit containing the package version and release implementation, then push the tag.
-5. Record the registry version, dist-tag, package integrity, tag commit, and supported runtime/Agent acceptance results in the release notes.
-
-### Upgrade and rollback checks
-
-- New npm versions are immutable. Publish a new semver version rather than replacing an existing version.
-- `@latest` is resolved on a new npx launch. The daemon checks npm `latest` periodically, stages verified runtime assets outside the npm cache, and waits for both MCP sessions and review pages to close before switching. Stale page sessions expire after 90 seconds. A newer CLI also requests a staged upgrade. Older daemons without the upgrade protocol require a one-time manual restart after saving edits and disconnecting Agents. Manual stop or restart is blocked by active Agent sessions and requests, while open review pages do not block it. Verify candidate startup, port reuse, connection protection and fallback to the previous runtime before promotion.
-- Before promotion, verify that staged versioned daemon assets are installed outside the npm cache, the active service reports the intended version/protocol, and restart does not alter user data.
-- Data layout is independent of the local RPC protocol. New supervisors advertise layout-aware switching and candidates reject automatic launch by older supervisors before opening user data. Across protocols, request an upgrade only when the old supervisor advertises that capability; otherwise disconnect Agents and restart the service manually. Failed candidates are rolled back only if the persisted data layout matches the previous runtime. An incompatible layout leaves the service stopped with `upgrade-failure.json`; the status command reports the failure. Manual rollback also requires matching layout metadata before stopping the running service. Update the layout marker and runtime metadata whenever storage compatibility changes.
-- DSH HMR can restore a previous plugin after activation fails. Its MCP manager waits for registered-server cleanup, but that alone does not establish safe rollback after a storage migration. Until the full host lifecycle is verified, stop DSH before upgrading a profile with legacy collaboration data and do not rely on live plugin reload for this migration.
-- Keep the previous runtime bundle available for code rollback. Test schema compatibility and backup/restore behavior before any data-format migration.
-- Do not remove old npm versions or user runtime assets as a normal upgrade step.
-
-## Coordinated multi-package release
-
-DSH and Local Server may be published from one clean release commit, but they are not a single npm package and their versions need not match.
-
-1. Prepare and verify both staged artifacts independently.
-2. Publish each requested package and verify registry state before tagging.
-3. Complete the DSH market-index commit/push when DSH is included.
-4. Only after every requested npm package and market update succeeds, create each applicable tag on the release commit: `v<dsh-version>` and/or `local-server-v<local-server-version>`.
-5. If one publish fails, do not create tags for the coordinated release. Resolve the partial publish or explicitly complete a separately verified package release before tagging.
+Do not publish new `@hanfang5057/co-space` npm versions or remove existing published artifacts. The legacy installer remains in `apps/site/legacy-local/` only to keep the current site functional until the desktop release and migration guidance are available. Existing user data stays in its original directory until the user explicitly imports it into Desktop.

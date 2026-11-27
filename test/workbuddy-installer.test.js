@@ -7,9 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const shell = readFileSync(path.join(root, 'apps/local-server/installer/install.sh'), 'utf8');
-const js = readFileSync(path.join(root, 'apps/local-server/installer/install.cjs'), 'utf8');
-const skill = readFileSync(path.join(root, 'apps/local-server/skills/cospace-review/SKILL.md'), 'utf8');
+const shell = readFileSync(path.join(root, 'apps/site/legacy-local/install.sh'), 'utf8');
+const js = readFileSync(path.join(root, 'apps/site/legacy-local/install.cjs'), 'utf8');
+const skill = readFileSync(path.join(root, 'apps/site/legacy-local/SKILL.md'), 'utf8');
 const script = shell.replace('/* COSPACE_INSTALLER_SOURCE */', js.replace('/* COSPACE_SKILL_CONTENT */', JSON.stringify(skill)));
 
 test('WorkBuddy installer does not fall back to system Node', t => {

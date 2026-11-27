@@ -1,6 +1,6 @@
 # CoSpace Local Server Requirements
 
-> Historical planning record: Desktop has been removed; see current architecture and release documentation for supported products.
+> Historical planning record: the independent Local Server product has been retired. See the current desktop architecture and release documentation.
 
 ## Problem and goal
 

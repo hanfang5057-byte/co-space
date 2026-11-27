@@ -24,7 +24,8 @@ async function sourceFiles(relative) {
 const rootManifest = await readJson('package.json');
 assert.ok(rootManifest.workspaces.includes('packages/adapter-contract'), 'adapter contract must be a workspace package');
 assert.ok(rootManifest.workspaces.includes('packages/host-api'), 'shared host API must be a workspace package');
-assert.ok(rootManifest.workspaces.includes('apps/local-server'), 'the local server must be a workspace');
+assert.ok(rootManifest.workspaces.includes('apps/desktop'), 'the desktop app must be a workspace');
+assert.ok(!rootManifest.workspaces.includes('apps/local-server'), 'the retired local server must not be a workspace');
 assert.ok(!JSON.stringify(rootManifest).toLowerCase().includes('workbuddy'), 'removed adapters must not remain in current workspace configuration');
 
 const adapterEntries = await readdir(path.join(root, 'adapters'), { withFileTypes: true });
@@ -32,6 +33,7 @@ const adapterDirectories = adapterEntries.filter(entry => entry.isDirectory()).m
 const adapterIds = new Set();
 const integrationDeclarations = [
   ...adapterDirectories.map(directory => ({ directory, file: `adapters/${directory}/adapter.json` })),
+  { directory: 'desktop', file: 'apps/desktop/adapter.json' },
 ];
 for (const { directory, file } of integrationDeclarations) {
   const declaration = await readJson(file);

@@ -13,7 +13,7 @@
     "packages/transport-http",
     "packages/local-runtime",
     "adapters/dsh",
-    "apps/local-server"
+    "apps/desktop"
   ],
   "engines": {
     "node": ">=22.22.2"
@@ -29,13 +29,9 @@
     "build:market": "node scripts/build-market.mjs",
     "build:dsh": "npm run build:client && node scripts/build-dsh.mjs && node scripts/build-market.mjs",
     "dev:dsh": "node scripts/dev-dsh.mjs",
-    "dev:local": "node scripts/dev-local.mjs",
+    "dev:desktop": "npm run dev --workspace @cospace/desktop",
+    "package:desktop:local": "npm run package:local --workspace apps/desktop",
     "build:site": "node scripts/build-site.mjs",
-    "local-server:build": "npm run build --workspace @hanfang5057/co-space",
-    "local-server:pack": "npm run pack --workspace @hanfang5057/co-space",
-    "local-server:verify-package": "npm run verify-package --workspace @hanfang5057/co-space",
-    "local-server:mcp": "npm run mcp --workspace @hanfang5057/co-space",
-    "local-server:web": "npm run web --workspace @hanfang5057/co-space",
     "verify:architecture": "node scripts/verify-adapter-boundaries.mjs",
     "pack:npm": "node scripts/pack-dsh.mjs",
     "pack:dsh": "node scripts/pack-dsh.mjs",

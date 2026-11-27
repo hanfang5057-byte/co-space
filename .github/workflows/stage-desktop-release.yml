@@ -1,0 +1,115 @@
+name: Stage signed desktop release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify release version
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const pkg = JSON.parse(fs.readFileSync("apps/desktop/package.json"));
+            const tauri = JSON.parse(fs.readFileSync("apps/desktop/src-tauri/tauri.conf.json"));
+            const adapter = JSON.parse(fs.readFileSync("apps/desktop/adapter.json"));
+            const npmLock = JSON.parse(fs.readFileSync("package-lock.json")).packages["apps/desktop"]?.version;
+            const cargo = fs.readFileSync("apps/desktop/src-tauri/Cargo.toml", "utf8").match(/^version = "([^"]+)"/m)?.[1];
+            const cargoLock = fs.readFileSync("apps/desktop/src-tauri/Cargo.lock", "utf8").match(/name = "cospace-desktop"\nversion = "([^"]+)"/)?.[1];
+            if (!/^\d+\.\d+\.\d+$/.test(pkg.version) || process.env.GITHUB_REF_NAME !== `desktop-v${pkg.version}` || [tauri.version, adapter.version, npmLock, cargo, cargoLock].some(version => version !== pkg.version)) throw Error("Desktop tag and version sources disagree");
+          '
+      - run: npm ci
+      - run: npm run check
+
+  package:
+    needs: verify
+    environment: desktop-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: macos-arm64
+          - os: macos-15-intel
+            target: macos-x64
+          - os: ubuntu-22.04
+            target: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: npm run prepare:tauri --workspace @cospace/desktop
+      - run: npm run smoke --workspace @cospace/desktop
+      - name: Build signed artifacts
+        env:
+          COSPACE_RELEASE: '1'
+          COSPACE_UPDATER_PUBLIC_KEY: ${{ vars.COSPACE_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node apps/desktop/scripts/build-tauri.mjs
+      - run: node apps/desktop/scripts/package-release.mjs
+      - name: Verify AppImage MCP launcher
+        if: runner.os == 'Linux'
+        run: node apps/desktop/scripts/smoke-appimage.mjs
+      - name: Verify installed deb MCP launcher
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./dist/releases/desktop/linux/*.deb
+          node apps/desktop/scripts/smoke-appimage.mjs --deb
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cospace-desktop-${{ matrix.target }}
+          path: dist/releases/desktop/**
+          if-no-files-found: error
+
+  draft:
+    needs: package
+    environment: desktop-release
+    env:
+      COSPACE_RELEASE_TARGETS: macos-arm64,macos-x64,linux-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: dist/desktop-release-input
+          pattern: cospace-desktop-*
+      - name: Build signature verifier
+        run: cargo build --locked --release --manifest-path apps/desktop/tools/verify-update/Cargo.toml
+      - name: Verify signatures and assemble release
+        env:
+          COSPACE_RELEASE: '1'
+          COSPACE_UPDATER_PUBLIC_KEY: ${{ vars.COSPACE_UPDATER_PUBLIC_KEY }}
+          COSPACE_VERIFY_UPDATE: ${{ github.workspace }}/apps/desktop/tools/verify-update/target/release/cospace-verify-update
+        run: |
+          node apps/desktop/scripts/assemble-release.mjs dist/desktop-release-input dist/desktop-release
+          node apps/desktop/scripts/verify-release.mjs dist/desktop-release
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "CoSpace Desktop ${GITHUB_REF_NAME#desktop-v}" --notes 'Draft: complete platform installation and upgrade acceptance before publishing. macOS builds are ad-hoc signed and not notarized.' dist/desktop-release/*
