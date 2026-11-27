@@ -1,6 +1,13 @@
 name: Publish DSH plugin
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-dsh.yml'
+      - 'adapters/dsh/package.json'
+      - 'release/npm-version.json'
   workflow_dispatch:
 
 permissions:
@@ -22,5 +29,9 @@ jobs:
       - run: npm run check
       - run: npm run pack:dsh
       - name: Verify target package version
-        run: node -e "const expected = require('./release/npm-version.json').version; const actual = require('./dist/dsh-plugin/package.json').version; if (expected !== actual) throw new Error('Staged package version mismatch: ' + actual + ' !== ' + expected); console.log('Publishing dsh-plugin-space@' + actual)"
+        run: |
+          expected="$(node -p "require('./release/npm-version.json').version")"
+          actual="$(node -p "require('./dist/dsh-plugin/package.json').version")"
+          test "$expected" = "$actual"
+          echo "Publishing dsh-plugin-space@$actual"
       - run: npm publish ./dist/dsh-plugin --provenance
