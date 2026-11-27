@@ -1,5 +1,6 @@
 /** DOM coordinate mapping between annotated Markdown and browser ranges. */
 import { renderMarkdown } from './markdown.js';
+import { normalizeCommentRange, quoteOccurrenceRange, quoteOffsets } from './comment-range.js';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
@@ -174,25 +175,59 @@ export function sourceOffsetAtDomPoint(surface, node, offset, markdownSource = '
   return span ? sourceOffsetInside(span, node?.nodeType === 3 ? offset : offset ? span.textLength : 0) : null;
 }
 
-function boundarySourceOffset(node, offset, spans, side) {
+/** Every mapped range that lives inside one DOM node, in source order. */
+function spansMappedIn(spans, node) {
+  if (!node) return [];
+  if (node.nodeType === 3) {
+    const span = spans.find(item => item.textNode === node);
+    return span ? [span] : [];
+  }
+  return spans.filter(item => item.element && node.contains?.(item.element));
+}
+
+/**
+ * Resolve one selection boundary (a text offset or a child index inside an
+ * element) to a Markdown source offset.
+ * @param {Node} node - boundary container.
+ * @param {number} offset - text offset, or child index for element containers.
+ * @param {Array} spans - output of readSourceSpans.
+ * @param {'start'|'end'} side - which end of the boundary to resolve.
+ * @returns {number|null} UTF-16 source offset, or null when nothing maps.
+ */
+export function boundarySourceOffset(node, offset, spans, side) {
   if (!node) return null;
   if (node.nodeType === 3) {
+    // Synthesized spans (built from the rendered Markdown when the editor paints
+    // no decorations) carry no DOM attributes: the text node is the only identity
+    // both mappings share. Without this a selection that crosses an inline run
+    // (plain → bold, bold → plain) maps to nothing and the comment anchor is lost.
+    const span = spans.find(item => item.textNode === node);
+    if (span) return sourceOffsetInside(span, offset);
     const element = node.parentElement?.closest('[data-src-from]');
-    const span = spans.find(item => item.element === element);
-    return span ? sourceOffsetInside(span, offset) : null;
+    const decorated = element ? spans.find(item => item.element === element) : null;
+    return decorated ? sourceOffsetInside(decorated, offset) : null;
   }
+  // An element boundary (a selection that starts or ends at a paragraph edge, at
+  // the start of a bold run, or after a whole block) is a child index, not a
+  // character offset. Resolve it to the nearest mapped run *inside that child*,
+  // never to the container's first run: a paragraph whose first run is plain text
+  // and whose last run is bold must end at the bold run's end, not at "plain ".
   const element = node.nodeType === 1 ? node : node.parentElement;
-  const ownSpan = spans.find(item => item.element === element);
-  if (ownSpan) return sourceOffsetInside(ownSpan, offset === 0 ? 0 : ownSpan.textLength);
   const children = [...(element?.childNodes || [])];
-  const order = side === 'end' ? children.slice(0, offset).reverse() : children.slice(offset);
-  for (const child of order) {
-    const candidate = child.nodeType === 1 ? (child.closest?.('[data-src-from]') || child.querySelector?.('[data-src-from]')) : null;
-    if (!candidate) continue;
-    const span = spans.find(item => item.element === candidate);
-    if (span) return side === 'end' ? span.to : span.from;
+  if (side === 'end') {
+    for (let index = Math.min(offset, children.length) - 1; index >= 0; index -= 1) {
+      const last = spansMappedIn(spans, children[index]).at(-1);
+      if (last) return last.to;
+    }
+    const first = spansMappedIn(spans, element)[0];
+    return first ? first.from : null;
   }
-  return null;
+  for (let index = Math.max(offset, 0); index < children.length; index += 1) {
+    const first = spansMappedIn(spans, children[index])[0];
+    if (first) return first.from;
+  }
+  const last = spansMappedIn(spans, element).at(-1);
+  return last ? last.to : null;
 }
 
 /**
@@ -208,40 +243,27 @@ export function capturePreviewSelection(surface, range, content, version) {
   if (!Number.isInteger(from) || !Number.isInteger(to)) {
     const quote = range.toString().trim();
     if (!quote) return null;
-    const occurrences = text => {
-      const offsets = [];
-      for (let offset = text.indexOf(quote); offset >= 0; offset = text.indexOf(quote, offset + quote.length)) offsets.push(offset);
-      return offsets;
-    };
-    const sourceOccurrences = occurrences(content);
-    let at = sourceOccurrences[0];
-    if (sourceOccurrences.length > 1) {
+    const offsets = quoteOffsets(content, quote);
+    let index = 0;
+    if (offsets.length > 1) {
       const textRoot = surface.querySelector('.ProseMirror');
       if (!textRoot || !textRoot.contains(range.startContainer)) return null;
       const prefix = document.createRange();
       prefix.selectNodeContents(textRoot);
       prefix.setEnd(range.startContainer, range.startOffset);
       const visibleText = textRoot.innerText || textRoot.textContent || '';
-      const visibleOccurrences = occurrences(visibleText);
-      const ordinal = visibleOccurrences.findIndex(offset => offset >= prefix.toString().length);
-      if (visibleOccurrences.length !== sourceOccurrences.length || ordinal < 0) return null;
-      at = sourceOccurrences[ordinal];
+      const visibleOffsets = quoteOffsets(visibleText, quote);
+      index = visibleOffsets.findIndex(offset => offset >= prefix.toString().length);
+      if (visibleOffsets.length !== offsets.length || index < 0) return null;
     }
-    if (at < 0) return null;
-    from = at;
-    to = at + quote.length;
+    const located = quoteOccurrenceRange(content, quote, index);
+    if (!located) return null;
+    from = located.from;
+    to = located.to;
   }
-  if (from > to) [from, to] = [to, from];
-  const raw = content.slice(from, to);
-  const leading = raw.length - raw.trimStart().length;
-  const trailing = raw.length - raw.trimEnd().length;
-  from += leading;
-  to -= trailing;
-  if (from >= to) return null;
-  if (from > 0 && content.charCodeAt(from - 1) >= 0xd800 && content.charCodeAt(from - 1) <= 0xdbff
-    && content.charCodeAt(from) >= 0xdc00 && content.charCodeAt(from) <= 0xdfff) return null;
-  if (to < content.length && content.charCodeAt(to - 1) >= 0xd800 && content.charCodeAt(to - 1) <= 0xdbff
-    && content.charCodeAt(to) >= 0xdc00 && content.charCodeAt(to) <= 0xdfff) return null;
+  const normalized = normalizeCommentRange(content, from, to);
+  if (!normalized) return null;
+  [from, to] = [normalized.from, normalized.to];
   const wrap = surface.closest('.space-paper-wrap');
   if (!wrap) return null;
   const wrapRect = wrap.getBoundingClientRect();

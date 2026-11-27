@@ -655,8 +655,11 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const [hoverPreview,setHoverPreview]=useState(null);
   const hoverTimer=useRef(null);
   const [layout,setLayout]=useState({positions:{},lines:[],highlights:[],height:0,minHeight:0});
-  const commentFieldId=useId(), commentTitleId=useId(), editSaveErrorTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null), fabRef=useRef(null);
+  const commentFieldId=useId(), commentTitleId=useId(), commentHintId=useId(), editSaveErrorTitleId=useId(), textareaRef=useRef(null), scrollRef=useRef(null), stageRef=useRef(null), railRef=useRef(null), fabRef=useRef(null);
+  // Both measure the selected range: `fabPosition` also remembers which range it
+  // was measured for, and `selectionHints` is re-derived while the dialog is open.
   const [fabPosition,setFabPosition]=useState(null);
+  const [selectionHints,setSelectionHints]=useState(null);
   const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,editing,editInitialContent,editorRef,markEditDirty}=review;
   const visibleComments=useMemo(()=>comments.filter(comment=>!['sent','processed'].includes(comment.status)),[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
@@ -779,6 +782,30 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     });
   },[hasAnnotations,items,suggestions,liveComments,doc?.content,resizeTick,active,activeComment,confirmDelete,cardRefs,commentRefs,t,zoom]);
   useEffect(()=>{ if(!selection) setComposerOpen(false); },[selection]);
+  // A draft belongs to the anchor it was typed for. A different selection, or a
+  // cleared one after a reload, starts empty instead of carrying the text onto a
+  // different quote.
+  const selectionKey=selection?`${selection.from}:${selection.to}:${selection.quote.length}`:null;
+  useEffect(()=>{setDraft('');setMessage('');},[selectionKey]);
+  // Keyboard path for the same action as the floating button. Word opens a new
+  // comment with Ctrl+Alt+M, so keep that shortcut on every platform
+  // (Cmd+Alt+M on macOS).
+  useEffect(()=>{
+    if(editing) return;
+    const onKeyDown=event=>{
+      if(event.defaultPrevented||event.isComposing) return;
+      if(!(event.metaKey||event.ctrlKey)||!event.altKey) return;
+      // Alt changes `key` on macOS (Option+M is "µ"), so match the physical key.
+      if(event.code!=='KeyM'&&event.key!=='m'&&event.key!=='M') return;
+      if(event.target?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
+      if(!selection||composerOpen||busy) return;
+      event.preventDefault();
+      setMessage('');
+      setComposerOpen(true);
+    };
+    document.addEventListener('keydown',onKeyDown);
+    return ()=>document.removeEventListener('keydown',onKeyDown);
+  },[editing,selection,composerOpen,busy,setMessage]);
   useEffect(()=>{setConfirmDelete(null)},[comments]);
   useEffect(()=>{
     setHoverPreview(null);
@@ -796,10 +823,23 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
     }};
     let alive=true;
     const update=()=>computePosition(virtual,button,{placement:'top',middleware:[offset(10),flip(),shift({padding:8})]})
-      .then(({x,y})=>{if(alive)setFabPosition({left:x,top:y});}).catch(()=>{});
+      .then(({x,y})=>{if(alive)setFabPosition({from:selection.from,to:selection.to,left:x,top:y});}).catch(()=>{});
     const cleanup=autoUpdate(virtual,button,update);
     return ()=>{alive=false;cleanup();};
   },[selection,composerOpen,busy,surface,resizeTick,zoom,doc?.content]);
+  // Hints under the composer are recomputed from the same source spans the
+  // capture used, so a decoration, font or zoom change cannot leave them on a
+  // stale rectangle while the dialog stays open.
+  useLayoutEffect(()=>{
+    if(!composerOpen||!selection||!doc){setSelectionHints(previous=>previous?null:previous);return}
+    const paper=surface.current, wrap=paper?.closest('.space-paper-wrap');
+    if(!paper||!wrap) return;
+    const mapped=sourceRangeToDom(readSourceSpans(paper,doc.content),selection.from,selection.to);
+    if(!mapped){setSelectionHints(null);return}
+    const wrapRect=wrap.getBoundingClientRect();
+    const rects=rangeRects(mapped.range,wrapRect).map(rect=>({...rect,left:rect.left+wrap.scrollLeft,top:rect.top+wrap.scrollTop}));
+    setSelectionHints(previous=>JSON.stringify(previous)===JSON.stringify(rects)?previous:rects);
+  },[composerOpen,selection,doc,resizeTick,zoom,surface]);
   if (!doc) return <section className="space-paper-wrap"><p className="space-loading" role="status">{review.message || t('empty.loading')}</p></section>;
 
   const openComposer=()=>{setMessage('');setComposerOpen(true)};
@@ -869,6 +909,9 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const anchor=selection?.anchor;
   const fabBelow=(anchor?.top || 0)<60;
   const fabLeft=Math.max(40,Math.min(anchor?.x || 0,(anchor?.wrapWidth || 120)-40));
+  // A measured position is only valid for the range it was measured for; a new
+  // selection falls back to the capture-time anchor until the next measurement.
+  const positionedFab=fabPosition&&selection&&fabPosition.from===selection.from&&fabPosition.to===selection.to?{left:fabPosition.left,top:fabPosition.top}:null;
   return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
       <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={editing?(editInitialContent??doc.content):doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
@@ -891,12 +934,13 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
       </g>)}</svg>}
     </div>
     <div className="space-comment-layer">
-      {selection && !composerOpen && !busy && <button ref={fabRef} type="button" className={`space-comment-fab${!fabPosition && fabBelow?' is-below':''}${fabPosition?' is-positioned':''}`} style={fabPosition || {left:fabLeft,top:fabBelow?(anchor?.bottom||0)+10:(anchor?.top||0)-10}} onMouseDown={event=>event.preventDefault()} onClick={openComposer} aria-haspopup="dialog" aria-label={t('comment.bubble')}><CommentIcon/><span>{t('comment.bubble')}</span></button>}
+      {selection && !composerOpen && !busy && <button ref={fabRef} type="button" className={`space-comment-fab${!positionedFab && fabBelow?' is-below':''}${positionedFab?' is-positioned':''}`} style={positionedFab || {left:fabLeft,top:fabBelow?(anchor?.bottom||0)+10:(anchor?.top||0)-10}} onMouseDown={event=>event.preventDefault()} onClick={openComposer} aria-haspopup="dialog" aria-keyshortcuts="Control+Alt+M Meta+Alt+M" aria-label={t('comment.bubble')} title={t('comment.shortcut')}><CommentIcon/><span>{t('comment.bubble')}</span></button>}
       <SpaceDialog open={Boolean(selection && composerOpen)} onClose={()=>{setComposerOpen(false);setMessage('')}} labelledBy={commentTitleId} title={t('comment.addTitle')} closeLabel={t('dialog.close')} className="space-comment-dialog" actions={selection&&<><button type="button" onClick={closeComposer}>{t('comment.cancel')}</button><button type="button" className="is-primary" disabled={busy || !draft.trim()} onClick={saveComment}>{t('comment.save')}</button></>}>
         {selection && <>
           <p className="space-comment-selected">{t('comment.selected',{quote:selection.quote})}</p>
           <label htmlFor={commentFieldId}>{t('comment.label')}</label>
-          <textarea ref={textareaRef} autoFocus id={commentFieldId} rows="4" maxLength="4000" value={draft} onChange={event=>{setDraft(event.target.value);if(message)setMessage('')}} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();if(!busy&&draft.trim())saveComment()}}}/>
+          <textarea ref={textareaRef} autoFocus id={commentFieldId} rows="4" maxLength="4000" aria-describedby={commentHintId} value={draft} onChange={event=>{setDraft(event.target.value);if(message)setMessage('')}} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();if(!busy&&draft.trim())saveComment()}}}/>
+          <p id={commentHintId} className="space-comment-hint">{t('comment.submitHint')}</p>
           {message && <p className="space-comment-error" role="alert">{message}</p>}
         </>}
       </SpaceDialog>
@@ -904,7 +948,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
         <p role="alert">{review.editSaveError}</p>
         <p className="space-muted">{t('edit.saveErrorKeepEditing')}</p>
       </SpaceDialog>
-      {composerOpen && selection?.rects?.map((rect,index)=><span key={index} className="space-selection-hint" style={{left:rect.left,top:rect.top,width:rect.width,height:rect.height}}/>)}
+      {composerOpen && (selectionHints || selection?.rects || []).map((rect,index)=><span key={index} className="space-selection-hint" style={{left:rect.left,top:rect.top,width:rect.width,height:rect.height}}/>)}
     </div>
   </section>;
 }
