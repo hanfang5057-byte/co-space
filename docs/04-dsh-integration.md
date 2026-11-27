@@ -36,7 +36,7 @@
 | 左侧入口 | Client slot `main`（key `spaces`）与 `sidebar.panellist`（id `spaces`） | 已在 DSH 页面渲染 |
 | 输入框多选 | `inputTriggers` 的 `@` 菜单按标题/ID 过滤并插入引用；`/space` 命令打开基于 `SpaceDialog` 的多选弹窗（`shell.overlay`）；引用格式 `space:<docId>`，两处共用同一套插入与通知逻辑 | 已注册；真实对话中的插入与 Agent 引用解析仍待验收 |
 | 发送引用渲染 | `uiConversation.userText.register` 匹配完整 `space:<docId>`；`conversation.user.text.node` 注册文档卡片；只读场景保持卡片但不可点击 | 已在本地构建中渲染卡片 |
-| 右侧边栏文档 | `sidebarRightTabs.register` 注册 `dsh-resource://space/**` 资源类型；`sidebar.right.pane.tab` 渲染审阅面板，地址持久化文档 ID | 已打开、刷新后恢复同一文档 |
+| 右侧边栏文档 | `sidebarRightTabs.register` 注册 `dsh-resource://space/**` 资源类型；`sidebar.right.pane.tab` 渲染审阅面板，地址持久化文档 ID；面板顶部与主页面共用 `SpaceSurfaceHeader`（`surface="sidebar"` 紧凑变体），共用更多工具菜单（含风格偏好）、缩放和发送；风格偏好经同一个 `useDocumentPreferences` 控制器读写 | 已打开、刷新后恢复同一文档；标题栏共用已接入，DSH 内视觉实测待做 |
 | 评论处理触发 | 优先使用 UI 当前对话；没有对话时复用最近工作区、必要时创建默认工作区并新建/复用对话，再发送文档引用和简短指令；评论正文只由 Agent 经 MCP 工具读取 | 已接入；单元测试验证会话目标、请求不含评论正文；真实 DSH 宿主会话链路仍待端到端验收 |
 | 客户端本地化 | Client `locale` 服务注册 `space` 命名空间（中文 / English） | 已接入；已确认切换 English 后插件页、详情页和面板文案更新，切回中文正常 |
 | 自主审阅入口 | 客户端适配器提供 `prompts.mcpReady`，审阅页显示「让 Agent 起草 / 让 Agent 审阅」；点击后把 `autonomousReviewPrompt` 文本复制到剪贴板，不直接发送消息。`mcpReady` 由宿主 `status` 探测 MCP 工具是否已注册 | 已接入；复制与降级有单元测试，真实会话未验收 |

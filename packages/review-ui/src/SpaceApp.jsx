@@ -73,7 +73,13 @@ function IconButton({ label, children, ...props }) {
   return <button type="button" aria-label={label} title={label} {...props}>{children}</button>;
 }
 
-function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, canExport, t }) {
+/**
+ * The document tools menu, shared by the Space page and the Sidebar tab.
+ * Entries a surface cannot offer are simply omitted by leaving the handler out.
+ * @param {object} props - export state, optional review/preferences/page handlers, and the translator.
+ * @returns {React.ReactElement} the trigger and its menu panel.
+ */
+export function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, onOpenPage, canExport, t }) {
   const [open,setOpen]=useState(false);
   const rootRef=useRef(null), triggerRef=useRef(null);
   const panelId=useId();
@@ -91,6 +97,7 @@ function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, canExpo
     {open&&<div id={panelId} className="space-tools-menu-panel">
       {onReview&&<button type="button" onClick={()=>run(onReview)}>让 Agent 审阅</button>}
       {onPreferences&&<button type="button" onClick={()=>run(onPreferences)}>{t('collab.open')}</button>}
+      {onOpenPage&&<button type="button" onClick={()=>run(onOpenPage)}>{t('toolbar.openPage')}</button>}
       {canExport&&<>
         <div className="space-tools-menu-divider" role="separator"/>
         <p>{t('export.button')}</p>
@@ -430,6 +437,183 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
 }
 
 /**
+ * The toolbar both review surfaces share.
+ *
+ * The Space page and the right Sidebar tab render the same document, so their
+ * chrome must not drift: this component owns the header element, the pending
+ * count, the tools menu seat, zoom and the one send action. `surface` switches
+ * only the shell class names; a Sidebar header is compact by construction
+ * because the tab chip already carries the document title, and review/edit
+ * mode is a page-level concern.
+ * @param {object} props - surface variant, optional leading/tools seats, and the review controller.
+ * @param {'page'|'sidebar'} [props.surface] - which shell to render.
+ * @param {React.ReactNode} [props.leading] - brand and back-control cluster; page only.
+ * @param {number} [props.pending] - document-scoped pending suggestion count.
+ * @param {React.ReactNode} [props.tools] - tools menu seat, rendered before the view controls.
+ * @param {React.ReactNode} [props.viewTools] - review/edit mode controls; page only.
+ * @param {object} props.review - review controller from `useSpaceReview`.
+ * @param {string|null} [props.sessionId] - conversation that receives sent comments.
+ * @param {object} [props.adapter] - host adapter supplying the send target.
+ * @param {(key: string, vars?: object) => string} [props.t] - bound translator.
+ * @param {boolean} [props.showSend] - whether the send action may render at all.
+ * @returns {React.ReactElement} the surface toolbar.
+ */
+export function SpaceSurfaceHeader({
+  surface = 'page',
+  leading = null,
+  pending = 0,
+  tools = null,
+  viewTools = null,
+  review,
+  sessionId = null,
+  adapter = null,
+  t = defaultT,
+  showSend = true,
+}) {
+  const sidebar=surface==='sidebar';
+  const zoom=review?.doc ? <ReviewZoomControls review={review} t={t}/> : null;
+  return <header className={sidebar ? 'space-sidebar-toolbar' : 'space-top space-preview-top'}>
+    {leading && <div className="space-preview-brand">{leading}</div>}
+    <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
+      {pending>0 && <span className="space-pending-chip">{t('sidebar.pending',{count:pending})}</span>}
+      {tools}
+      {viewTools ? <div className="space-toolbar-group is-view">{viewTools}{zoom}</div> : zoom}
+      {showSend && <ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t} compact={sidebar}/>}
+    </div>
+  </header>;
+}
+
+/**
+ * Read one document and hand the exported bytes to the host save capability.
+ *
+ * Both surfaces export the same accepted content through the same path, so a
+ * Sidebar export and a page export cannot diverge. The caller owns the failure
+ * message because each surface reports errors in its own place.
+ * @param {object} options - document id and the host adapter.
+ * @param {string|null} options.docId - document to export.
+ * @param {object} options.adapter - adapter exposing `core.request` and `files.saveExport`.
+ * @returns {{exporting: boolean, exportDocument: (format: 'md'|'docx') => Promise<boolean>}} export state and action.
+ */
+export function useDocumentExport({ docId, adapter }) {
+  const [exporting,setExporting]=useState(false);
+  const exportDocument=useCallback(async format=>{
+    if(!docId) return false;
+    setExporting(true);
+    try {
+      const snapshot=await adapter.core.request('readDocument',{docId});
+      if(!snapshot || typeof snapshot.content!=='string') return false;
+      const filename=exportFileName(snapshot.title,format);
+      const file=format==='md'
+        ? {name:filename,type:'text/markdown;charset=utf-8',bytes:new TextEncoder().encode(snapshot.content)}
+        : format==='docx'
+          ? {name:filename,type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',bytes:new Uint8Array(await createDocx(snapshot.content).arrayBuffer())}
+          : null;
+      if(!file || !supportsCapability(adapter.capabilities,'files.export.save') || typeof adapter.files?.saveExport!=='function') return false;
+      return await adapter.files.saveExport(file)===true;
+    } catch { return false; }
+    finally { setExporting(false); }
+  },[docId,adapter]);
+  return {exporting,exportDocument};
+}
+
+/**
+ * The Agent handoff dialog: CoSpace cannot start an Agent turn on its own, so
+ * both surfaces show the exact prompt for the user to paste into the composer.
+ * @param {object} props - pending task, host adapter, translator, and close handler.
+ * @param {{kind: 'create'|'review', docId?: string} | null} props.task - task the prompt is for.
+ * @param {object} props.adapter - host adapter carrying the MCP readiness flag.
+ * @param {(key: string, vars?: object) => string} [props.t] - bound translator.
+ * @param {() => void} props.onClose - closes the dialog.
+ * @returns {React.ReactElement} the prompt dialog, or null while closed.
+ */
+export function SpaceAgentPromptDialog({ task, adapter, t = defaultT, onClose }) {
+  const [copied,setCopied]=useState(false);
+  const titleId=useId();
+  useEffect(()=>{setCopied(false)},[task]);
+  const promptText=task ? (task.docId ? autonomousReviewPrompt(`space:${encodeURIComponent(task.docId)}`) : '请根据我的要求，通过 CoSpace MCP 创建一份新文档并提交完整初稿。') : '';
+  const copy=async()=>{try{await navigator.clipboard.writeText(promptText);setCopied(true)}catch{setCopied(false)}};
+  return <SpaceDialog open={Boolean(task)} onClose={onClose} labelledBy={titleId} title="发送给 Agent 的提示词" closeLabel={t('dialog.close')} actions={<><button type="button" onClick={onClose}>{t('dialog.close')}</button><button type="button" className="is-primary" onClick={copy}>{copied?'已复制':'复制提示词'}</button></>}>
+    {adapter.prompts?.mcpReady===false&&<p>请先在 Agent 接入设置中配置 CoSpace MCP。</p>}
+    <textarea readOnly rows="8" value={promptText}/>
+  </SpaceDialog>;
+}
+
+/**
+ * Read, edit and save the standing instructions the Agent follows.
+ *
+ * The preference belongs to the document, not to one entry point, so the Space
+ * page and the Sidebar tab drive the same controller: whichever surface opens
+ * it reads the accepted text, and both save with the same base version and
+ * operation id. The draft is kept here rather than in the surface so closing
+ * either dialog never leaves a half-saved copy behind.
+ * @param {object} options - document id, host adapter, and translator.
+ * @param {string|null} options.docId - document the document-scoped text belongs to.
+ * @param {object} options.adapter - adapter exposing `core.request`.
+ * @param {(key: string, vars?: object) => string} [options.t] - bound translator.
+ * @returns {object} open state, draft text, save state and the actions that drive them.
+ */
+export function useDocumentPreferences({ docId, adapter, t = defaultT }) {
+  const [open,setOpen]=useState(false);
+  const [scope,setScope]=useState('document');
+  const [settings,setSettings]=useState(null);
+  const [error,setError]=useState('');
+  const [text,setText]=useState('');
+  const [saveState,setSaveState]=useState('idle');
+  const [busy,setBusy]=useState(false);
+  const saved=scope==='global'?settings?.global:settings?.document;
+  const read=useCallback(scope=>adapter.core.request('readCollaboration',{docId:scope==='document'?docId:undefined}),[adapter,docId]);
+  // Opening always reloads: another surface, another tab or the Agent may have
+  // changed the text since this controller last read it.
+  const openPreferences=useCallback(async (nextScope='document')=>{
+    setSettings(null);setError('');setScope(nextScope);setText('');setSaveState('idle');setOpen(true);setBusy(true);
+    try {
+      const next=await read(nextScope);
+      setSettings(next);
+      setText((nextScope==='global'?next.global:next.document)?.content||'');
+    } catch (e) {
+      setError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t));
+    } finally { setBusy(false); }
+  },[read,t]);
+  const save=useCallback(async ()=>{
+    const current=scope==='global'?settings?.global:settings?.document;
+    setSaveState('saving');
+    try {
+      await adapter.core.request('saveInstructions',{scope,docId:scope==='document'?docId:undefined,content:text,baseVersion:current?.version||0,operationId:requestId()});
+      const next=await read(scope);
+      setSettings(next);
+      setSaveState('saved');
+    } catch (e) {
+      setError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t));
+      setSaveState('error');
+    }
+  },[adapter,docId,read,scope,settings,t,text]);
+  const changeText=useCallback(value=>{setError('');setSaveState('idle');setText(value)},[]);
+  const dismiss=useCallback(()=>setOpen(false),[]);
+  return {open,scope,settings,error,text,saveState,busy,saved,openPreferences,save,changeText,dismiss};
+}
+
+/**
+ * The document preference dialog, shared by the Space page and the Sidebar tab.
+ * @param {object} props - controller from `useDocumentPreferences` and the translator.
+ * @param {object} props.preferences - controller state and actions.
+ * @param {(key: string, vars?: object) => string} [props.t] - bound translator.
+ * @returns {React.ReactElement} the preference dialog, or null while closed.
+ */
+export function SpaceDocumentPreferencesDialog({ preferences, t = defaultT }) {
+  const titleId=useId();
+  const dirty=Boolean(preferences.settings)&&preferences.text!==(preferences.saved?.content||'');
+  const saveState=preferences.saveState;
+  const status=saveState==='saving'?t('collab.saving'):saveState==='saved'?t('collab.saved'):saveState==='error'?t('collab.saveError'):'';
+  return <SpaceDialog open={preferences.open} onClose={preferences.dismiss} labelledBy={titleId} title={t('collab.documentTitle')} closeLabel={t('dialog.close')} closeOnBackdrop actions={<button type="button" className="is-primary" disabled={!dirty||saveState==='saving'||preferences.busy||Boolean(preferences.error)} onClick={preferences.save}>{t('collab.save')}</button>}>
+    {preferences.error&&<p className="space-collab-error" role="alert">{preferences.error}</p>}
+    {preferences.busy&&!preferences.settings?<p role="status">{t('collab.loading')}</p>:<>
+      <textarea rows="8" maxLength={12000} value={preferences.text} onChange={event=>preferences.changeText(event.target.value)} placeholder={t('collab.placeholder')}/>
+      <p className="space-collab-save-status" role="status">{status}</p>
+    </>}
+  </SpaceDialog>;
+}
+
+/**
  * Coalesce overlapping comment rectangles so translucent anchor fills are
  * painted once. Keep an active range as a transparent outline over that fill.
  * @param {Array<object>} highlights - comment rectangles and zero-width carets.
@@ -732,9 +916,7 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
   const [autoEditDocId,setAutoEditDocId]=useState(null);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
-  const [settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(null),[settingsError,setSettingsError]=useState(''),[settingsScope,setSettingsScope]=useState('document'),[instructionText,setInstructionText]=useState(''),[instructionSaveState,setInstructionSaveState]=useState('idle'),[settingsBusy,setSettingsBusy]=useState(false);
-  const [exporting,setExporting]=useState(false);
-  const [promptTask,setPromptTask]=useState(null),[copiedPrompt,setCopiedPrompt]=useState(false);
+  const [promptTask,setPromptTask]=useState(null);
   const [updateInfo,setUpdateInfo]=useState(null);
   useEffect(()=>{
     if(!adapter.updates?.getStatus) return;
@@ -747,6 +929,8 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
   const editUnavailableTipId=useId();
   const user=useCurrentUser(adapter.identity?.getCurrentUser);
   const review=useSpaceReview(api,docId,sessionId,t,adapter,autoEditDocId);
+  const {exporting,exportDocument}=useDocumentExport({docId,adapter});
+  const preferences=useDocumentPreferences({docId,adapter,t});
   const translateNow=useRef(t); translateNow.current=t;
   const call=useCallback((method,args={})=>api(method,args),[api]);
   const selectDocument=useCallback((next,{replace=false}={})=>{
@@ -789,37 +973,12 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
     } catch (e) { setError(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
-  const exportDocument=async (format)=>{
-    setExporting(true);setError('');
-    try {
-      const snapshot=await call('readDocument',{docId});
-      if(!snapshot || typeof snapshot.content!=='string') throw new Error('Document unavailable');
-      const filename=exportFileName(snapshot.title,format);
-      const file=format==='md'
-        ? {name:filename,type:'text/markdown;charset=utf-8',bytes:new TextEncoder().encode(snapshot.content)}
-        : format==='docx'
-          ? {name:filename,type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',bytes:new Uint8Array(await createDocx(snapshot.content).arrayBuffer())}
-          : null;
-      if(!file || !supportsCapability(adapter.capabilities,'files.export.save') || typeof adapter.files?.saveExport!=='function') throw new Error('Export saving is unavailable');
-      const saved=await adapter.files.saveExport(file);
-      if(saved!==true) throw new Error('Export saving was not accepted');
-    } catch {
-      setError(t('export.failed'));
-    }
-    finally { setExporting(false); }
-  };
-  const openCollaboration=async(scope)=>{setSettings(null);setSettingsError('');setSettingsScope(scope);setInstructionText('');setInstructionSaveState('idle');setSettingsOpen(true);setSettingsBusy(true);try{const next=await call('readCollaboration',{docId:scope==='document'?docId:undefined});setSettings(next);setInstructionText((scope==='global'?next.global:next.document)?.content||'')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t))}finally{setSettingsBusy(false)}};
-  const saveCollaboration=useCallback(async(content)=>{const current=settingsScope==='global'?settings?.global:settings?.document;setInstructionSaveState('saving');try{await call('saveInstructions',{scope:settingsScope,docId:settingsScope==='document'?docId:undefined,content,baseVersion:current?.version||0,operationId:requestId()});const next=await call('readCollaboration',{docId:settingsScope==='document'?docId:undefined});setSettings(next);setInstructionSaveState('saved')}catch(e){setSettingsError(e?.code==='METHOD_NOT_FOUND'?t('collab.backendOutdated'):errorText(e,t));setInstructionSaveState('error')}},[call,docId,settingsScope,settings,t]);
-  const saveInstructionNow=async()=>{await saveCollaboration(instructionText)};
-  const closeCollaboration=()=>{setSettingsOpen(false)};
   const backToHome=async()=>{
     if(review.editing){const saved=await review.switchToReview();if(!saved)return;}
     selectDocument(null);
   };
   const visibleComments=review.comments.filter(comment=>!['sent','processed'].includes(comment.status));
   const selectedDocument=documents.find(item=>item.id===docId);
-  const promptText=promptTask ? (promptTask.docId ? autonomousReviewPrompt(`space:${encodeURIComponent(promptTask.docId)}`) : '请根据我的要求，通过 CoSpace MCP 创建一份新文档并提交完整初稿。') : '';
-  const copyPrompt=async()=>{try{await navigator.clipboard.writeText(promptText);setCopiedPrompt(true)}catch{setCopiedPrompt(false)}};
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const shownDocuments=useMemo(()=>{
     const needle=query.trim().toLocaleLowerCase();
@@ -828,8 +987,6 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
       .sort((a,b)=>sort==='title' ? (a.title||a.id||'').localeCompare(b.title||b.id||'',undefined,{numeric:true}) : time(b)-time(a));
   },[documents,query,filter,sort]);
   const home=!docId;
-  const savedInstruction=settingsScope==='global'?settings?.global:settings?.document;
-  const instructionDirty=Boolean(settings)&&instructionText!==(savedInstruction?.content||'');
   const updateState=updateInfo?.update?.state || (updateInfo?.updaterEnabled===false?'disabled':'checking');
   const failureReason=['check','download','stage','switch'].includes(updateInfo?.update?.reason)?`.${updateInfo.update.reason}`:'';
   const updateLabel=adapter.updates ? t(`update.${updateState}${updateState==='failed'?failureReason:''}`,{version:updateInfo?.update?.targetVersion||'',agents:updateInfo?.activeMcpClients||0,pages:updateInfo?.activeUiSessions||0}) : '';
@@ -859,26 +1016,25 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
         </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section>
     </main> : <>
-      <header className="space-top space-preview-top">
-        <div className="space-preview-brand"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton><BrandLockup versionIndicator={versionIndicator}/></div>
-            <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
-              {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
-              {review.doc&&<div className="space-toolbar-group is-view">
-                <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
-                {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} title={editSaveLabel} role="status" aria-label={editSaveLabel}><EditSaveIcon size={15} strokeWidth={2.1} aria-hidden="true"/>{review.editSaveState==='error'&&<span>{t('edit.autoSaveFailedShort')}</span>}</span>}
-                <ReviewZoomControls review={review} t={t}/>
-              </div>}
-              {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}
-            </div>
-      </header>
+      <SpaceSurfaceHeader
+        surface="page"
+        leading={<><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton><BrandLockup versionIndicator={versionIndicator}/></>}
+        tools={review.doc ? <ReviewToolsMenu exporting={exporting} onExport={format=>{void exportDocument(format).then(ok=>{if(!ok)setError(t('export.failed'))})}} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>preferences.openPreferences('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/> : null}
+        viewTools={review.doc ? <>
+          <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
+          {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} title={editSaveLabel} role="status" aria-label={editSaveLabel}><EditSaveIcon size={15} strokeWidth={2.1} aria-hidden="true"/>{review.editSaveState==='error'&&<span>{t('edit.autoSaveFailedShort')}</span>}</span>}
+        </> : null}
+        review={review} sessionId={sessionId} adapter={adapter} t={t}
+        showSend={!review.editing&&visibleComments.length>0}
+      />
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}
     {!home&&<div className="space-message" role="status" aria-live="polite">{review.editSaveError ? '' : review.doc ? review.message : ''}</div>}
     <SpaceAlertDialog open={Boolean(error||review.error)} title={t('dialog.errorTitle')} description={error||review.error} closeLabel={t('dialog.close')} confirmLabel={t('dialog.dismiss')} onClose={()=>{setError('');review.dismissError()}}/>
-    <SpaceDialog open={Boolean(promptTask)} onClose={()=>{setPromptTask(null);setCopiedPrompt(false)}} labelledBy="space-agent-prompt-title" title="发送给 Agent 的提示词" closeLabel={t('dialog.close')} actions={<><button type="button" onClick={()=>{setPromptTask(null);setCopiedPrompt(false)}}>{t('dialog.close')}</button><button type="button" className="is-primary" onClick={copyPrompt}>{copiedPrompt?'已复制':'复制提示词'}</button></>}>{adapter.prompts?.mcpReady===false&&<p>请先在 Agent 接入设置中配置 CoSpace MCP。</p>}<textarea readOnly rows="8" value={promptText}/></SpaceDialog>
+    <SpaceAgentPromptDialog task={promptTask} adapter={adapter} t={t} onClose={()=>setPromptTask(null)}/>
     <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} title={t('document.deleteTitle')} closeLabel={t('dialog.close')} className="space-delete-dialog" actions={<><button type="button" autoFocus disabled={busy} onClick={()=>setDeleteTarget(null)}>{t('document.deleteCancel')}</button><button type="button" className="is-danger" disabled={busy} onClick={deleteDocument}>{t('document.deleteConfirm')}</button></>}>
       <p>{t('document.deleteDescription',{title:deleteTarget?.title || deleteTarget?.id || ''})}</p>
     </SpaceDialog>
-    <SpaceDialog open={settingsOpen} onClose={closeCollaboration} labelledBy="space-collab-title" title={t('collab.documentTitle')} closeLabel={t('dialog.close')} closeOnBackdrop actions={<button type="button" className="is-primary" disabled={!instructionDirty||instructionSaveState==='saving'||settingsBusy||Boolean(settingsError)} onClick={saveInstructionNow}>{t('collab.save')}</button>}>{settingsError&&<p className="space-collab-error" role="alert">{settingsError}</p>}{settingsBusy&&!settings?<p role="status">{t('collab.loading')}</p>:<><textarea rows="8" maxLength={12000} value={instructionText} onChange={event=>{setSettingsError('');setInstructionSaveState('idle');setInstructionText(event.target.value)}} placeholder={t('collab.placeholder')}/><p className="space-collab-save-status" role="status">{instructionSaveState==='saving'?t('collab.saving'):instructionSaveState==='saved'?t('collab.saved'):instructionSaveState==='error'?t('collab.saveError'):''}</p></>}</SpaceDialog>
+    <SpaceDocumentPreferencesDialog preferences={preferences} t={t}/>
   </div>;
 }

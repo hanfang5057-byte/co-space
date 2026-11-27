@@ -1,12 +1,13 @@
 /** Right-Sidebar tab body and chip title for one Space document. */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useCurrentUser } from './current-user.js';
 import { rememberDocumentTitle, useDocumentTitle } from './document-titles.js';
 import { translate, zh } from './locale.js';
 import { documentIdFromResource } from './space-reference.js';
 import { SpaceAlertDialog } from './SpaceDialog.jsx';
-import { ReviewSendButton, ReviewZoomControls, SpaceReviewSurface, useSpaceReview } from './SpaceApp.jsx';
+import { ReviewToolsMenu, SpaceAgentPromptDialog, SpaceDocumentPreferencesDialog, SpaceReviewSurface, SpaceSurfaceHeader, useDocumentExport, useDocumentPreferences, useSpaceReview } from './SpaceApp.jsx';
 import { themeRootProps } from './theme/index.js';
+import { supportsCapability } from '../../adapter-contract/src/index.js';
 
 const fallbackT = (key, vars) => translate(zh, key, vars);
 
@@ -15,9 +16,13 @@ const fallbackT = (key, vars) => translate(zh, key, vars);
  *
  * The tab is a resource tab, so its address survives a reload; the document id
  * is read from the tab content address rather than page navigation parameters.
- * The surface is the same review controller the Space page uses, with the
- * conversation scope supplying the comment-send target. The compact toolbar
- * keeps zoom and the explicit send action reachable without the Space page.
+ * The surface is the same review controller and the same header the Space page
+ * uses, so the two entry points cannot drift: the Sidebar renders it compact
+ * (no brand lockup or review/edit mode, which stay page-level) but keeps the
+ * tools menu, zoom and the one send action. The document title comes from the
+ * tab chip, so the body itself starts with the toolbar. Export, the Agent
+ * handoff and the document preferences are document actions, so they are
+ * reachable here too, through the same controllers the page uses.
  * @param {object} props - tab information hook, session id, optional creator, and locale seat.
  * @returns {React.ReactElement} the scrollable document review surface.
  */
@@ -28,6 +33,10 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme
   const requestApi=adapter.core.request;
   const user = useCurrentUser(adapter.identity?.getCurrentUser);
   const review = useSpaceReview(requestApi, docId, sessionId, t, adapter);
+  const { exporting, exportDocument } = useDocumentExport({ docId, adapter });
+  const preferences = useDocumentPreferences({ docId, adapter, t });
+  const [promptTask,setPromptTask]=useState(null);
+  const [exportError,setExportError]=useState('');
   useEffect(() => {
     if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title, requestApi);
   }, [docId, review.doc?.title, requestApi]);
@@ -35,17 +44,26 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme
   // Document-scoped pending count: the tab names one document, so no
   // conversation-to-document mapping is implied.
   const pending = (review.suggestions || []).filter(suggestion => suggestion.status === 'pending' || suggestion.status === 'conflicted').length;
+  // Export, the Agent handoff and the document preferences are document actions,
+  // so the compact header offers them too; review/edit mode stays page-only
+  // because it rewrites the whole surface rather than one document's settings.
+  const tools = review.doc ? <ReviewToolsMenu
+    exporting={exporting}
+    onExport={format=>{void exportDocument(format).then(ok=>{if(!ok)setExportError(t('export.failed'))})}}
+    onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null}
+    onPreferences={()=>preferences.openPreferences('document')}
+    onOpenPage={typeof adapter.navigation?.openDocumentInPage==='function'?()=>adapter.navigation.openDocumentInPage(docId):null}
+    canExport={supportsCapability(adapter.capabilities,'files.export.save')}
+    t={t}/> : null;
   return <div {...themeRootProps('sidebar', { className: 'space-app space-sidebar-app', tokens: (theme ?? adapter?.theme)?.tokens })}>
-      <header className="space-sidebar-toolbar">
-        {pending > 0 && <span className="space-pending-chip">{t('sidebar.pending', { count: pending })}</span>}
-        {review.doc && <ReviewZoomControls review={review} t={t}/>}
-        {visibleComments.length > 0 && <ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t} compact/>}
-      </header>
+    <SpaceSurfaceHeader surface="sidebar" pending={pending} tools={tools} review={review} sessionId={sessionId} adapter={adapter} t={t} showSend={visibleComments.length > 0}/>
     <main className="space-sidebar-main">
       <SpaceReviewSurface review={review} user={user} t={t}/>
     </main>
     <div className="space-message" role="status" aria-live="polite">{review.doc ? review.message : ''}</div>
-    <SpaceAlertDialog open={Boolean(review.error)} title={t('dialog.errorTitle')} description={review.error} closeLabel={t('dialog.close')} confirmLabel={t('dialog.dismiss')} onClose={review.dismissError}/>
+    <SpaceAlertDialog open={Boolean(exportError||review.error)} title={t('dialog.errorTitle')} description={exportError||review.error} closeLabel={t('dialog.close')} confirmLabel={t('dialog.dismiss')} onClose={()=>{setExportError('');review.dismissError()}}/>
+    <SpaceAgentPromptDialog task={promptTask} adapter={adapter} t={t} onClose={()=>setPromptTask(null)}/>
+    <SpaceDocumentPreferencesDialog preferences={preferences} t={t}/>
   </div>;
 }
 

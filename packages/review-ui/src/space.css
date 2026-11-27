@@ -23,6 +23,10 @@
 .space-sidebar-app .space-paper-wrap { padding:16px; }
 .space-sidebar-app .space-paper { min-block-size:0; padding:clamp(16px,4vw,28px); }
 .space-sidebar-app .space-compose { margin-block:16px; }
+/* The compact header reuses the page toolbar; only the menu anchor differs, so a
+   narrow pane opens the panel toward its own start edge instead of off-screen. */
+.space-sidebar-toolbar .space-tools-menu { inline-size:32px; margin-inline-end:0; padding-inline-end:0; border-inline-end:0; }
+.space-sidebar-toolbar .space-tools-menu-panel { inset-inline-start:auto; inset-inline-end:0; }
 /* A sent Space reference reads as one document card inside the conversation bubble. */
 .space-ref-card { display:inline-flex; align-items:center; gap:8px; max-inline-size:100%; margin:2px 4px; padding:6px 10px; border:1px solid var(--cospace-border); border-radius:8px; background:var(--cospace-surface-raised); color:var(--cospace-text-primary); font:inherit; line-height:1.35; text-align:start; white-space:normal; vertical-align:middle; }
 button.space-ref-card { cursor:pointer; }
