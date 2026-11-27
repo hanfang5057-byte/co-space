@@ -1,20 +1,63 @@
-.space-app {
-  --cospace-border: var(--dsw-alias-border, #d5d7dc);
-  --cospace-surface: var(--dsw-alias-surface, #fff);
-  --cospace-text: var(--dsw-alias-text, #25262b);
-  --cospace-muted: var(--dsw-alias-text-secondary, #656b77);
-  --cospace-accent: var(--dsw-alias-primary, #315acb);
-  --cospace-warning: var(--dsw-alias-warning, #a16207);
-  --cospace-link: var(--dsw-alias-link, #0f766e);
-  --cospace-background: var(--dsw-alias-background, #f4f5f8);
-  --cospace-danger: var(--dsw-alias-danger, #b91c1c);
+/*
+ * DSH host theme for CoSpace (theme contract v1).
+ *
+ * Tokens only. DSH maps its own alias tokens onto the CoSpace contract, so the
+ * review surfaces follow DSH light/dark, brand color, and text font without a
+ * second stylesheet owning any structure. Everything a token does not cover
+ * stays in packages/review-ui/src/space.css.
+ *
+ * Fallbacks keep the surface readable on a DSH build that does not publish an
+ * alias yet; they never win over a real token.
+ */
+.cospace-theme {
+  /* surface */
+  --cospace-surface-canvas: var(--dsw-alias-bg-base, #f1eee7);
+  --cospace-surface-paper: var(--dsw-alias-bg-layer-1, #fffdf8);
+  --cospace-surface-raised: var(--dsw-alias-bg-layer-1, #fffdf9);
+  --cospace-surface-rail: var(--dsw-alias-bg-layer-2, #f8f5ef);
+  --cospace-scrim: rgba(0, 0, 0, 0.42);
+
+  /* text */
+  --cospace-text-primary: var(--dsw-alias-label-primary, #25262b);
+  --cospace-text-secondary: var(--dsw-alias-label-secondary, #656b77);
+  --cospace-text-on-accent: #ffffff;
+
+  /* line */
+  --cospace-border: var(--dsw-alias-border-l1, #e4ded3);
+  --cospace-border-strong: var(--dsw-alias-border-l2, #d8d0c2);
+
+  /* brand and status */
+  --cospace-accent: var(--dsw-alias-brand-primary, #315acb);
+  --cospace-comment: var(--dsw-alias-state-warn-primary, #b45309);
+  --cospace-suggestion: var(--dsw-alias-state-success-primary, #0f766e);
+  --cospace-danger: var(--dsw-alias-state-error-primary, #a62835);
+  --cospace-success: var(--dsw-alias-state-success-primary, #17683b);
+
+  /* DSH adds a cool shadow instead of the warm paper shadow. */
+  --cospace-shadow: #111418;
+
+  /* type: the review surface follows the user's DSH text font and size. */
+  --cospace-font-ui: var(--dsh-font-family-text, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --cospace-font-reading: var(--dsh-font-family-text, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --cospace-font-size: var(--dsh-content-font-size, 14px);
 }
 
-.space-picker-dialog {
-  --cospace-border: var(--dsw-alias-border, #d5d7dc);
-  --cospace-surface: var(--dsw-alias-surface, #fff);
-  --cospace-text: var(--dsw-alias-text, #25262b);
-  --cospace-muted: var(--dsw-alias-text-secondary, #656b77);
-  --cospace-accent: var(--dsw-alias-primary, #315acb);
-  --cospace-background: var(--dsw-alias-background, #f4f5f8);
+/* The right sidebar shows a document beside a conversation: keep the surface
+   flush with the DSH pane instead of painting a separate desk under the paper. */
+.cospace-theme[data-cospace-surface='sidebar'] {
+  --cospace-surface-canvas: var(--dsw-alias-bg-base, #f1eee7);
+  --cospace-surface-paper: var(--dsw-alias-bg-layer-1, #fffdf8);
+}
+
+/* A sent document reference reads as one more card in the message bubble. */
+.cospace-theme[data-cospace-surface='inline'] {
+  --cospace-surface-raised: var(--dsw-alias-bg-layer-2, #fffdf9);
+}
+
+/* Mapped alias tokens already switch with the theme; only the shadow needs a
+   value that stays dark in DSH's dark palette. */
+body[data-ds-dark-theme] .cospace-theme {
+  --cospace-shadow: #000000;
+  /* DSH's dark brand accent is light, so filled accents take dark text. */
+  --cospace-text-on-accent: var(--dsw-alias-bg-base, #ffffff);
 }

@@ -1,0 +1,50 @@
+/*
+ * CoSpace theme defaults (contract v1).
+ *
+ * This is the only shared file allowed to contain literal colors. Every
+ * component reads a token; a host overrides a token on `.cospace-theme` and
+ * never edits this file.
+ *
+ * `:where()` keeps the default block at zero specificity, so a host rule such
+ * as `.cospace-theme { --cospace-accent: … }` wins regardless of stylesheet
+ * order. Every root that renders `.space-*` carries the marker; nested roots
+ * are safe because the marker only declares inputs and hosts may override them
+ * at any marker.
+ */
+:where(.cospace-theme) {
+  /* surface */
+  --cospace-surface-canvas: #f1eee7;
+  --cospace-surface-paper: #fffdf8;
+  --cospace-surface-raised: #fffdf9;
+  --cospace-surface-rail: #f8f5ef;
+  --cospace-scrim: rgba(24,24,27,.38);
+
+  /* text */
+  --cospace-text-primary: #25262b;
+  --cospace-text-secondary: #656b77;
+  --cospace-text-on-accent: #ffffff;
+
+  /* line */
+  --cospace-border: #e4ded3;
+  --cospace-border-strong: #d8d0c2;
+
+  /* brand and status */
+  --cospace-accent: #315acb;
+  --cospace-comment: #b45309;
+  --cospace-suggestion: #0f766e;
+  --cospace-danger: #a62835;
+  --cospace-success: #17683b;
+
+  /* effect */
+  --cospace-shadow: #2a241b;
+
+  /* type */
+  --cospace-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --cospace-font-reading: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --cospace-font-size: 14px;
+
+  /* geometry */
+  --cospace-radius-control: 8px;
+  --cospace-radius-card: 12px;
+  --cospace-radius-dialog: 16px;
+}

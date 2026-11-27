@@ -6,6 +6,7 @@ import { translate, zh } from './locale.js';
 import { documentIdFromResource } from './space-reference.js';
 import { SpaceAlertDialog } from './SpaceDialog.jsx';
 import { ReviewSendButton, ReviewZoomControls, SpaceReviewSurface, useSpaceReview } from './SpaceApp.jsx';
+import { themeRootProps } from './theme/index.js';
 
 const fallbackT = (key, vars) => translate(zh, key, vars);
 
@@ -20,7 +21,7 @@ const fallbackT = (key, vars) => translate(zh, key, vars);
  * @param {object} props - tab information hook, session id, optional creator, and locale seat.
  * @returns {React.ReactElement} the scrollable document review surface.
  */
-export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT }) {
+export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme }) {
   const { tab } = useTabInfo();
   const docId = (adapter.navigation?.parseDocumentLink || documentIdFromResource)(tab.contentId);
   const sessionId=adapter.conversation?.current?.id || null;
@@ -31,8 +32,12 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT }) {
     if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title, requestApi);
   }, [docId, review.doc?.title, requestApi]);
   const visibleComments = review.comments.filter(comment => !['sent', 'processed'].includes(comment.status));
-  return <div className="space-app space-sidebar-app">
+  // Document-scoped pending count: the tab names one document, so no
+  // conversation-to-document mapping is implied.
+  const pending = (review.suggestions || []).filter(suggestion => suggestion.status === 'pending' || suggestion.status === 'conflicted').length;
+  return <div {...themeRootProps('sidebar', { className: 'space-app space-sidebar-app', tokens: (theme ?? adapter?.theme)?.tokens })}>
       <header className="space-sidebar-toolbar">
+        {pending > 0 && <span className="space-pending-chip">{t('sidebar.pending', { count: pending })}</span>}
         {review.doc && <ReviewZoomControls review={review} t={t}/>}
         {visibleComments.length > 0 && <ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t} compact/>}
       </header>

@@ -10,6 +10,7 @@ import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
 import { supportsCapability } from '../../adapter-contract/src/index.js';
+import { themeRootProps } from './theme/index.js';
 import { autonomousReviewPrompt, commentProcessingPrompt } from '../../adapter-contract/src/prompts.js';
 import { SpaceAlertDialog, SpaceDialog } from './SpaceDialog.jsx';
 import './space.css';
@@ -724,7 +725,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   </section>;
 }
 
-export function SpaceApp({ adapter, t = defaultT }) {
+export function SpaceApp({ adapter, t = defaultT, theme }) {
   const sessionId=adapter.conversation?.current?.id || null;
   const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(()=>adapter.navigation?.getDocumentId?.() || null), [error,setError]=useState(''), [busy,setBusy]=useState(false);
@@ -843,7 +844,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const versionIndicator=adapter.updates
     ? <span className={`space-version-badge is-${updateState}`} role="img" title={`${t('update.versionTitle')}: v${currentVersion} · ${updateLabel}`} aria-label={`${t('update.versionTitle')}: v${currentVersion}. ${updateLabel}`} aria-live={['waiting','updated','failed','offline'].includes(updateState)?'polite':'off'}><UpdateStateIcon size={12} strokeWidth={2.2} aria-hidden="true"/><span className="space-version-number">v{compactVersion}</span></span>
     : <span className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</span>;
-  return <div className="space-app">
+  return <div {...themeRootProps('page', { className: 'space-app', tokens: (theme ?? adapter?.theme)?.tokens })}>
     {home ? <main className="space-home" aria-labelledby="space-home-title">
       <header className="space-home-header"><BrandLockup versionIndicator={versionIndicator}/><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>

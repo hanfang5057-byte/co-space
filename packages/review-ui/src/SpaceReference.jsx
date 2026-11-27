@@ -1,6 +1,7 @@
 /** One sent Space document reference, rendered as a document card. */
 import { useDocumentTitle } from './document-titles.js';
 import { translate, zh } from './locale.js';
+import { themeRootProps } from './theme/index.js';
 
 const fallbackT = (key, vars) => translate(zh, key, vars);
 
@@ -20,7 +21,7 @@ function DocumentGlyph() {
  * @param {object} props - UserText node, raw token, interaction policy, locale seat, and navigation face.
  * @returns {React.ReactElement} an inline card.
  */
-export function SpaceDocumentReference({ node, raw, interactive = false, t = fallbackT, adapter }) {
+export function SpaceDocumentReference({ node, raw, interactive = false, t = fallbackT, adapter, theme }) {
   const title = useDocumentTitle(node.data.docId, adapter?.core?.request);
   const label = title || node.data.docId;
   const contents = <>
@@ -31,12 +32,13 @@ export function SpaceDocumentReference({ node, raw, interactive = false, t = fal
     </span>
   </>;
   const openDocument=adapter?.navigation?.openDocument;
+  const rootProps=themeRootProps('inline', { className: 'space-ref-card', tokens: (theme ?? adapter?.theme)?.tokens });
   if (!interactive || typeof openDocument !== 'function') {
-    return <span className="space-ref-card" data-space-reference={node.data.docId} title={raw}>{contents}</span>;
+    return <span {...rootProps} data-space-reference={node.data.docId} title={raw}>{contents}</span>;
   }
   return <button
     type="button"
-    className="space-ref-card"
+    {...rootProps}
     data-space-reference={node.data.docId}
     title={raw}
     onClick={event => {
