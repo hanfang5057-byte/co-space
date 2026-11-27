@@ -266,9 +266,10 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       child.unref();
       return child;
     };
-    const healthy = async target => {
+    const healthy = async (target, child) => {
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
+        if (child && (child.exitCode !== null || child.signalCode !== null || child.pid === undefined)) return false;
         try {
           const current = JSON.parse(await readFile(endpointPath, 'utf8'));
           if (current.host !== host || !Number.isInteger(current.port)) throw new Error('Candidate endpoint is invalid');
@@ -282,7 +283,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
     };
     const candidateProcess = launch(version);
     await appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} candidate spawned pid=${candidateProcess.pid}\n`, { mode: 0o600 });
-    if (await healthy(version)) { process.exit(0); return; }
+    if (await healthy(version, candidateProcess)) { process.exit(0); return; }
     if (candidateProcess.exitCode === null && candidateProcess.signalCode === null) {
       candidateProcess.kill();
       await Promise.race([new Promise(resolve => candidateProcess.once('exit', resolve)), new Promise(resolve => setTimeout(resolve, 2000))]);

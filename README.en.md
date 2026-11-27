@@ -35,9 +35,12 @@ Local Server development requires Node.js 22.22.2 or later.
 
 ```sh
 npm install
+npm run test:fast
 npm run check
 npm run build:dsh
 ```
+
+Use `test:fast` during development; `check` runs the full suite, including local service, update, and rollback integration tests.
 
 See the [unified release process](docs/16-release-process.md) for build and release commands. Build and verify each product from its own staging directory; the root workspace is private and must not be published.
 

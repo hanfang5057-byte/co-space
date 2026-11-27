@@ -21,6 +21,8 @@
   "scripts": {
     "pretest": "npm run build:client",
     "test": "node --test test/*.test.js",
+    "pretest:fast": "npm run build:client",
+    "test:fast": "node scripts/test-fast.mjs",
     "precheck": "npm run build:client",
     "check": "node --test test/*.test.js",
     "build:client": "node scripts/build-client.mjs",

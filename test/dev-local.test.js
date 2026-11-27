@@ -8,9 +8,15 @@ import { randomUUID } from 'node:crypto';
 
 const root = path.resolve(import.meta.dirname, '..');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function waitFor(predicate, message) {
-  for (let i = 0; i < 150; i++) { if (await predicate()) return; await delay(100); }
-  throw new Error(`Timed out: ${message}`);
+async function waitFor(predicate, message, child, output, failure) {
+  for (let i = 0; i < 150; i++) {
+    if (await predicate()) return;
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Process exited while waiting for ${message}: ${output()}`);
+    const reason = await failure?.();
+    if (reason) throw new Error(`Failed while waiting for ${message}: ${reason}\n${output()}`);
+    await delay(100);
+  }
+  throw new Error(`Timed out: ${message}: ${output()}`);
 }
 
 test('development service rebuilds, waits for MCP clients, and stops cleanly', { timeout: 45000 }, async () => {
@@ -18,10 +24,16 @@ test('development service rebuilds, waits for MCP clients, and stops cleanly', {
   const marker = path.join(root, 'assets', `.dev-test-${process.pid}.js`);
   const child = spawn(process.execPath, ['scripts/dev-local.mjs'], { cwd: root, env: { ...process.env, COSPACE_DEV_HOME: home, COSPACE_DEV_NO_OPEN: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
+  let startupFailed = false;
   child.stdout.on('data', chunk => { output += chunk; });
   child.stderr.on('data', chunk => { output += chunk; });
   try {
-    await waitFor(() => /\[dev:local\] http:\/\/127\.0\.0\.1:\d+\//.test(output), `initial startup: ${output}`);
+    await waitFor(() => /\[dev:local\] http:\/\/127\.0\.0\.1:\d+\//.test(output), 'initial startup', child, () => output, async () => {
+      const log = await readFile(path.join(home, '.runtime', 'daemon.log'), 'utf8').catch(() => '');
+      const reason = log.match(/(?:Error: )?listen (?:EPERM|EACCES)[^\n]*/)?.[0];
+      startupFailed = Boolean(reason);
+      return reason;
+    });
     const endpoint = JSON.parse(await readFile(path.join(home, '.runtime', 'endpoint.json'), 'utf8'));
     const secrets = JSON.parse(await readFile(path.join(home, '.runtime', 'secrets.json'), 'utf8'));
     const url = `http://127.0.0.1:${endpoint.port}`;
@@ -33,22 +45,25 @@ test('development service rebuilds, waits for MCP clients, and stops cleanly', {
     const send = action => fetch(`${url}/__cospace/mcp/session`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cospace-rpc-token': secrets.rpcToken }, body: JSON.stringify({ action, id: session }) });
     assert.equal((await send('open')).status, 200);
     await writeFile(marker, '// development watcher test\n');
-    await waitFor(() => output.includes('Restart deferred:'), 'restart deferred');
+    await waitFor(() => output.includes('Restart deferred:'), 'restart deferred', child, () => output);
     assert.equal((await (await fetch(`${url}/__cospace/health`)).json()).version, endpoint.version);
     assert.equal((await send('close')).status, 200);
     await waitFor(async () => {
       try { return JSON.parse(await readFile(path.join(home, '.runtime', 'endpoint.json'), 'utf8')).version !== endpoint.version; } catch { return false; }
-    }, 'rebuild after disconnect');
+    }, 'rebuild after disconnect', child, () => output);
     const updated = JSON.parse(await readFile(path.join(home, '.runtime', 'endpoint.json'), 'utf8'));
     assert.equal(updated.port, endpoint.port);
     assert.equal((await fetch(`${url}/`)).status, 200);
   } finally {
     await rm(marker, { force: true });
-    child.kill('SIGTERM');
-    let timeout;
-    await Promise.race([new Promise(resolve => child.once('exit', resolve)), new Promise(resolve => { timeout = setTimeout(resolve, 8000); })]);
-    clearTimeout(timeout);
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise(resolve => child.once('exit', resolve));
+      child.kill(startupFailed ? 'SIGKILL' : 'SIGTERM');
+      let timeout;
+      await Promise.race([exited, new Promise(resolve => { timeout = setTimeout(resolve, 8000); })]);
+      clearTimeout(timeout);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
     await rm(home, { recursive: true, force: true });
   }
   assert.match(output, /stopped; data preserved/);

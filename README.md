@@ -35,9 +35,12 @@ Local Server 开发需要 Node.js 22.22.2 或更高版本。
 
 ```sh
 npm install
+npm run test:fast
 npm run check
 npm run build:dsh
 ```
+
+`test:fast` 适合日常开发；`check` 运行完整测试，包括本地服务、更新和回滚集成测试。
 
 更多构建和发布命令见[统一发布流程](docs/16-release-process.md)。发布包和安装器应从各自的暂存目录构建、验证；根目录 workspace 是私有的，不可直接发布。
 

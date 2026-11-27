@@ -4,7 +4,6 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { startLocalService } from '../packages/local-runtime/src/service.js';
 import { ensureLocalDaemon, installRuntimeVersion } from '../packages/local-runtime/src/manager.js';
 
@@ -128,7 +127,7 @@ test('an expired session is swept without requests and the daemon switches to th
   await writeFile(path.join(oldHome, 'daemon.cjs'), '');
   await writeFile(path.join(oldHome, 'web/index.html'), '');
   await writeFile(path.join(candidateHome, 'web/index.html'), '');
-  await writeFile(candidatePath, `(async()=>{const fs=await import('node:fs/promises');await fs.writeFile(process.env.COSPACE_RUNTIME_HOME+'/candidate-started',process.env.COSPACE_PACKAGE_VERSION);try{const {startLocalService}=await import(process.env.COSPACE_TEST_SERVICE_MODULE);const service=await startLocalService({dataHome:process.env.COSPACE_DATA_HOME,runtimeHome:process.env.COSPACE_RUNTIME_HOME,versionHome:process.env.COSPACE_VERSION_HOME,version:process.env.COSPACE_PACKAGE_VERSION,port:Number(process.env.COSPACE_UPDATE_PORT||0),fallbackPort:true});process.once('SIGTERM',()=>service.close().finally(()=>process.exit(0)));}catch(error){await fs.writeFile(process.env.COSPACE_RUNTIME_HOME+'/candidate-error',error.stack||error.message);process.exit(1)}})();`);
+  await writeFile(candidatePath, `(async()=>{const fs=await import('node:fs/promises');await fs.writeFile(process.env.COSPACE_RUNTIME_HOME+'/candidate-started',process.env.COSPACE_PACKAGE_VERSION);await new Promise(resolve=>setTimeout(resolve,1000));try{const {startLocalService}=await import(process.env.COSPACE_TEST_SERVICE_MODULE);const service=await startLocalService({dataHome:process.env.COSPACE_DATA_HOME,runtimeHome:process.env.COSPACE_RUNTIME_HOME,versionHome:process.env.COSPACE_VERSION_HOME,version:process.env.COSPACE_PACKAGE_VERSION,port:Number(process.env.COSPACE_UPDATE_PORT||0),fallbackPort:true});process.once('SIGTERM',()=>service.close().finally(()=>process.exit(0)));}catch(error){await fs.writeFile(process.env.COSPACE_RUNTIME_HOME+'/candidate-error',error.stack||error.message);process.exit(1)}})();`);
   await writeFile(runnerPath, `import {startLocalService} from ${JSON.stringify(serviceModule)};const service=await startLocalService({dataHome:process.env.COSPACE_TEST_DATA,runtimeHome:process.env.COSPACE_TEST_RUNTIME,versionHome:process.env.COSPACE_TEST_OLD_HOME,version:'1.0.0',mcpSessionTtlMs:300,sessionSweepIntervalMs:50});console.log(JSON.stringify({url:service.url,rpcToken:service.rpcToken}));process.once('SIGTERM',()=>service.close().finally(()=>process.exit(0)));`);
   const runner = spawn(process.execPath, [runnerPath], { env: { ...process.env, COSPACE_TEST_SERVICE_MODULE: serviceModule, COSPACE_TEST_DATA: dataHome, COSPACE_TEST_RUNTIME: runtimeHome, COSPACE_TEST_OLD_HOME: oldHome }, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
@@ -137,14 +136,14 @@ test('an expired session is swept without requests and the daemon switches to th
   runner.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
   let endpoint;
   const startDeadline = Date.now() + 10000;
-  while (!endpoint && Date.now() < startDeadline) {
-    const line = stdout.split(/\r?\n/).find(value => value.startsWith('{'));
-    if (line) endpoint = JSON.parse(line);
-    else await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  assert.ok(endpoint, `old service did not start: ${stderr}`);
-  const base = endpoint.url.replace(/\/$/, '');
   try {
+    while (!endpoint && Date.now() < startDeadline && runner.exitCode === null && runner.signalCode === null) {
+      const line = stdout.split(/\r?\n/).find(value => value.startsWith('{'));
+      if (line) endpoint = JSON.parse(line);
+      else await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(endpoint, `old service did not start: ${stderr}`);
+    const base = endpoint.url.replace(/\/$/, '');
     const opened = await fetch(`${base}/__cospace/mcp/session`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cospace-rpc-token': endpoint.rpcToken }, body: JSON.stringify({ action: 'open', id: 'expired-session-long-enough' }) });
     assert.equal(opened.status, 200);
     const response = await fetch(`${base}/__cospace/control/upgrade`, {
@@ -174,8 +173,13 @@ test('an expired session is swept without requests and the daemon switches to th
       const endpointData = JSON.parse(await (await import('node:fs/promises')).readFile(path.join(runtimeHome, 'endpoint.json'), 'utf8'));
       await fetch(`http://${endpointData.host}:${endpointData.port}/__cospace/control/stop`, { method: 'POST', headers: { 'x-cospace-rpc-token': endpoint.rpcToken } });
     } catch {}
-    if (runner.exitCode === null) runner.kill('SIGTERM');
-    await Promise.race([once(runner, 'exit'), new Promise(resolve => setTimeout(resolve, 3000))]);
+    if (runner.exitCode === null && runner.signalCode === null) {
+      const exited = new Promise(resolve => runner.once('exit', resolve));
+      runner.kill('SIGTERM');
+      let timeout;
+      await Promise.race([exited, new Promise(resolve => { timeout = setTimeout(resolve, 3000); })]);
+      clearTimeout(timeout);
+    }
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -198,7 +202,7 @@ test('a failed candidate restarts the previous runtime without replacing user da
   let endpoint;
   try {
     const startDeadline = Date.now() + 10000;
-    while (!endpoint && Date.now() < startDeadline) {
+    while (!endpoint && Date.now() < startDeadline && runner.exitCode === null && runner.signalCode === null) {
       const line = output.split(/\r?\n/).find(value => value.startsWith('{'));
       if (line) endpoint = JSON.parse(line); else await new Promise(resolve => setTimeout(resolve, 50));
     }
@@ -209,7 +213,7 @@ test('a failed candidate restarts the previous runtime without replacing user da
     assert.equal(created.status, 200);
     const response = await fetch(`${endpoint.url}__cospace/control/upgrade`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cospace-rpc-token': endpoint.rpcToken }, body: JSON.stringify({ version: '2.0.0' }) });
     assert.equal(response.status, 200);
-    const deadline = Date.now() + 22000;
+    const deadline = Date.now() + 5000;
     let restored;
     while (Date.now() < deadline) {
       try {
