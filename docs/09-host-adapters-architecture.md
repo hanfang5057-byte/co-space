@@ -51,3 +51,11 @@ CoSpace Desktop has been removed from the active product. DSH declares its suppo
 ## Core boundary
 
 Do not modify the behavior of `packages/review-core/src/review-core.js` without the explicit prior consent required by the repository guidelines. Adapter separation is implemented at the composition, transport, contract, and UI boundaries; core review semantics stay unchanged.
+
+## Local runtime protocol compatibility
+
+The Local Server CLI, MCP proxy and daemon can run different package versions. `LOCAL_PROTOCOL_VERSION` in `packages/local-runtime/src/paths.js` is the single source for the endpoint health response, installed runtime marker and bundled package metadata. Clients require an exact protocol match before connecting; an absent or different version fails with `LOCAL_SERVER_PROTOCOL_MISMATCH` and requires the service to be stopped or upgraded before reconnecting. The status command can still report an incompatible service.
+
+Increment the protocol version whenever an existing RPC, session, authentication, endpoint or response contract changes incompatibly, including removals or changes to error semantics. Additive operations may retain the version only when both old clients and new clients can safely operate with the other side; otherwise increment it or explicitly negotiate the capability. Exercise matching, older, newer and missing protocol versions and the shared MCP behavior before releasing. A version mismatch must never silently start a second daemon over the same data home.
+
+Review data and collaboration preferences share `review.sqlite` within each product's own data home. Document deletion removes its document-specific preferences in the same transaction as its review data; global preferences remain. This storage change does not import the former `collaboration.sqlite`.

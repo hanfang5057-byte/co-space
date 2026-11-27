@@ -26,7 +26,7 @@ export function createHostApi({ home, prompt, getUser, resolveTarget, status, sp
       case 'readCollaboration': return collaboration.readInstructions(args.docId);
       case 'saveInstructions': return collaboration.saveInstructions(args);
       case 'deleteDocument': {
-        const result=space.deleteDocument(args.docId);collaboration.deleteDocument(args.docId);return result;
+        return space.deleteDocument(args.docId);
       }
       case 'decide': return space.decide(args);
       case 'updateDocument': return space.updateContent(args);

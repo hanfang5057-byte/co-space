@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { build } from 'esbuild';
 import { resolveAdapterCapabilities } from '../packages/adapter-contract/src/index.js';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -61,6 +62,39 @@ for (const [directory, forbidden] of boundaries) {
       .replace(/'agent\.(?:workbuddy|deepseek)':\s*'(?:WorkBuddy|DeepSeek)'/g, '')
       .replace(/\.is-agent-(?:workbuddy|deepseek)/gi, '.is-agent');
     assert.doesNotMatch(boundarySource, forbidden, `${file} crosses its host-neutral package boundary`);
+  }
+}
+
+// Parse import/require expressions with esbuild, including re-exports and
+// dynamic imports. Resolve workspace aliases and relative paths before checking
+// the allowed package graph, so spelling an edge differently cannot bypass it.
+const allowed = {
+  'review-core': [],
+  'adapter-contract': [],
+  'host-api': ['review-core', 'adapter-contract'],
+  'review-ui': ['adapter-contract', 'brand'],
+  'transport-http': [],
+  'transport-mcp': ['review-core'],
+  'local-runtime': ['review-core', 'host-api', 'transport-http', 'transport-mcp'],
+};
+const packageOf = file => {
+  const match = file.replaceAll('\\', '/').match(/(?:^|\/)packages\/([^/]+)\//);
+  return match?.[1];
+};
+for (const [name, dependencies] of Object.entries(allowed)) {
+  const sources = (await sourceFiles(`packages/${name}`)).map(([file]) => file).filter(file => /\.(?:js|jsx|ts|tsx)$/.test(file) && !file.endsWith('.d.ts'));
+  if (!sources.length) continue;
+  const result = await build({ absWorkingDir: root, entryPoints: sources, bundle: true, write: false, outdir: '/tmp/cospace-boundary-check', metafile: true, packages: 'external', external: ['*'], logLevel: 'silent' });
+  for (const [file, input] of Object.entries(result.metafile.inputs)) {
+    for (const dependency of input.imports) {
+      const specifier = dependency.original || dependency.path;
+      const alias = specifier.match(/^@cospace\/([^/]+)/)?.[1];
+      const resolved = specifier.startsWith('.') ? path.resolve(root, path.dirname(file), specifier) : '';
+      const target = alias || packageOf(resolved);
+      const product = resolved && path.relative(root, resolved).replaceAll('\\', '/').match(/^(?:apps|adapters)\//);
+      assert.ok(!product, `${file} imports product or adapter ${specifier}`);
+      if (target && target !== name) assert.ok(dependencies.includes(target), `${file} imports forbidden package ${specifier}`);
+    }
   }
 }
 

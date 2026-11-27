@@ -3,7 +3,8 @@ import { homedir } from 'node:os';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
-export const LOCAL_PROTOCOL_VERSION = 1;
+// Version 2 requires the shared review/collaboration database layout.
+export const LOCAL_PROTOCOL_VERSION = 2;
 
 export function resolveDataHome(env = process.env) {
   return path.resolve(env.COSPACE_WEB_HOME || path.join(homedir(), '.cospace', 'webapp'));

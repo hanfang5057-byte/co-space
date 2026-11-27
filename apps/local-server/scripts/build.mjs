@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LOCAL_PROTOCOL_VERSION } from '../../../packages/local-runtime/src/paths.js';
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.resolve(appDir, '../..');
@@ -52,6 +53,6 @@ await build({
   sourcemap: false,
 });
 const manifest = JSON.parse(await readFile(path.join(appDir, 'package.json'), 'utf8'));
-await writeFile(path.join(output, 'package.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, type: 'module', protocolVersion: 1 }, null, 2)}\n`);
+await writeFile(path.join(output, 'package.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, type: 'module', protocolVersion: LOCAL_PROTOCOL_VERSION }, null, 2)}\n`);
 await cp(path.join(root, 'LICENSE'), path.join(appDir, 'LICENSE'));
 console.log(`Built Local Server ${manifest.version} at ${output}`);

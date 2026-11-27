@@ -229,6 +229,8 @@ test('document deletion removes comments in one transaction and preserves data w
     const doc = await host.dispatch('readDocument', { docId: created.id });
     const quote = 'Delete me';
     const note = await host.dispatch('createComment', { docId: created.id, quote, body: 'retain?', anchor: { from: 2, to: 2 + quote.length, version: doc.version } });
+    await host.dispatch('saveInstructions', { scope: 'document', docId: created.id, content: 'Keep concise', baseVersion: 0, operationId: 'delete-instructions' });
+    await host.dispatch('saveInstructions', { scope: 'global', content: 'Global preference', baseVersion: 0, operationId: 'global-instructions' });
     const db = new DatabaseSync(path.join(home, 'review.sqlite'));
     try {
       db.exec("CREATE TRIGGER reject_document_delete BEFORE DELETE ON review_documents BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END;");
@@ -236,6 +238,12 @@ test('document deletion removes comments in one transaction and preserves data w
       assert.equal(db.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id)?.id, created.id);
       assert.equal(db.prepare('SELECT id FROM space_comments WHERE id=?').get(note.id)?.id, note.id);
       db.exec('DROP TRIGGER reject_document_delete');
+      db.exec("CREATE TRIGGER reject_instruction_delete BEFORE DELETE ON collaboration_instructions BEGIN SELECT RAISE(ABORT, 'injected instruction failure'); END;");
+      await assert.rejects(host.dispatch('deleteDocument', { docId: created.id }));
+      assert.ok(db.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id));
+      assert.ok(db.prepare('SELECT id FROM space_comments WHERE id=?').get(note.id));
+      assert.equal(db.prepare('SELECT content FROM collaboration_instructions WHERE scope=?').get(`doc:${created.id}`).content, 'Keep concise');
+      db.exec('DROP TRIGGER reject_instruction_delete');
       db.prepare("UPDATE space_comments SET status='sending' WHERE id=?").run(note.id);
       await assert.rejects(host.dispatch('deleteDocument', { docId: created.id }), error => error.code === 'COMMENT_BUSY');
       assert.equal(db.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id)?.id, created.id);
@@ -247,6 +255,10 @@ test('document deletion removes comments in one transaction and preserves data w
     try {
       assert.equal(verify.prepare('SELECT id FROM review_documents WHERE id=?').get(created.id), undefined);
       assert.equal(verify.prepare('SELECT id FROM space_comments WHERE id=?').get(note.id), undefined);
+      assert.equal(verify.prepare('SELECT content FROM collaboration_instructions WHERE scope=?').get(`doc:${created.id}`), undefined);
+      assert.equal(verify.prepare("SELECT id FROM collaboration_operations WHERE id='delete-instructions'").get(), undefined);
+      assert.equal(verify.prepare("SELECT content FROM collaboration_instructions WHERE scope='global'").get().content, 'Global preference');
+      assert.ok(verify.prepare("SELECT id FROM collaboration_operations WHERE id='global-instructions'").get());
     } finally { verify.close(); }
   } finally { host.close(); rmSync(home, { recursive: true, force: true }); }
 });

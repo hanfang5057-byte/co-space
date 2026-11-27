@@ -10,7 +10,7 @@ const MAX_INSTRUCTIONS = 12000;
 export class CollaborationStore {
   constructor(home) {
     mkdirSync(home, { recursive: true, mode: 0o700 });
-    this.db = new DatabaseSync(path.join(home, 'collaboration.sqlite'), { timeout: 5000 });
+    this.db = new DatabaseSync(path.join(home, 'review.sqlite'), { timeout: 5000 });
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS collaboration_instructions (
         scope TEXT PRIMARY KEY,

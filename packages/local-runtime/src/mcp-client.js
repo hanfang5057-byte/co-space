@@ -31,6 +31,20 @@ async function sessionRequest(endpoint, action, id) {
   return body.result;
 }
 
+export function createRemoteServices(endpoint) {
+  const call = (method, args) => remoteCall(endpoint, method, args);
+  return {
+    space: {
+      createDocument: args => call('createDocument', args),
+      readDocument: id => call('readDocument', { id }),
+      propose: args => call('propose', args),
+      listSuggestions: (id, status) => call('listSuggestions', { id, status }),
+      completeCommentProcessing: args => call('completeCommentProcessing', args),
+    },
+    collaboration: { readInstructions: docId => call('readInstructions', { docId }) },
+  };
+}
+
 export async function startStdioMcp(endpoint, { packageVersion = endpoint?.version || '0.0.0' } = {}) {
   if (!endpoint?.url || !endpoint?.rpcToken) throw new TypeError('A ready Local Server endpoint is required');
   const sessionId = randomUUID();
@@ -40,15 +54,7 @@ export async function startStdioMcp(endpoint, { packageVersion = endpoint?.versi
     catch { endpoint.upgradeNotice = 'restart-required'; }
   }
   if (endpoint.runtimeHome) await enableLocalUpdater(endpoint.runtimeHome).catch(() => false);
-  const call = (method, args) => remoteCall(endpoint, method, args);
-  const space = {
-    createDocument: args => call('createDocument', args),
-    readDocument: id => call('readDocument', { id }),
-    propose: args => call('propose', args),
-    listSuggestions: (id, status) => call('listSuggestions', { id, status }),
-    completeCommentProcessing: args => call('completeCommentProcessing', args),
-  };
-  const collaboration = { readInstructions: docId => call('readInstructions', { docId }) };
+  const { space, collaboration } = createRemoteServices(endpoint);
   const versionNotice = endpoint.version && endpoint.version !== packageVersion
     ? endpoint.upgradeNotice === 'scheduled' || endpoint.updaterEnabled
       ? `This MCP package is ${packageVersion}, while the running Local Server is ${endpoint.version}. The update waits until review pages and Agent connections close. Current service status: npx -y @hanfang5057/co-space@latest service status.`

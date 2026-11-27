@@ -48,6 +48,12 @@ export class SpaceRepository {
       db.prepare('DELETE FROM space_comment_completions WHERE doc_id=?').run(id);
       db.prepare('DELETE FROM review_suggestions WHERE doc_id=?').run(id);
       db.prepare('DELETE FROM review_changes WHERE doc_id=?').run(id);
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='collaboration_instructions'").get()) {
+        db.prepare('DELETE FROM collaboration_instructions WHERE scope=?').run(`doc:${id}`);
+      }
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='collaboration_operations'").get()) {
+        db.prepare("DELETE FROM collaboration_operations WHERE json_extract(result, '$.scope')='document' AND json_extract(result, '$.docId')=?").run(id);
+      }
       for (const operation of db.prepare('SELECT id,result FROM review_operations').all()) {
         try {
           const result = JSON.parse(operation.result);

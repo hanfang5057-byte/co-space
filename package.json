@@ -23,7 +23,7 @@
     "test": "node --test test/*.test.js",
     "pretest:fast": "npm run build:client",
     "test:fast": "node scripts/test-fast.mjs",
-    "precheck": "npm run build:client",
+    "precheck": "npm run build:client && npm run verify:architecture",
     "check": "node --test test/*.test.js",
     "build:client": "node scripts/build-client.mjs",
     "build:market": "node scripts/build-market.mjs",
