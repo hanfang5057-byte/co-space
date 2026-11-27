@@ -1,10 +1,23 @@
 /** Host-neutral JSON HTTP transport for the review UI. */
 export const COSPACE_API_PATH = '/cospace-api';
 
-export function createHttpHandler(api, { token } = {}) {
+/**
+ * Build one JSON POST handler for the review API.
+ * @param {object} api - facade from `createHostApi`.
+ * @param {object} [options]
+ * @param {string} [options.token] - local session token carriers check per request.
+ * @param {boolean} [options.sameOriginGuard=true] - reject requests whose `Origin`
+ *   header does not match `http://<Host>`. This is the transport's own CSRF defense
+ *   for carriers without host admission (a local daemon that pins Host and checks a
+ *   token). A route the host itself admits (a web-server route registered with
+ *   `auth:'required'`) passes `false` so the handler never re-decides admission the
+ *   host already made.
+ * @returns {(req: object, res: object) => Promise<void>} dispatch handler.
+ */
+export function createHttpHandler(api, { token, sameOriginGuard = true } = {}) {
   return async (req,res) => {
     if (token && req.headers?.['x-cospace-token'] !== token) { res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'FORBIDDEN',message:'Invalid local session'}}));return; }
-    if (req.headers?.origin && req.headers.origin !== `http://${req.headers.host}`) { res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'FORBIDDEN',message:'Cross-origin request denied'}}));return; }
+    if (sameOriginGuard && req.headers?.origin && req.headers.origin !== `http://${req.headers.host}`) { res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'FORBIDDEN',message:'Cross-origin request denied'}}));return; }
     if (req.url !== undefined && req.url !== COSPACE_API_PATH) { res.writeHead(404);res.end();return; }
     if (req.method !== 'POST') { res.writeHead(405,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'METHOD_NOT_ALLOWED',message:'仅支持 POST'}}));return; }
     try {

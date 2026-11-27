@@ -58,7 +58,9 @@ Each adapter owns an `adapter.json` beside its implementation. It declares stabl
 
 At startup or when host state changes, the adapter intersects its declaration with APIs available in the current host session using `resolveAdapterCapabilities(declaration, availableNow)`. The result contains both `declared` and `available`. Runtime state can remove a declared capability but cannot invent an undeclared one. Permission-dependent calls can still fail after negotiation; those failures must be returned with a stable error code and a recoverable UI message.
 
-Unknown capability names and unsupported contract versions fail fast during adapter development/build. Unknown future optional fields can be ignored. A capability's absence means unavailable; adapters must not rely on optimistic defaults.
+A capability backed by an endpoint the same adapter composition registers itself (for example the DSH adapter's own UI route) may be reported available without a separate probe: that report is a composition fact, not an optimistic default, and call-time failures still follow the explicit-error rule above.
+
+Unknown capability names and unsupported contract versions fail fast during adapter development/build. Unknown future optional fields can be ignored. A capability's absence means unavailable; adapters must not rely on optimistic defaults about host features they did not register.
 
 ## Adapter bridge shape
 

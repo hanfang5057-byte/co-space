@@ -41,6 +41,27 @@ test('HTTP route uses actual service and blocks unknown methods',async()=>{
  } finally {host.close();rmSync(home,{recursive:true,force:true});}
 });
 
+test('the shared handler guards same-origin by default and can leave admission to a host',async()=>{
+  const home=mkdtempSync(path.join(tmpdir(),'space-origin-'));const host=createHostApi({home,prompt:async()=>({accepted:true})});
+  const invoke=async(handler,headers)=>{
+    let output='',status;
+    const req={method:'POST',url:'/cospace-api',headers,async *[Symbol.asyncIterator](){yield Buffer.from(JSON.stringify({method:'listDocuments'}));}};
+    const res={writeHead(code){status=code;},end(value){output=value;}};
+    await handler(req,res);
+    return {status,body:output?JSON.parse(output):null};
+  };
+  try {
+    // Carriers without host admission (the Desktop local daemon) keep the guard.
+    const guarded=createHttpHandler(host);
+    assert.equal((await invoke(guarded,{origin:'https://attacker.example',host:'127.0.0.1:43127'})).status,403);
+    assert.equal((await invoke(guarded,{origin:'http://127.0.0.1:43127',host:'127.0.0.1:43127'})).status,200);
+    assert.equal((await invoke(guarded,{})).status,200);
+    // A host-admitted route opts out so the handler never re-decides admission.
+    const open=createHttpHandler(host,{sameOriginGuard:false});
+    assert.equal((await invoke(open,{origin:'https://space.example',host:'proxy.example'})).status,200);
+  } finally {host.close();rmSync(home,{recursive:true,force:true});}
+});
+
 test('UI creates an untitled document with an empty body and replays its operation',async()=>{
  const home=mkdtempSync(path.join(tmpdir(),'space-create-'));
  const host=createHostApi({home,prompt:async()=>({accepted:true})});

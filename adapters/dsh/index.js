@@ -51,15 +51,20 @@ export function apply(ctx) {
       getUser:createUserResolver(ctx),
       resolveTarget:createSendTargetResolver(ctx),
     });
-    const dispatch=createHttpHandler(api);
     // The host owns admission. A `required` route (the default) applies the
     // Host/Origin source check and the browser credential before this handler
     // runs, passes the admitted Peer as the trailing argument, and fails closed
     // with 503 when no authentication provider can decide. DSH 0.2.2-rc.2
     // removed `connection.requestRejection`, so calling it here threw and every
     // authenticated request answered 503 "无法校验请求来源".
+    // `sameOriginGuard:false` keeps admission one-sided: the handler must never
+    // re-decide what the host already admitted, so an https or proxied DSH
+    // deployment cannot be 403-ed by a same-origin comparison in the handler.
+    const dispatch=createHttpHandler(api,{sameOriginGuard:false});
     const handler=(req,res)=>dispatch(req,res);
-    scope.effect(()=>{const dispose=scope.webServer.register({kind:'prefix',path:COSPACE_API_PATH,auth:'required',handler});return ()=>{dispose();api.close();}},'dsh-space: UI API');
+    // The handler answers exactly this path; an exact route leaves every other
+    // path to the host instead of claiming the whole `/cospace-api/*` prefix.
+    scope.effect(()=>{const dispose=scope.webServer.register({kind:'exact',path:COSPACE_API_PATH,auth:'required',handler});return ()=>{dispose();api.close();}},'dsh-space: UI API');
   });
   registerReviewCard(ctx,{space});
 }

@@ -31,11 +31,11 @@ function createHarness() {
   return { route, dispose: () => disposers.reverse().forEach(dispose => dispose?.()) };
 }
 
-function request(body) {
+function request(body, headers = {}) {
   return {
     method: 'POST',
     url: '/cospace-api',
-    headers: {},
+    headers,
     async *[Symbol.asyncIterator]() {
       yield Buffer.from(JSON.stringify(body));
     },
@@ -57,7 +57,8 @@ test('the CoSpace HTTP route delegates admission to the Host with auth required'
   process.env.DSH_SPACE_HOME = home;
   const { route, dispose } = createHarness();
   try {
-    assert.equal(route.kind, 'prefix');
+    // The handler answers exactly this path; every other path stays with the Host.
+    assert.equal(route.kind, 'exact');
     assert.equal(route.path, '/cospace-api');
     assert.equal(route.auth, 'required');
     assert.equal(typeof route.handler, 'function');
@@ -77,6 +78,27 @@ test('an admitted request reaches the CoSpace API without the connection service
   try {
     const res = response();
     await route.handler(request({ method: 'listDocuments' }), res);
+    assert.equal(res.status, 200);
+    assert.deepEqual(JSON.parse(res.body), { result: [] });
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.DSH_SPACE_HOME;
+    else process.env.DSH_SPACE_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('the handler never re-decides admission the Host already made', async () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'space-route-auth-origin-'));
+  const previous = process.env.DSH_SPACE_HOME;
+  process.env.DSH_SPACE_HOME = home;
+  const { route, dispose } = createHarness();
+  try {
+    const res = response();
+    // An Origin a same-origin comparison would reject. The Host's `required`
+    // admission owns this decision (an https or proxied deployment admits it),
+    // so the handler dispatches instead of answering 403 on its own.
+    await route.handler(request({ method: 'listDocuments' }, { origin: 'https://space.example', host: '127.0.0.1:3080' }), res);
     assert.equal(res.status, 200);
     assert.deepEqual(JSON.parse(res.body), { result: [] });
   } finally {

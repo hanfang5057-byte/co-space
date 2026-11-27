@@ -9,7 +9,6 @@
     "conversation.send",
     "conversation.references.insert",
     "conversation.references.render",
-    "workspace.list",
     "identity.current.read",
     "files.export.save",
     "clipboard.write",

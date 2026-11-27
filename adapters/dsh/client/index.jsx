@@ -93,7 +93,6 @@ function resolveDshCapabilities(ctx, conversation) {
   if (conversation?.canCreate) available.push('conversation.create');
   if (typeof services('uiWorkspace')?.openSession === 'function') available.push('conversation.open');
   if (typeof services('sessions')?.binding === 'function') available.push('conversation.references.insert');
-  if (typeof services('workspaces')?.list?.getSnapshot === 'function') available.push('workspace.list');
   if (typeof services('uiConversation')?.userText?.register === 'function') available.push('conversation.references.render');
   if (typeof services('sidebarRight')?.openResource === 'function') available.push('navigation.document.open');
   if (typeof services('sidebarRightTabs')?.register === 'function') available.push('navigation.deepLink.register');
