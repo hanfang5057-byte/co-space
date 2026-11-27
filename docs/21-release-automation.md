@@ -61,7 +61,7 @@ Every numbered step is an *ensure* step: a re-run repairs whatever is missing an
 
 PRs always build the preview matrix. Pushes to `main` first resolve **intent** (`apps/desktop/scripts/release-intent.mjs`):
 
-- `release` — the desktop version changed in the pushed range: run the shared checks and sidecar smoke, verify all six version sources agree, verify the tag is new and increasing, then create the annotated `desktop-vX.Y.Z` tag. The tag push triggers staging.
+- `release` — the desktop version changed in the pushed range: run the shared checks and sidecar smoke, verify all six version sources agree, verify the tag is new and increasing, then create the annotated `desktop-vX.Y.Z` tag and dispatch `Stage signed desktop release` on it. A tag pushed with `GITHUB_TOKEN` does not fire push events, so the dispatch is explicit — the same limitation the DSH publish workflow handles for the Pages deployment.
 - `preview` — desktop code changed without a version bump: run the checks, then build the unsigned matrix (macOS arm64/x64, Linux x64) and upload 14-day artifacts, including the Linux deb/AppImage launcher smokes.
 - `none` — only shared code changed: leave it to `CI`; the desktop matrix is not spent on it.
 
@@ -69,7 +69,7 @@ PRs always build the preview matrix. Pushes to `main` first resolve **intent** (
 
 ### `Stage signed desktop release` (stage-desktop-release.yml)
 
-Unchanged staged pipeline, now triggered by `desktop-v*` tag pushes in addition to manual dispatch on a tag. It re-verifies version agreement against the tag, builds the signed matrix inside the protected `desktop-release` environment, verifies updater signatures against `COSPACE_UPDATER_PUBLIC_KEY`, and creates a **draft** GitHub Release only after every platform and check succeeds. A dispatch from a non-tag ref now fails loudly instead of silently skipping all jobs. Re-dispatch on the same tag restages the draft; acceptance (download, install, A→B update testing) and publishing the draft remain human steps per 16-release-process.md.
+Unchanged staged pipeline, dispatched automatically on the release tag by `Build CoSpace Desktop` (a `GITHUB_TOKEN` tag push does not fire push events) and still dispatchable manually on a tag, including to restage a draft. It re-verifies version agreement against the tag, builds the signed matrix inside the protected `desktop-release` environment, verifies updater signatures against `COSPACE_UPDATER_PUBLIC_KEY`, and creates a **draft** GitHub Release only after every platform and check succeeds. A dispatch from a non-tag ref now fails loudly instead of silently skipping all jobs. Acceptance (download, install, A→B update testing) and publishing the draft remain human steps per 16-release-process.md.
 
 ### `Promote desktop release` (promote-desktop.yml)
 

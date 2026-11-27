@@ -92,6 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     env:
       DESKTOP_VERSION: ${{ needs.intent.outputs.version }}
     steps:
@@ -144,7 +145,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "desktop-v$DESKTOP_VERSION" -m "CoSpace Desktop $DESKTOP_VERSION"
           git push origin "desktop-v$DESKTOP_VERSION"
-          echo "Created desktop-v$DESKTOP_VERSION; Stage signed desktop release builds the draft release from this tag."
+          echo "Created desktop-v$DESKTOP_VERSION."
+      - name: Dispatch the signed staging workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A tag pushed with GITHUB_TOKEN does not fire push events, so the
+          # tag-triggered staging workflow must be dispatched explicitly.
+          gh workflow run stage-desktop-release.yml --ref "desktop-v$DESKTOP_VERSION"
+          echo "Dispatched Stage signed desktop release on desktop-v$DESKTOP_VERSION."
 
   package:
     name: Build preview artifacts (${{ matrix.target }})
