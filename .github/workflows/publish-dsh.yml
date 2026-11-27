@@ -10,15 +10,31 @@ on:
       - 'release/npm-version.json'
   workflow_dispatch:
 
+# Keep this workflow filename stable: npm trusted publishing on npmjs.com is
+# bound to `.github/workflows/publish-dsh.yml`. Renaming it breaks the OIDC
+# binding until the trusted publisher configuration is updated.
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: publish-dsh
+  cancel-in-progress: false
+
 jobs:
   publish:
+    name: Publish and converge DSH release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -28,10 +44,130 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run pack:dsh
-      - name: Verify target package version
+      - name: Verify staged release version
         run: |
           expected="$(node -p "require('./release/npm-version.json').version")"
-          actual="$(node -p "require('./dist/dsh-plugin/package.json').version")"
-          test "$expected" = "$actual"
-          echo "Publishing dsh-plugin-space@$actual"
-      - run: npm publish ./dist/dsh-plugin --provenance
+          staged="$(node -p "require('./dist/dsh-plugin/package.json').version")"
+          manifest="$(node -p "require('./adapters/dsh/package.json').version")"
+          if [ "$expected" != "$staged" ] || [ "$expected" != "$manifest" ]; then
+            echo "::error::Release version sources disagree: release/npm-version.json=$expected staged=$staged adapters/dsh/package.json=$manifest"
+            exit 1
+          fi
+          echo "DSH_VERSION=$expected" >> "$GITHUB_ENV"
+          echo "Publishing dsh-plugin-space@$expected"
+      - name: Check npm registry state
+        run: |
+          version="$DSH_VERSION"
+          if [ "${version#*-}" != "$version" ]; then
+            dist_tag="rc"
+          else
+            dist_tag="latest"
+          fi
+          echo "DSH_DIST_TAG=$dist_tag" >> "$GITHUB_ENV"
+          if npm view "dsh-plugin-space@$version" version >/dev/null 2>&1; then
+            echo "DSH_PUBLISH_NEEDED=false" >> "$GITHUB_ENV"
+            echo "dsh-plugin-space@$version is already published; this run only verifies follow-through."
+          else
+            if [ "$dist_tag" = "latest" ]; then
+              latest="$(npm view dsh-plugin-space dist-tags.latest 2>/dev/null || true)"
+              if [ -n "$latest" ]; then
+                greatest="$(printf '%s\n' "$latest" "$version" | sort -V | tail -n1)"
+                if [ "$greatest" != "$version" ]; then
+                  echo "::error::Refusing to publish $version below the current latest dist-tag $latest; bump the release version instead."
+                  exit 1
+                fi
+              fi
+            fi
+            echo "DSH_PUBLISH_NEEDED=true" >> "$GITHUB_ENV"
+            echo "dsh-plugin-space@$version is not on the registry yet."
+          fi
+      - name: Publish to npm
+        if: env.DSH_PUBLISH_NEEDED == 'true'
+        run: npm publish ./dist/dsh-plugin --provenance --tag "$DSH_DIST_TAG"
+      - name: Verify the published version
+        if: env.DSH_PUBLISH_NEEDED == 'true'
+        run: |
+          published=""
+          for attempt in 1 2 3 4 5; do
+            published="$(npm view "dsh-plugin-space@$DSH_VERSION" version 2>/dev/null || true)"
+            if [ "$published" = "$DSH_VERSION" ]; then
+              break
+            fi
+            echo "Registry is not showing $DSH_VERSION yet (attempt $attempt)."
+            sleep 15
+          done
+          if [ "$published" != "$DSH_VERSION" ]; then
+            echo "::error::dsh-plugin-space@$DSH_VERSION is not visible on the npm registry."
+            exit 1
+          fi
+          if [ "$DSH_DIST_TAG" = "latest" ]; then
+            tagged="$(npm view dsh-plugin-space dist-tags.latest 2>/dev/null || true)"
+            if [ "$tagged" != "$DSH_VERSION" ]; then
+              echo "::error::The latest dist-tag points at $tagged instead of $DSH_VERSION."
+              exit 1
+            fi
+          fi
+      - name: Sync and commit the market index
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -- adapters/dsh/package.json adapters/dsh/adapter.json package-lock.json
+          git fetch origin main
+          git checkout -B market-sync origin/main
+          node scripts/sync-market.mjs
+          if git status --porcelain -- market/index.json market/icons | grep -q .; then
+            git add market/index.json market/icons
+            git commit -m "chore(market): sync dsh-plugin-space@$DSH_VERSION"
+            git push origin HEAD:main
+            echo "Committed the synced market index for dsh-plugin-space@$DSH_VERSION."
+          else
+            echo "market/index.json already reflects the published registry state."
+          fi
+      - name: Ensure the annotated version tag
+        run: |
+          tag="v$DSH_VERSION"
+          if git ls-remote --tags origin "refs/tags/$tag" | grep -q .; then
+            echo "Tag $tag already exists; keeping the original (release tags are never moved)."
+          else
+            git tag -a "$tag" -m "dsh-plugin-space $DSH_VERSION"
+            git push origin "$tag"
+          fi
+      - name: Ensure the GitHub release and tarball assets
+        run: |
+          tag="v$DSH_VERSION"
+          tarball="dist/npm-packages/dsh-plugin-space-$DSH_VERSION.tgz"
+          if [ ! -f "$tarball" ]; then
+            echo "::error::Missing staged tarball $tarball; run npm run pack:dsh before publishing."
+            exit 1
+          fi
+          tarball_name="$(basename "$tarball")"
+          (cd "$(dirname "$tarball")" && sha256sum "$tarball_name" > "$tarball_name.sha256")
+          notes="$(node --input-type=module -e '
+            import fs from "node:fs";
+            const version = process.env.DSH_VERSION;
+            const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
+            const section = changelog.split(/^## /m).find(part => part.startsWith(`${version}\n`));
+            if (section) process.stdout.write(section.slice(version.length).trim());
+          ' 2>/dev/null || true)"
+          if [ -z "$notes" ]; then
+            notes="dsh-plugin-space $DSH_VERSION release. See CHANGELOG.md for details."
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; ensuring its assets only."
+          else
+            release_args=("$tag" --verify-tag --repo "$GITHUB_REPOSITORY" --title "dsh-plugin-space $DSH_VERSION" --notes "$notes")
+            if [ "${DSH_VERSION#*-}" != "$DSH_VERSION" ]; then
+              release_args+=(--prerelease)
+            fi
+            gh release create "${release_args[@]}"
+          fi
+          for asset in "$tarball" "$tarball.sha256"; do
+            name="$(basename "$asset")"
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.[].name' | grep -qx "$name"; then
+              echo "Asset $name is already attached to $tag."
+            else
+              gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
+      - name: Refresh the published site and plugin index
+        run: gh workflow run pages.yml --ref main

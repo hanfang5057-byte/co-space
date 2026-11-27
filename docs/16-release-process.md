@@ -1,19 +1,19 @@
 # Unified Release Process
 
-## Desktop release staging (not yet published)
+Releases are performed by the automated pipeline specified in [21-release-automation.md](21-release-automation.md). This document keeps the release invariants, the one-time pipeline configuration, the human acceptance gates, and the post-release promotion task that an Agent executes on the external plugin listing. The workflow files under `.github/workflows/` are the executable specification of every publish, market sync, tag, and release-asset step; do not reproduce them by hand.
 
-Desktop replaces the retired Local Server npm product. Existing npm artifacts and user data remain available; do not publish a new Local Server package. Staging does not authorize publication.
+## Deprecated manual procedures
 
-For local desktop development, run `npm run dev:desktop`; UI changes rebuild and reload the page, while Node service/MCP changes require restarting the command. To build and open a locally runnable package for the current OS, run `npm run package:desktop:local` from the workspace root. This selects macOS `.app`, Windows MSI and NSIS (opening the NSIS installer), or Linux AppImage; it does not sign or publish a release. The Linux local path intentionally builds AppImage only. The current GitHub release matrix includes macOS arm64/x64 and Linux deb/AppImage. Windows local packaging remains available, but Windows is temporarily excluded from formal build and release workflows.
+The former hand-run release sequences are deprecated and must not be used for a normal release. A failed or partial release is repaired by re-running the affected workflow — the pipelines converge on re-runs — never by hand-publishing around them.
 
-1. Configure a protected GitHub environment named `desktop-release`, restrict it to approved release tags, and require reviewers. Store the persistent Tauri updater public key in the `COSPACE_UPDATER_PUBLIC_KEY` environment variable; store `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as environment secrets. Protect and back up the private key outside the repository. Windows signing secrets are not required while Windows is excluded; add the code-signing PFX and password before re-enabling its release target. macOS currently uses ad-hoc signing and is not notarized.
-2. On a reviewed release commit, synchronize `apps/desktop/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`, the desktop adapter declaration, and both lockfiles to the intended stable version. After the required checks pass, create the unique annotated tag `desktop-vX.Y.Z` according to the release authorization; do not reuse or move a tag.
-3. Manually run `Stage signed desktop release` on that tag. The workflow checks matching versions, runs the shared checks, builds macOS arm64/x64 and Linux deb/AppImage, verifies both Linux MCP launchers, and validates each updater signature against the configured public key and its signed version. It creates a **draft** GitHub Release only after all jobs succeed. The `latest.json` in the draft is not the live update channel. Windows is excluded from both build matrices and the staged updater manifest until explicitly re-enabled.
-4. Download and inspect every artifact and `SHA256SUMS`. On clean target systems, test installation, first-run migration, Agent connection, review, and real A→B updates and interrupted recovery. For macOS, record ad-hoc Gatekeeper behavior for first launch and updates; for Linux, test both deb and AppImage, and use the package manager or manual installation for deb updates. Do not describe untested architectures or environments as supported. Publish the draft only after acceptance and explicit release authorization.
-5. After the release is published, build the local verifier with `cargo build --locked --release --manifest-path apps/desktop/tools/verify-update/Cargo.toml`. Set `COSPACE_UPDATER_PUBLIC_KEY` to the same public key and `COSPACE_VERIFY_UPDATE` to the resulting executable, then run `node apps/desktop/scripts/prepare-promotion.mjs desktop-vX.Y.Z`. It requires `gh` authentication, downloads the published release, checks checksums, signatures and signed versions, re-downloads each updater URL, and prepares `apps/site/desktop/latest.json`. Review this file, verify all npm packages still referenced by the site are published, and only then commit and push the site change under the appropriate authorization. The existing Pages deployment publishes the website and independent desktop update manifest together; verify the deployed manifest and its URLs from the networks users actually use.
-6. On a failed/partial release, do not promote the manifest. Preserve installed user data and backups. An older executable must not open a newer incompatible data layout. Revoke or rotate a compromised signing key through an explicitly planned migration; the updater does not trust an arbitrary replacement key.
+| Deprecated hand-run step | Superseded by |
+| --- | --- |
+| `npm publish ./dist/dsh-plugin` and hand-managed dist-tags | `Publish DSH plugin` (npm trusted publishing with provenance) |
+| `node scripts/sync-market.mjs` after publishing and hand-committing `market/index.json` | The publish workflow's convergent market-sync step; hand-running the script remains only a recovery tool when branch protection blocks the bot push |
+| Hand-created annotated tags `vX.Y.Z` / `desktop-vX.Y.Z`, and tarballs attached to releases by hand | Tag and release creation inside the pipelines; tags are never moved or reused |
+| Hand-built signed installers or hand-running `prepare-promotion` locally | `Stage signed desktop release` (tag-triggered, protected environment) and `Promote desktop release` (opens the manifest pull request); manual dispatch on an existing tag remains a restage tool only |
 
-Windows can be restored by adding `windows-x64` to both workflow matrices and the `COSPACE_RELEASE_TARGETS` value in the draft job, then restoring the Windows certificate import and signature verification steps. Add `WINDOWS_CERTIFICATE_PFX` and `WINDOWS_CERTIFICATE_PASSWORD` to the `desktop-release` environment and verify signed MSI/NSIS installers before staging that platform.
+`npm run pack:dsh` stays a development tool for staging and inspecting the package locally. It is no longer a required release step: the publish workflow packs and verifies the release commit itself.
 
 ## Release tracks and shared rules
 
@@ -24,31 +24,57 @@ The workspace root is private and must never be published. DSH and Desktop keep 
 | DSH plugin | `dsh-plugin-space` npm package | `release/npm-version.json` | `vX.Y.Z` |
 | Desktop | Signed platform installers and updater assets | Desktop package, Tauri configuration and Cargo manifest | `desktop-vX.Y.Z` |
 
-1. Confirm the artifact, version, target channel, and publication authorization. This guide does not authorize publishing.
-2. Build and publish from a clean release commit, preserving unrelated worktree changes. Run `npm run check` and resolve unexplained failures.
-3. Publish DSH only from `dist/dsh-plugin/`, never the private workspace root. Desktop uses the protected GitHub Actions workflow above.
+1. Confirm the artifact, version, target channel, and publication authorization. Neither this guide nor the pipeline waives that confirmation.
+2. Build and publish from a clean release commit, preserving unrelated worktree changes. Resolve unexplained `npm run check` failures before pushing a version bump.
+3. Publish DSH only from `dist/dsh-plugin/`, never the private workspace root. Desktop releases only through the protected staging workflow.
 4. Do not hand-edit generated files under `dist/` or generated market metadata. Verify published artifacts and tags before declaring a release complete.
 5. Before pushing a `main` commit that changes `apps/site/`, publish and verify every npm package referenced by the site; Pages deploys automatically. Do not advertise unpublished desktop downloads.
 
-## DSH plugin release
+## Pipeline configuration (one-time)
 
-### Prepare and verify
+Configure a protected GitHub environment named `desktop-release`, restrict it to approved release tags, and require reviewers. Store the persistent Tauri updater public key in the `COSPACE_UPDATER_PUBLIC_KEY` environment variable; store `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as environment secrets. Protect and back up the private key outside the repository. Windows signing secrets are not required while Windows is excluded; add the code-signing PFX and password before re-enabling its release target. macOS currently uses ad-hoc signing and is not notarized. npm trusted publishing on npmjs.com must be bound to this repository and the `.github/workflows/publish-dsh.yml` workflow file.
 
-1. Set the intended version in `release/npm-version.json`.
-2. Run `npm run pack:dsh` (or the equivalent `npm run pack:npm`). This synchronizes the DSH manifest, adapter declaration, and lockfile; rebuilds the generated client and package; runs package verification; and creates the tarball under `dist/npm-packages/`.
-3. Run `npm run check` and `npm run verify:dsh-package`. Do not publish with unexplained failures.
-4. Review the staged package and tarball. Verify `engines.dsh` matches the host versions actually tested. Confirm install surfaces stay aligned: `README.md`, `README.en.md`, `adapters/dsh/README.md`, `apps/site/index.html`, and `market/index.json`.
-5. Verify `node scripts/sync-market.mjs --check` before publishing, and confirm the market URLs/mirrors satisfy the documented DSH network behavior.
+Windows can be restored by adding `windows-x64` to both workflow matrices and the `COSPACE_RELEASE_TARGETS` value in the draft job, then restoring the Windows certificate import and signature verification steps. Add `WINDOWS_CERTIFICATE_PFX` and `WINDOWS_CERTIFICATE_PASSWORD` to the `desktop-release` environment and verify signed MSI/NSIS installers before staging that platform.
 
-### Publish and finish
+## Desktop development and local packaging
 
-1. Publish the staged artifact only: `npm publish ./dist/dsh-plugin`.
-2. Verify `dsh-plugin-space@X.Y.Z` exists in the npm registry and `latest` points to the intended version.
-3. Run `node scripts/sync-market.mjs`; review the generated `market/index.json`, commit it, and push so the configured static host redeploys. Do not hand-edit versions or timestamps in the index.
-4. Confirm the market check passes against the current registry state.
-5. Create annotated tag `vX.Y.Z` on the commit containing the release and market index, then push the tag.
-6. Attach the staged tarball to the GitHub Release and verify its digest matches the staged tarball.
-7. Update the [awesome-dsh-plugin listing](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/hanfang5057-byte__co-space--adapters-dsh.yml) in a PR. Keep its URL at `https://github.com/hanfang5057-byte/co-space/tree/main/adapters/dsh`, tarball at the new GitHub Release asset, and description/icon aligned with the verified package. Verify the listing after the PR merges.
+For local desktop development, run `npm run dev:desktop`; UI changes rebuild and reload the page, while Node service/MCP changes require restarting the command. To build and open a locally runnable package for the current OS, run `npm run package:desktop:local` from the workspace root. This selects macOS `.app`, Windows MSI and NSIS (opening the NSIS installer), or Linux AppImage; it does not sign or publish a release. The Linux local path intentionally builds AppImage only. The formal release matrix includes macOS arm64/x64 and Linux deb/AppImage; Windows local packaging remains available but is temporarily excluded from formal build and release workflows.
+
+## Release path
+
+- **DSH**: set the intended version in `release/npm-version.json` — a prerelease such as `0.1.21-rc.1` publishes under the `rc` dist-tag and a prerelease GitHub Release without moving `latest` — pass the pre-push gate below, and push to `main`. `Publish DSH plugin` publishes with provenance, syncs and commits the market index, ensures the annotated `vX.Y.Z` tag and the GitHub Release with the staged tarball, and refreshes the Pages deployment; re-runs converge.
+- **Desktop**: on a reviewed release commit, set the intended stable version across all six desktop sources with `npm run version:desktop -- X.Y.Z` (`apps/desktop/package.json`, `adapter.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and both lockfiles), then push. `Build CoSpace Desktop` re-verifies the version agreement and creates the unique annotated tag `desktop-vX.Y.Z` after its checks pass, and `Stage signed desktop release` builds macOS arm64/x64 and Linux deb/AppImage, verifies both Linux MCP launchers, and validates each updater signature against the configured public key and its signed version. It creates a **draft** GitHub Release only after all jobs succeed. The `latest.json` in the draft is not the live update channel; staging does not authorize publication. Windows is excluded from both build matrices and the staged updater manifest until explicitly re-enabled.
+
+## Human gates
+
+### Before pushing a DSH version bump
+
+1. Verify `engines.dsh` names the range actually tested; widen it only after rechecking route admission (`webServer.register` `auth` and `ctx.connection.admit`), MCP tool registration, and client slots in a clean profile.
+2. Confirm install surfaces stay aligned: `README.md`, `README.en.md`, `adapters/dsh/README.md`, `apps/site/index.html`, and `market/index.json`.
+3. Optionally stage and inspect the package locally with `npm run pack:dsh`; `node scripts/sync-market.mjs --check` also runs in CI before publishing.
+
+### Desktop draft acceptance
+
+Download and inspect every artifact and `SHA256SUMS`. On clean target systems, test installation, first-run migration, Agent connection, review, and real A→B updates and interrupted recovery. For macOS, record ad-hoc Gatekeeper behavior for first launch and updates; for Linux, test both deb and AppImage, and use the package manager or manual installation for deb updates. Do not describe untested architectures or environments as supported. Publish the draft only after acceptance and explicit release authorization.
+
+### After the desktop release is published
+
+Dispatch `Promote desktop release` with the `desktop-vX.Y.Z` tag. It builds the update verifier, runs `prepare-promotion` — which downloads the published release, checks checksums, signatures and signed versions, re-downloads each updater URL, and prepares `apps/site/desktop/latest.json` — and opens a pull request with that change. Review the pull request, verify all npm packages still referenced by the site are published, and merge it under the appropriate authorization. The Pages deployment publishes the website and the desktop update manifest together; verify the deployed manifest and its URLs from the networks users actually use.
+
+### Failed or partial releases
+
+Do not promote the manifest of a failed or partial release; re-run the affected workflow to converge instead. Preserve installed user data and backups. An older executable must not open a newer incompatible data layout. Revoke or rotate a compromised signing key through an explicitly planned migration; the updater does not trust an arbitrary replacement key. Never tag a failed or partial release.
+
+## Post-release DSH plugin promotion (Agent task)
+
+The external [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) listing is part of the distribution surface, but the release pipeline cannot update it: it lives in an external repository and merges through the listing's own review. After `Publish DSH plugin` completes a stable release, an Agent executes this task. Pre-release (`rc`) versions are not promoted.
+
+1. Confirm the release converged: `dsh-plugin-space@X.Y.Z` is visible on the npm registry with `latest` pointing at it, the `vX.Y.Z` GitHub Release exists with the staged tarball and checksum, and `market/index.json` on `main` lists the version.
+2. Open a pull request on `awesome-dsh-plugin/awesome-dsh-plugin` updating `data/plugins/hanfang5057-byte__co-space--adapters-dsh.yml`:
+   - Keep the subdirectory URL at `https://github.com/hanfang5057-byte/co-space/tree/main/adapters/dsh`.
+   - Point the tarball at the new GitHub Release asset.
+   - Keep the description and icon aligned with the verified package and its verified security posture; do not advertise capabilities the release did not verify.
+3. Verify after the pull request merges: the listing renders with the new version, the subdirectory URL and tarball resolve, and the listed engine range matches the published package.
 
 ## Retired Local Server
 

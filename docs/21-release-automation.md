@@ -1,0 +1,108 @@
+# Release Automation Design
+
+This document specifies the automated release pipeline that implements [16-release-process.md](16-release-process.md). The release invariants — never publish from the private workspace root, never move or reuse a tag, desktop releases stay behind acceptance — are unchanged; automation makes the happy path require no manual steps while keeping every gate intact.
+
+## Design goals
+
+The pipeline serves three distinct needs from one trunk (`main`):
+
+1. **Saving progress** — frequent pushes of unfinished work must be cheap, safe, and never trigger a publication.
+2. **Preview** — every meaningful change produces installable, testable artifacts before anything is official.
+3. **Release** — a release is expressed by a version bump, and the pipeline carries it from `main` to npm and GitHub Releases without manual ceremony.
+
+The mapping to industry practice:
+
+- **Trunk-based development with release-on-demand.** `main` is always releasable; every push is verified. A release is *not* "every push" — it is an explicit version bump commit, exactly like release-please/changesets treat the version PR as the release intent, but without the ceremony of a separate release branch.
+- **Version files are the trigger contract.** `release/npm-version.json` is the single DSH release intent; the six synchronized desktop version sources are the desktop release intent. CI diffs the pushed range and routes accordingly, so a daily progress push and a release push are distinguished by content, not by who remembers to run a command.
+- **Convergent (idempotent) release runs.** Publishing workflows may re-run at any time and end in the same state: the version is on npm, `market/index.json` is committed, the annotated tag exists, and the GitHub Release carries the staged tarball. A partially failed release is repaired by re-running, never by re-creating tags or hand-editing generated files.
+- **Build and publish stay separated for signed artifacts.** Desktop installers ship through an updater whose signing keys are load-bearing, so the automated path stops at a **draft** GitHub Release behind the protected `desktop-release` environment; publishing the draft and promoting the update manifest stay human decisions (the promote workflow turns the latter into a reviewable PR).
+- **OIDC, not tokens.** The npm publish uses trusted publishing with provenance, bound to the `publish-dsh.yml` workflow filename. No `NPM_TOKEN` secret exists to leak or rotate.
+- **Cost control.** Path filters keep heavy builds off irrelevant pushes, concurrency groups cancel stale verification runs, and release runs are serialized so two releases can never interleave.
+
+## Channels and triggers
+
+| Situation | Trigger | What runs | Publication |
+| --- | --- | --- | --- |
+| Progress save, shared code only | push to `main` (paths) | `CI` verify + desktop sidecar smoke | None |
+| Progress save touching desktop code | push to `main` (paths) | `CI` + `Build CoSpace Desktop` preview matrix (unsigned, 14-day artifacts) | None |
+| Pull request | PR (paths) | `CI` + `Build CoSpace Desktop` preview matrix | None |
+| DSH prerelease preview | push with `release/npm-version.json` = `X.Y.Z-rc.n` | `Publish DSH plugin` | npm dist-tag `rc` + prerelease GitHub Release; `latest` untouched |
+| DSH stable release | push with `release/npm-version.json` = `X.Y.Z` | `Publish DSH plugin` | npm `latest` + market sync commit + tag `vX.Y.Z` + GitHub Release |
+| Desktop release | push bumping the six desktop version sources | `Build CoSpace Desktop` verify → authorize tag → `Stage signed desktop release` | Signed draft GitHub Release behind `desktop-release` environment |
+| Desktop promotion | manual dispatch of `Promote desktop release` | verifier build + `prepare-promotion` | PR updating `apps/site/desktop/latest.json`; merging deploys Pages |
+
+Version-source contracts:
+
+| Product | Version source | Tag |
+| --- | --- | --- |
+| DSH plugin | `release/npm-version.json` (synchronized into `adapters/dsh/package.json`, `adapters/dsh/adapter.json`, lockfile by `npm run pack:dsh`) | `vX.Y.Z` |
+| Desktop | `npm run version:desktop -- X.Y.Z` writes `apps/desktop/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `adapter.json`, and both lockfile records from one input; the release workflows verify all six agree before tagging | `desktop-vX.Y.Z` |
+
+## Workflow reference
+
+### `CI` (ci.yml)
+
+Runs on pushes to `main` and PRs touching workspace-shared code, the site, scripts, or tests. It verifies `npm run check`, the staged DSH package (`verify:dsh-package`), the market index invariants (`sync-market --check`), and the install site build. On pushes it also runs the desktop sidecar smoke (`prepare:tauri` + `smoke`) on Linux, so every main push proves the desktop Node runtime and webapp still boot even when the desktop matrix is not scheduled. Concurrency cancels superseded runs per ref.
+
+### `Publish DSH plugin` (publish-dsh.yml)
+
+Triggers on `main` pushes that change `release/npm-version.json`, the synchronized `adapters/dsh/package.json`, or the workflow itself, plus manual dispatch. One convergent job:
+
+1. `npm run check`, then `npm run pack:dsh` — the only build path; publishes happen from `dist/dsh-plugin`, never the workspace root.
+2. Version agreement check across the three DSH version sources.
+3. Registry gate: pick the `rc` dist-tag for prerelease versions, `latest` otherwise; refuse to publish a stable version that would move `latest` backwards; skip publishing when the version already exists.
+4. Publish with `--provenance` (OIDC trusted publishing), then verify the registry shows the version and the expected dist-tag.
+5. `sync-market` onto the latest `origin/main`, commit `market/index.json` when it changes, and push. The bot push intentionally does not retrigger workflows; the job then explicitly dispatches `pages.yml` so the site and plugin index redeploy immediately.
+6. Ensure the annotated tag `vX.Y.Z` and a GitHub Release (prerelease flag for `rc` versions) carrying the staged tarball and its SHA-256 sidecar, with notes extracted from the `CHANGELOG.md` section when present.
+
+Every numbered step is an *ensure* step: a re-run repairs whatever is missing and skips what is already done. The workflow filename is part of the npm trusted-publishing binding — rename it only together with the npmjs.com trusted publisher configuration.
+
+### `Build CoSpace Desktop` (build-desktop.yml)
+
+PRs always build the preview matrix. Pushes to `main` first resolve **intent** (`apps/desktop/scripts/release-intent.mjs`):
+
+- `release` — the desktop version changed in the pushed range: run the shared checks and sidecar smoke, verify all six version sources agree, verify the tag is new and increasing, then create the annotated `desktop-vX.Y.Z` tag. The tag push triggers staging.
+- `preview` — desktop code changed without a version bump: run the checks, then build the unsigned matrix (macOS arm64/x64, Linux x64) and upload 14-day artifacts, including the Linux deb/AppImage launcher smokes.
+- `none` — only shared code changed: leave it to `CI`; the desktop matrix is not spent on it.
+
+`workflow_dispatch` offers the same two routes manually, so a release whose push failed after the version bump can be resumed with `route: release` once the fix is pushed — the tag guard rejects anything that was already tagged. Runs on the same ref are serialized (never cancelled mid-release); recovery for a broken release push is fix → push (progress) → dispatch with `route: release`.
+
+### `Stage signed desktop release` (stage-desktop-release.yml)
+
+Unchanged staged pipeline, now triggered by `desktop-v*` tag pushes in addition to manual dispatch on a tag. It re-verifies version agreement against the tag, builds the signed matrix inside the protected `desktop-release` environment, verifies updater signatures against `COSPACE_UPDATER_PUBLIC_KEY`, and creates a **draft** GitHub Release only after every platform and check succeeds. A dispatch from a non-tag ref now fails loudly instead of silently skipping all jobs. Re-dispatch on the same tag restages the draft; acceptance (download, install, A→B update testing) and publishing the draft remain human steps per 16-release-process.md.
+
+### `Promote desktop release` (promote-desktop.yml)
+
+Manual dispatch with a published `desktop-vX.Y.Z` tag, inside the `desktop-release` environment. It builds the update verifier, runs `prepare-promotion` (which itself verifies the published release, checksums, signatures, and re-downloads every updater URL), confirms `dsh-plugin-space` still resolves on npm, and opens a pull request updating `apps/site/desktop/latest.json`. The PR is the review surface required by 16-release-process.md; merging it triggers the Pages deployment that publishes the live update manifest.
+
+### `Deploy site and plugin index` (pages.yml)
+
+Unchanged. Deploys on `main` pushes that change the site or market metadata, and can be dispatched by the DSH publish job after a market sync commit.
+
+## Required configuration
+
+| Item | Where | Notes |
+| --- | --- | --- |
+| npm trusted publishing | npmjs.com → package settings | Repository `hanfang5057-byte/co-space`, workflow `.github/workflows/publish-dsh.yml`. No `NPM_TOKEN` secret is used. |
+| `desktop-release` environment | repo settings | Restricted to `desktop-v*` tags, with the required reviewer acting as the staging and promotion authorization. |
+| `COSPACE_UPDATER_PUBLIC_KEY` | `desktop-release` environment variable | Persistent updater public key. |
+| `TAURI_SIGNING_PRIVATE_KEY` / `..._PASSWORD` | `desktop-release` environment secrets | Updater signing key; back it up outside the repository. |
+| Branch protection on `main` | repo settings | The publish job pushes the market sync commit with `GITHUB_TOKEN` as `github-actions[bot]`; if protection blocks it, allow that actor, or recover once by hand-running `node scripts/sync-market.mjs` and committing (a deprecated manual step; see [16-release-process.md](16-release-process.md)). |
+| Workflow permissions | repo settings | The workflows declare least-privilege `permissions` per job; no repo-wide write defaults are required. |
+
+## Failure and recovery playbook
+
+- **A verify step failed during a release push.** Nothing was published or tagged. Fix on `main`; for DSH re-run the workflow (dispatch converges on the new head); for desktop dispatch `Build CoSpace Desktop` with `route: release`.
+- **npm published, but the run failed before market sync / tag / release.** Re-run the workflow; every remaining step is an ensure step and will complete the release without republishing.
+- **The desktop draft is signed but acceptance failed.** Do not publish the draft. Fix, bump the desktop version, and push again — the tag guard rejects reusing `desktop-vX.Y.Z`, which is intentional.
+- **A market sync commit raced another push.** The sync job rebases onto `origin/main` before committing; a lost race fails the push and the next re-run converges.
+- **Never**: publish from the workspace root, move or recreate an existing tag, hand-edit `market/index.json` or `dist/`, or publish a site that references an unpublished npm package.
+
+## What deliberately stays manual
+
+- Desktop acceptance testing on clean target systems, including A→B updates and interrupted recovery, before a draft is published.
+- Publishing the desktop draft release and dispatching `Promote desktop release` afterwards.
+- The [awesome-dsh-plugin listing](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) PR after a stable DSH release — an Agent task; the executable checklist lives in [16-release-process.md](16-release-process.md).
+- Widening `engines.dsh` after verifying route admission, MCP registration, and client slots in a clean profile.
+
+Windows remains excluded from the desktop matrices per 16-release-process.md; restoring it means adding `windows-x64` to both matrices and the `COSPACE_RELEASE_TARGETS` list, plus the Windows certificate secrets.

@@ -10,13 +10,146 @@ on:
       - 'scripts/**'
       - 'test/**'
       - 'package*.json'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-desktop.yml'
+      - 'apps/desktop/**'
+      - 'packages/**'
+      - 'assets/**'
+      - 'scripts/**'
+      - 'test/**'
+      - 'package*.json'
   workflow_dispatch:
+    inputs:
+      route:
+        description: 'Preview build, or resume a release whose push already failed'
+        type: choice
+        options:
+          - preview
+          - release
+        default: preview
 
 permissions:
   contents: read
 
+concurrency:
+  group: build-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  intent:
+    name: Resolve release intent
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.intent.outputs.mode }}
+      version: ${{ steps.intent.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - id: intent
+        name: Resolve desktop release intent
+        env:
+          INTENT_EVENT: ${{ github.event_name }}
+          INTENT_ROUTE: ${{ github.event.inputs.route }}
+          INTENT_BEFORE: ${{ github.event.before }}
+        run: |
+          args=(--event "$INTENT_EVENT")
+          if [ "$INTENT_EVENT" = "push" ] && [ -n "$INTENT_BEFORE" ] && [ "$INTENT_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            args+=(--before "$INTENT_BEFORE")
+          fi
+          if [ "$INTENT_EVENT" = "workflow_dispatch" ] && [ -n "$INTENT_ROUTE" ]; then
+            args+=(--mode "$INTENT_ROUTE")
+          fi
+          node apps/desktop/scripts/release-intent.mjs "${args[@]}"
+
+  verify:
+    name: Verify workspace and desktop sidecar
+    needs: intent
+    if: needs.intent.outputs.mode != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run prepare:tauri --workspace @cospace/desktop
+      - run: npm run smoke --workspace @cospace/desktop
+
+  authorize:
+    name: Authorize signed desktop release
+    needs: [intent, verify]
+    if: needs.intent.outputs.mode == 'release' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DESKTOP_VERSION: ${{ needs.intent.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Verify desktop release version sources
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const version = process.env.DESKTOP_VERSION;
+            if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error(`Desktop release versions must be stable semver: ${version}`);
+            const pkg = JSON.parse(fs.readFileSync("apps/desktop/package.json"));
+            const tauri = JSON.parse(fs.readFileSync("apps/desktop/src-tauri/tauri.conf.json"));
+            const adapter = JSON.parse(fs.readFileSync("apps/desktop/adapter.json"));
+            const npmLock = JSON.parse(fs.readFileSync("package-lock.json")).packages["apps/desktop"]?.version;
+            const cargo = fs.readFileSync("apps/desktop/src-tauri/Cargo.toml", "utf8").match(/^version = "([^"]+)"/m)?.[1];
+            const cargoLock = fs.readFileSync("apps/desktop/src-tauri/Cargo.lock", "utf8").match(/name = "cospace-desktop"\nversion = "([^"]+)"/)?.[1];
+            const sources = {
+              "apps/desktop/package.json": pkg.version,
+              "apps/desktop/src-tauri/tauri.conf.json": tauri.version,
+              "apps/desktop/adapter.json": adapter.version,
+              "package-lock.json": npmLock,
+              "apps/desktop/src-tauri/Cargo.toml": cargo,
+              "apps/desktop/src-tauri/Cargo.lock": cargoLock,
+            };
+            const mismatched = Object.entries(sources).filter(([, value]) => value !== version)
+              .map(([file, value]) => `${file}=${value ?? "missing"}`);
+            if (mismatched.length > 0) throw Error(`Desktop version sources disagree with ${version}: ${mismatched.join(", ")}`);
+          '
+      - name: Ensure the release tag is new and increasing
+        run: |
+          tag="desktop-v$DESKTOP_VERSION"
+          if git ls-remote --tags origin "refs/tags/$tag" | grep -q .; then
+            echo "::error::Tag $tag already exists; desktop tags are never moved or reused. Bump the version, or restage an existing tag with the Stage signed desktop release workflow."
+            exit 1
+          fi
+          previous="$(git ls-remote --tags origin 'refs/tags/desktop-v*' | sed -nE 's#.*refs/tags/desktop-v([0-9]+\.[0-9]+\.[0-9]+).*$#\1#p' | sort -V | tail -n1)"
+          if [ -n "$previous" ]; then
+            greatest="$(printf '%s\n' "$previous" "$DESKTOP_VERSION" | sort -V | tail -n1)"
+            if [ "$greatest" != "$DESKTOP_VERSION" ]; then
+              echo "::error::Desktop version must increase beyond $previous, the newest existing desktop tag."
+              exit 1
+            fi
+          fi
+      - name: Create the annotated release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "desktop-v$DESKTOP_VERSION" -m "CoSpace Desktop $DESKTOP_VERSION"
+          git push origin "desktop-v$DESKTOP_VERSION"
+          echo "Created desktop-v$DESKTOP_VERSION; Stage signed desktop release builds the draft release from this tag."
+
   package:
+    name: Build preview artifacts (${{ matrix.target }})
+    needs: [intent, verify]
+    if: needs.intent.outputs.mode == 'preview'
     strategy:
       fail-fast: false
       matrix:
@@ -39,7 +172,6 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: npm ci
-      - run: npm run check
       - run: npm run prepare:tauri --workspace @cospace/desktop
       - run: npm run smoke --workspace @cospace/desktop
       - run: node apps/desktop/scripts/build-tauri.mjs
@@ -57,3 +189,4 @@ jobs:
           name: cospace-desktop-${{ matrix.target }}
           path: dist/releases/desktop/**
           if-no-files-found: error
+          retention-days: 14

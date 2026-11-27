@@ -1,0 +1,75 @@
+name: Promote desktop release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published desktop release tag (desktop-vX.Y.Z)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Stage update manifest pull request
+    runs-on: ubuntu-latest
+    environment: desktop-release
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PROMOTION_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+      - name: Validate the requested tag
+        run: |
+          if ! printf '%s' "$PROMOTION_TAG" | grep -Eq '^desktop-v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The tag must match desktop-vX.Y.Z."
+            exit 1
+          fi
+      - run: npm ci
+      - name: Build the update verifier
+        run: cargo build --locked --release --manifest-path apps/desktop/tools/verify-update/Cargo.toml
+      - name: Prepare the promotion manifest
+        env:
+          COSPACE_UPDATER_PUBLIC_KEY: ${{ vars.COSPACE_UPDATER_PUBLIC_KEY }}
+          COSPACE_VERIFY_UPDATE: ${{ github.workspace }}/apps/desktop/tools/verify-update/target/release/cospace-verify-update
+        run: node apps/desktop/scripts/prepare-promotion.mjs "$PROMOTION_TAG"
+      - name: Confirm the npm package referenced by the site resolves
+        run: npm view dsh-plugin-space version --silent
+      - name: Open the promotion pull request
+        run: |
+          branch="promotion/$PROMOTION_TAG"
+          if git fetch origin "$branch" 2>/dev/null; then
+            echo "Reusing the existing $branch branch."
+            git checkout -B "$branch" "origin/$branch"
+          else
+            git checkout -b "$branch"
+          fi
+          if git status --porcelain -- apps/site/desktop | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add apps/site/desktop
+            git commit -m "chore(site): promote desktop ${PROMOTION_TAG#desktop-v}"
+            git push origin "$branch"
+          else
+            echo "apps/site/desktop is already up to date on this branch."
+          fi
+          if gh pr list --head "$branch" --state open --json number -q 'length' | grep -q 1; then
+            echo "The promotion pull request is already open."
+          else
+            gh pr create --head "$branch" --title "Promote desktop ${PROMOTION_TAG#desktop-v}" \
+              --body "$(printf 'Prepared by the Promote desktop release workflow for %s.\n\n- Verify the acceptance checklist in docs/16-release-process.md before merging.\n- Merging deploys the desktop update manifest through the Pages workflow.\n- Confirm every npm package referenced by the site is published.' "$PROMOTION_TAG")"
+          fi

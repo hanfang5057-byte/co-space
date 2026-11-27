@@ -31,9 +31,9 @@
     "dev:dsh": "node scripts/dev-dsh.mjs",
     "dev:desktop": "npm run dev --workspace @cospace/desktop",
     "package:desktop:local": "npm run package:local --workspace apps/desktop",
+    "version:desktop": "node apps/desktop/scripts/set-version.mjs",
     "build:site": "node scripts/build-site.mjs",
     "verify:architecture": "node scripts/verify-adapter-boundaries.mjs",
-    "pack:npm": "node scripts/pack-dsh.mjs",
     "pack:dsh": "node scripts/pack-dsh.mjs",
     "verify:dsh-package": "npm run build:dsh && npm run verify:architecture && node scripts/verify-dsh-package.mjs && npm pack ./dist/dsh-plugin --dry-run",
     "check:theme": "node scripts/check-theme.mjs"
