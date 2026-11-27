@@ -5,7 +5,7 @@
 评论正文由文档工具读取的流程已接入 DSH；完整领域流程见[评论驱动修改方案](11-comment-driven-revision-plan.md)。宿主能力由[适配器接入规范](14-adapter-integration.md)定义，DSH 只声明并启用其当前宿主可提供的能力。
 
 - 左侧 CoSpace 总入口负责浏览个人文档和打开审阅界面。
-- 任意 DSH 对话输入框的加号可选择一个或多个 CoSpace 文件，引用格式为 `space:<docId>`。该入口已在 DSH `0.2.2-rc.5` 中接入（见下）；真实对话内的插入、引用解析和跨会话行为仍待端到端验收，不把入口可用等同于插件接入已验证。
+- 任意 DSH 对话输入框的加号可选择一个或多个 CoSpace 文件，引用格式为 `space:<docId>`。该入口已在 DSH `0.2.3-alpha.2` 中接入（见下）；真实对话内的插入、引用解析和跨会话行为仍待端到端验收，不把入口可用等同于插件接入已验证。
 - 用户发送文件和修改要求后，Agent 通过受控能力读取对应正文、版本、待处理建议，并逐条提交具体建议；接受和拒绝由用户在 UI 发起。
 - 选区评论保存在文档侧；用户主动触发后，Agent 从 `space_document_read` 返回中读取评论并提交建议。对话请求只携带指定文档引用和简短指令，不携带评论正文。
 
@@ -25,27 +25,37 @@
 
 `OVERLAPPING_SUGGESTION` 返回冲突建议 ID 和可用定位；`VERSION_CONFLICT` 要求读最新版本；`ANCHOR_STALE` 禁止猜测应用。Agent 可以创建并写入新文档初始正文；接口不提供修改已有文档已接受正文的操作。若宿主还暴露文件或 shell 工具，应核实权限边界；插件不能声称能拦截所有绕行方式。
 
-## 已接入的宿主接口（0.2.2-rc.5）
+## 已接入的宿主接口（0.2.3-alpha.2）
 
-实现位置：[DSH 插件入口](../adapters/dsh/index.js)、[宿主 HTTP API](../adapters/dsh/server/host.js)、[MCP 进程入口](../adapters/dsh/server/mcp-entry.js)、[DSH 客户端入口](../adapters/dsh/client/index.jsx)。
+实现位置：[DSH 插件入口](../adapters/dsh/index.js)、[宿主 UI API](../packages/host-api/src/index.js) 与 [HTTP 传输](../packages/transport-http/http-handler.js)、[MCP 进程入口](../adapters/dsh/server/mcp-entry.js)、[DSH 客户端入口](../adapters/dsh/client/index.jsx)。
 
 | 接入点 | 实现方式 | 当前状态 |
 |---|---|---|
 | Agent 工具 | `mcpManager.register('space', { transport:'stdio', toolLoading:'eager' })`；工具为 `space_document_create`、`space_document_read`、`space_suggest`、`space_suggestion_list`、`space_comment_complete` | 已注册；不支持文档枚举；MCP stdio 和评论处理契约由 Node 测试覆盖 |
 | UI API | `webServer.register({ kind:'prefix', path:'/cospace-api', auth:'required' })`；宿主在分发前完成 Host/Origin 与浏览器凭据准入（无法判定时 503），通过后分发到文档新建、读取、决策、评论、账号名称/头像和发送目标服务 | 已注册；路由准入由宿主承担并有单元测试；新建文档入口、插件页、详情预览图、侧边栏 CoSpace 入口和空状态已加载 |
 | 左侧入口 | Client slot `main`（key `spaces`）与 `sidebar.panellist`（id `spaces`） | 已在 DSH 页面渲染 |
-| 输入框多选 | `commandUi.register` 打开原生对话框；`inputTriggers.registerSource` 提供引用编解码，引用格式 `space:<docId>` | 已注册；真实对话中的插入与 Agent 引用解析仍待验收 |
+| 输入框多选 | `inputTriggers` 的 `@` 菜单按标题/ID 过滤并插入引用；`/space` 命令打开基于 `SpaceDialog` 的多选弹窗（`shell.overlay`）；引用格式 `space:<docId>`，两处共用同一套插入与通知逻辑 | 已注册；真实对话中的插入与 Agent 引用解析仍待验收 |
 | 发送引用渲染 | `uiConversation.userText.register` 匹配完整 `space:<docId>`；`conversation.user.text.node` 注册文档卡片；只读场景保持卡片但不可点击 | 已在本地构建中渲染卡片 |
 | 右侧边栏文档 | `sidebarRightTabs.register` 注册 `dsh-resource://space/**` 资源类型；`sidebar.right.pane.tab` 渲染审阅面板，地址持久化文档 ID | 已打开、刷新后恢复同一文档 |
 | 评论处理触发 | 优先使用 UI 当前对话；没有对话时复用最近工作区、必要时创建默认工作区并新建/复用对话，再发送文档引用和简短指令；评论正文只由 Agent 经 MCP 工具读取 | 已接入；单元测试验证会话目标、请求不含评论正文；真实 DSH 宿主会话链路仍待端到端验收 |
 | 客户端本地化 | Client `locale` 服务注册 `space` 命名空间（中文 / English） | 已接入；已确认切换 English 后插件页、详情页和面板文案更新，切回中文正常 |
+| 自主审阅入口 | 客户端适配器提供 `prompts.mcpReady`，审阅页显示「让 Agent 起草 / 让 Agent 审阅」；点击后把 `autonomousReviewPrompt` 文本复制到剪贴板，不直接发送消息。`mcpReady` 由宿主 `status` 探测 MCP 工具是否已注册 | 已接入；复制与降级有单元测试，真实会话未验收 |
+| 右栏文档动作 | `sidebar.right.tab.menu.item` 注册「复制文档引用 / 复制文档链接 / 在 CoSpace 中打开 / 导出 Markdown / 导出 Word」；面板标题显示文档维度的待处理数量 | 已注册；菜单与导出待 DSH 内实测 |
+| 工具卡片 | 客户端 `tool.call.toolview` 按工具名（`mcp__space__space_document_read` 等）接管渲染：文档读取显示标题/版本/待处理与评论数，提交建议显示原文到替换内容的 diff，建议列表显示待处理与总数 | 已注册；解析与回退有单元测试 |
+| 审阅决策卡 | 宿主 `actionCards.register` 注册 `cospace-review`，并用 `skillProvider` 发布模型技能 `cospace-review-card` 教会围栏格式；客户端 `actionCards.register` 渲染 body，「全部接受」经宿主 `act` 复用 `decide` 逐条接受（操作 ID 可重放） | 已注册；决策循环与技能内容有单元测试，真实会话卡片待验收 |
 | 评论作者 | Host 读取 `deepseekAccount.getState()` / `getProfile()`，只返回登录状态、显示名和头像 URL；客户端回退到本地化通用作者 | 已接入；未登录或账号插件缺失时不影响评论 |
+
+## 本地开发安装
+
+本地联调时，DSH profile 的依赖用 `link:` 指向本仓库的 `dist/dsh-plugin`，不指向仓库根目录：根目录是私有 workspace，没有可直接加载的包入口。因此改完 `adapters/dsh/` 或 `packages/` 后必须先 `npm run build:dsh`（持续开发用 `npm run dev:dsh` 监听重建），再在 DSH 中重新加载插件；只运行 `npm run build:client` 仅重写 `adapters/dsh/client.js`，不会更新 `dist/dsh-plugin/`。验证干净安装时使用 `npm run pack:dsh` 暂存的 tarball，而不是链接目录。
 
 ## 仍需端到端验收
 
 1. 在真实对话中通过 + 选择一个或多个文档后，引用是否按 `space:<docId>` 插入，Agent 是否能解析并授权读取。
-2. 从文档请求处理评论时是否正确取得当前对话；无当前对话时新建/复用对话和默认工作区的真实宿主行为；宿主回执、超时、断连后的失败与结果未知如何区分。
-3. UI 更新和进程重启后，能否重新读取权威正文、版本和建议状态。
-4. 宿主文件/shell 权限及隔离边界，尤其是是否存在绕过 CoSpace 接口的写入。
+2. 工具调用卡片在真实对话中的渲染与回退；右栏菜单的复制/导出在 DSH 桌面与 Web 两种运行时的行为。
+3. 模型是否按技能输出 `action-card` 围栏，以及决策卡接受后的状态回灌。
+4. 从文档请求处理评论时是否正确取得当前对话；无当前对话时新建/复用对话和默认工作区的真实宿主行为；宿主回执、超时、断连后的失败与结果未知如何区分。
+5. UI 更新和进程重启后，能否重新读取权威正文、版本和建议状态。
+6. 宿主文件/shell 权限及隔离边界，尤其是是否存在绕过 CoSpace 接口的写入。
 
 现有自动化覆盖 MCP stdio、SQLite 事务、建议决策、评论处理触发模拟、重启与并发；这些测试不代替上述宿主内验收。

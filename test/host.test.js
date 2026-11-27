@@ -65,8 +65,8 @@ test('client bundle registers Space panel, picker action, and reference serializ
  vm.runInNewContext(bundle,context);
  const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
  const plugin=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
- const registrations=[],sources=[],commands=[],rules=[],tabTypes=[],opened=[];
- const ctx={uiSession:{adapter:{current:{}}},sidebarRight:{openResource:address=>{opened.push(address)}},sidebarRightTabs:{register:definition=>{tabTypes.push(definition);return ()=>{}}},uiConversation:{userText:{register:rule=>{rules.push(rule);return ()=>{}}}},slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{registrations.push({options,component});return ()=>{}}},inputTriggers:{registerSource:source=>{sources.push(source);return ()=>{}}},commandUi:{register:command=>{commands.push(command);return ()=>{}}},locale:{bind:()=>key=>key,register:()=>()=>{}},sessions:{},conversation:{},get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>fn()};
+ const registrations=[],sources=[],commands=[],rules=[],tabTypes=[],opened=[],cardBodies=[];
+ const ctx={uiSession:{adapter:{current:{}}},actionCards:{register:descriptor=>{cardBodies.push(descriptor);return ()=>{}}},sidebarRight:{openResource:address=>{opened.push(address)}},sidebarRightTabs:{register:definition=>{tabTypes.push(definition);return ()=>{}}},uiConversation:{userText:{register:rule=>{rules.push(rule);return ()=>{}}}},slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{registrations.push({options,component});return ()=>{}}},inputTriggers:{registerSource:source=>{sources.push(source);return ()=>{}}},commandUi:{register:command=>{commands.push(command);return ()=>{}}},locale:{bind:()=>key=>key,register:()=>()=>{}},sessions:{},conversation:{},get:()=>undefined,inject:(_deps,fn)=>fn(ctx),effect:fn=>fn()};
  plugin.apply(ctx);
  assert.ok(registrations.some(x=>x.options.name==='main'&&x.options.key==='spaces'));
  assert.ok(registrations.some(x=>x.options.name==='sidebar.panellist'&&x.options.id==='spaces'));
@@ -84,99 +84,59 @@ test('client bundle registers Space panel, picker action, and reference serializ
  assert.equal(rule.match('xspace:doc-1',0),undefined);
  assert.equal(commands[0].name,'space');assert.equal(typeof commands[0].icon,'function');assert.equal(await sources[0].codec.serialize('space:one%20two'),'space:one%20two');
  assert.equal(sources[0].openReference({}, {ref:'space:doc-2'}), true);assert.equal(opened.at(-1),'dsh-resource://space/doc-2');
-});
-
-test('document picker inserts the checked documents into the bound conversation',async()=>{
- const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
- const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
- class Element {
-   constructor(tag){this.tagName=tag;this.children=[];this.listeners={};this.checked=false;this.value='';this.textContent='';}
-   append(...children){this.children.push(...children);}
-   addEventListener(type,listener){this.listeners[type]=listener;}
-   setAttribute(){}
-   showModal(){this.open=true;}
-   close(){this.open=false;this.closed=true;}
-   remove(){this.removed=true;}
-   querySelectorAll(){return [];}
- }
- const elements=[];const modalRoot=[];const document={
-   documentElement:{style:{}},
-   createElement(tag){const element=new Element(tag);elements.push(element);return element;},
-   createTextNode(text){return {textContent:text};},
-   body:{style:{},append(element){modalRoot.push(element);}},
-   head:{append(){}},
- };
- const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
-   fetch:async()=>({ok:true,status:200,text:async()=>JSON.stringify({result:[{id:'doc-1',title:'Selected document'}]})})};
- vm.runInNewContext(bundle,context);
- const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
- const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
- const binding={ctx:{sessionId:'session-1'}};let inserted;let focused=false;
- // DSH's live SessionInput facade inserts a batch through addFiles(references, attachmentIds).
- const input={addFiles:(references,ids)=>{inserted={references,ids};return true;},focus:()=>{focused=true;}};
- const ctx={sessions:{binding:()=>binding},conversation:{input:{for:()=>input}}};
- await client.openSpacePicker(ctx,'session-1',key=>key);
- const checkbox=elements.find(element=>element.tagName==='input');checkbox.checked=true;
- const add=elements.find(element=>element.tagName==='button'&&element.textContent==='picker.add');
- add.listeners.click();
- assert.equal(inserted?.references.length,1);
- assert.equal(inserted?.references[0].ref,'space:doc-1');
- assert.equal(inserted?.ids.length,0);
- assert.equal(focused,true);
- assert.equal(modalRoot[0].closed,true);
-});
-
-test('document picker reports a failed insertion instead of throwing',async()=>{
-  const {readFile}=await import('node:fs/promises');const vm=await import('node:vm');
-  const bundle=await readFile(new URL('../adapters/dsh/client.js',import.meta.url),'utf8');let descriptor;
-  class Element {
-    constructor(tag){this.tagName=tag;this.children=[];this.listeners={};this.checked=false;this.value='';this.textContent='';}
-    append(...children){this.children.push(...children);}
-    addEventListener(type,listener){this.listeners[type]=listener;}
-    setAttribute(){}
-    showModal(){this.open=true;}
-    close(){this.open=false;this.closed=true;}
-    remove(){this.removed=true;}
-    querySelectorAll(){return [];}
-  }
-  const elements=[];const modalRoot=[];const document={
-    documentElement:{style:{}},
-    createElement(tag){const element=new Element(tag);elements.push(element);return element;},
-    createTextNode(text){return {textContent:text};},
-    body:{style:{},append(element){modalRoot.push(element);}},
-    head:{append(){}},
-  };
-  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
-    fetch:async()=>({ok:true,status:200,text:async()=>JSON.stringify({result:[{id:'doc-1',title:'Selected document'}]})})};
-  vm.runInNewContext(bundle,context);
-  const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
-  const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
-  const binding={ctx:{sessionId:'session-1'}};
-  // A facade without the batch reference method must surface the failure note,
-  // not throw out of the DOM click handler and leave the modal looking inert.
-  const input={focus(){}};
-  const ctx={sessions:{binding:()=>binding},conversation:{input:{for:()=>input}}};
-  await client.openSpacePicker(ctx,'session-1',key=>key);
-  const checkbox=elements.find(element=>element.tagName==='input');checkbox.checked=true;
-  const add=elements.find(element=>element.tagName==='button'&&element.textContent==='picker.add');
-  assert.doesNotThrow(()=>add.listeners.click());
-  assert.equal(elements.find(element=>element.tagName==='p'&&element.textContent==='picker.failed')?.textContent,'picker.failed');
-  assert.notEqual(modalRoot[0].closed,true);
+ // The @ menu inserts through the shared reference payload.
+ assert.equal(typeof sources[0].candidates,'function');
+ const picked=sources[0].onPick({candidate:{name:'doc-9',label:'文档九',value:'doc-9'}});
+ // A chip routes to its source by name, so the payload must carry that exact name.
+ assert.equal(picked.insert.source,sources[0].name);assert.equal(picked.insert.ref,'space:doc-9');assert.equal(picked.insert.label,'文档九');assert.equal(picked.insert.appearance,'file');
+ // One right-sidebar tab per document, retained across tab switches.
+ assert.equal(tabTypes[0].multiple,true);
+ assert.equal(tabTypes[0].keepMounted,true);
+ // /space opens the themed picker for the captured Session; the overlay owns the dialog.
+ const overlay=registrations.find(x=>x.options.name==='shell.overlay');
+ assert.ok(overlay);assert.equal(overlay.options.id,'dsh-plugin-space');
+ const injected=overlay.options.inject();
+ const closed=injected.picker.getSnapshot();assert.equal(closed.open,false);assert.equal(closed.sessionId,null);
+ commands[0].ui.run({sessionId:'session-1'});
+ const openedPicker=injected.picker.getSnapshot();assert.equal(openedPicker.open,true);assert.equal(openedPicker.sessionId,'session-1');
+ // P2: the review page's prompts entry, the per-tool cards and the tab menu.
+ const adapter=card.options.inject().adapter;
+ assert.equal(adapter.prompts.mcpReady,true);
+ assert.equal(adapter.navigation.getDocumentId(),null);
+ adapter.navigation.setDocumentId('doc-3');
+ assert.equal(adapter.navigation.getDocumentId(),'doc-3');
+ let followed=null;const unsubscribe=adapter.navigation.subscribeDocumentId(next=>{followed=next});
+ adapter.navigation.openDocumentInPage('doc-4');
+ assert.equal(followed,'doc-4');unsubscribe();
+ assert.deepEqual(registrations.filter(x=>x.options.name==='tool.call.toolview').map(x=>x.options.key),
+   ['mcp__space__space_document_read','mcp__space__space_suggest','mcp__space__space_suggestion_list']);
+ assert.deepEqual(registrations.filter(x=>x.options.name==='sidebar.right.tab.menu.item').map(x=>x.options.id),
+   ['space-copy-reference','space-copy-link','space-open-in-page','space-export-markdown','space-export-docx']);
+ assert.equal(cardBodies.length,1);assert.equal(cardBodies[0].action,'cospace-review');assert.equal(typeof cardBodies[0].Body,'function');
 });
 
 test('plugin registers MCP and web route against the same home and disposes them', async () => {
-  const { apply } = await import('../adapters/dsh/index.js');
+  const { apply, mcpReady } = await import('../adapters/dsh/index.js');
   const home = mkdtempSync(path.join(tmpdir(), 'space-apply-'));
   const old = process.env.DSH_SPACE_HOME;
   process.env.DSH_SPACE_HOME = home;
   const regs = [];
   const disposers = [];
+  const kinds = [];
+  const providers = [];
+  const tools = { get: name => (name === 'mcp__space__space_document_read' ? {} : undefined) };
   const ctx = {
-    get: () => undefined,
+    get: name => (name === 'tools' ? tools : undefined),
     inject: (_deps, fn) => fn(ctx),
     effect: fn => { disposers.push(fn()); },
     mcpManager: { register: (name, config) => { regs.push({ name, config }); return () => {}; } },
     webServer: { register: route => { regs.push({ route }); return () => {}; } },
+    actionCards: {
+      register: kind => { kinds.push(kind); return () => {}; },
+      record: () => {},
+      skillProvider: (candidate, get) => () => ({ name: candidate.provider, list: async () => [candidate], get }),
+    },
+    skills: { registerProvider: create => { providers.push(create({ signal: new AbortController().signal })); return () => {}; } },
   };
 
   try {
@@ -188,6 +148,21 @@ test('plugin registers MCP and web route against the same home and disposes them
     assert.equal(path.basename(path.dirname(mcpEntry)), 'server');
     assert.equal(path.basename(mcpEntry), 'mcp-entry.js');
     assert.equal(regs[1].route.path, '/cospace-api');
+    // Readiness follows the tool registry, so the review page hides its prompt
+    // entry exactly when the MCP tools are missing.
+    assert.equal(mcpReady(ctx), true);
+    assert.equal(mcpReady({ get: () => ({ get: () => undefined }) }), false);
+    assert.equal(mcpReady({ get: () => undefined }), true);
+    // The review card kind and its model-only skill are registered on the same
+    // document service as the UI API.
+    assert.equal(kinds.length, 1);
+    assert.equal(kinds[0].action, 'cospace-review');
+    assert.deepEqual(Object.keys(kinds[0].verbs), ['accept-all']);
+    assert.equal(providers.length, 1);
+    const [skill] = await providers[0].list();
+    assert.equal(skill.invocation.userInvocable, false);
+    const definition = await providers[0].get(skill);
+    assert.match(definition.content, /"action":"cospace-review"/);
   } finally {
     for (const dispose of disposers.reverse()) dispose?.();
     if (old === undefined) delete process.env.DSH_SPACE_HOME;
@@ -200,10 +175,13 @@ test('the UI can read the signed-in account without exposing credentials', async
   const home = mkdtempSync(path.join(tmpdir(), 'space-user-'));
   const host = createHostApi({ home, getUser: async () => ({ signedIn: true, name: 'Ada', avatarUrl: 'https://example.com/a.png' }) });
   const failing = createHostApi({ home, getUser: async () => { throw new Error('offline'); } });
+  const localized = createHostApi({ home, getUser: async locale => ({ signedIn: true, locale }) });
   try {
     assert.deepEqual(await host.dispatch('getUser'), { signedIn: true, name: 'Ada', avatarUrl: 'https://example.com/a.png' });
     assert.equal(await failing.dispatch('getUser'), null);
-  } finally { host.close(); failing.close(); rmSync(home, { recursive: true, force: true }); }
+    // The caller's UI language reaches the account reader unchanged.
+    assert.deepEqual(await localized.dispatch('getUser', { locale: 'en' }), { signedIn: true, locale: 'en' });
+  } finally { host.close(); failing.close(); localized.close(); rmSync(home, { recursive: true, force: true }); }
 });
 
 test('sending without a conversation resolves a target once and reuses it on retry', async () => {
@@ -298,4 +276,16 @@ test('new conversation choice resolves a different target and preserves it on re
     assert.deepEqual(resolved,[{operationId:'new-send',forceNew:true,excludeSessionId:'current'}]);
     await host.dispatch('sendComments',payload);assert.equal(resolved.length,1);assert.equal(sent.length,1);
   } finally {host.close();rmSync(home,{recursive:true,force:true});}
+});
+
+test('the UI can ask the host whether its MCP tools are ready', async () => {
+  const home=mkdtempSync(path.join(tmpdir(),'space-status-'));
+  const ready=createHostApi({home,status:async()=>({mcpReady:true})});
+  const cold=createHostApi({home,status:async()=>({mcpReady:false})});
+  const plain=createHostApi({home});
+  try {
+    assert.deepEqual(await ready.dispatch('status'),{mcpReady:true});
+    assert.deepEqual(await cold.dispatch('status'),{mcpReady:false});
+    assert.deepEqual(await plain.dispatch('status'),{});
+  } finally {ready.close();cold.close();plain.close();rmSync(home,{recursive:true,force:true});}
 });

@@ -4,15 +4,22 @@ import './theme.css';
 import { SpaceDocumentReference } from '../../../packages/review-ui/src/SpaceReference.jsx';
 import { SpaceSidebarDocument, SpaceSidebarTitle } from '../../../packages/review-ui/src/SpaceSidebar.jsx';
 import { api as request } from '../../../packages/transport-http/client.js';
-import { NS, en, errorText, zh } from '../../../packages/review-ui/src/locale.js';
-import { documentIdFromReference, matchSpaceReference, spaceReferenceFor } from '../../../packages/review-ui/src/space-reference.js';
+import { NS, en, zh } from '../../../packages/review-ui/src/locale.js';
+import { documentIdFromReference, matchSpaceReference } from '../../../packages/review-ui/src/space-reference.js';
 import { documentTitle } from '../../../packages/review-ui/src/document-titles.js';
 import { documentIdFromDshResource, dshSpaceResourceFor } from './resource-reference.js';
 import { workspaceNameForSession } from './workspace-name.js';
-import { BRAND } from '../../../packages/brand/brand.js';
 import { ADAPTER_CONTRACT_VERSION, resolveAdapterCapabilities } from '../../../packages/adapter-contract/src/index.js';
 import adapterDeclaration from '../adapter.json' with { type: 'json' };
+import { REFERENCE_SOURCE, createDocumentCache, documentCandidate, filterDocuments, referenceInsertFor } from './documents.js';
+import { createDocumentPicker } from './picker-store.js';
+import { createDocumentInserter } from './insert-documents.js';
+import { SpaceDocumentPicker } from './document-picker.jsx';
 import { SpaceIcon } from './brand-icon.jsx';
+import { createMainDocumentStore } from './main-document.js';
+import { registerSpaceTabMenu } from './tab-actions.jsx';
+import { registerSpaceToolViews } from './tool-views.jsx';
+import { REVIEW_CARD_ACTION, createReviewCardBody } from './review-card.jsx';
 
 export const name = 'dsh-space-client';
 /** Client services: slots, the current Session, copy, conversation text, and the right Sidebar. */
@@ -108,6 +115,14 @@ function resolveDshCapabilities(ctx, conversation) {
  * @param {string} docId - document to open.
  * @returns {boolean} whether a navigation was started.
  */
+/** Reveal the CoSpace page in the main panel; the page follows the shared store. */
+function selectSpacesPanel(ctx) {
+  try {
+    const layout=ctx.get?.('layout');
+    layout?.selectPanel?.('spaces');
+  } catch { /* Navigation is best effort. */ }
+}
+
 function openSpaceDocument(ctx, docId) {
   if (typeof docId !== 'string' || docId === '') return false;
   try {
@@ -120,82 +135,57 @@ function openSpaceDocument(ctx, docId) {
   }
 }
 
-/**
- * Append structured document references to the bound composer.
- * DSH's Session input facade exposes batch reference insertion as
- * `addFiles(references, attachmentIds)`; keep the older `addReferences`
- * spelling as a fallback for builds that still provide it. Both append after
- * the live editor selection and return false when the input is not editable.
- * @param {object} input - Session input facade for the bound Session.
- * @param {Array<object>} references - ReferenceInsert values in pick order.
- * @returns {boolean} whether the editor accepted the whole batch.
- */
-function insertReferences(input, references) {
-  try {
-    if (typeof input?.addFiles === 'function') return input.addFiles(references, []) === true;
-    if (typeof input?.addReferences === 'function') return input.addReferences(references) === true;
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-/** The native modal owns focus and dismissal. References enter the captured session only. */
-export async function openSpacePicker(ctx, sessionId, t) {
-  const binding=ctx.sessions.binding(sessionId);
-  if(!binding) return;
-  const documents=await api('listDocuments');
-  if(ctx.sessions.binding(sessionId)!==binding) return;
-  const modal=document.createElement('dialog'); modal.className='space-picker-dialog'; modal.setAttribute('aria-labelledby','space-picker-title');
-  const title=document.createElement('h2');title.id='space-picker-title';title.textContent=t('picker.title');modal.append(title);
-  const description=document.createElement('p');description.textContent=t('picker.description');modal.append(description);
-  const list=document.createElement('fieldset');const legend=document.createElement('legend');legend.textContent=t('picker.documents');list.append(legend);
-  const checkboxes=[];
-  for(const doc of documents) {const label=document.createElement('label');label.className='space-picker-option';const check=document.createElement('input');check.type='checkbox';check.value=doc.id;checkboxes.push(check);label.append(check,document.createTextNode(doc.title));list.append(label);}
-  if(!documents.length){const empty=document.createElement('p');empty.className='space-picker-empty';empty.textContent=t('picker.empty');list.append(empty);}
-  modal.append(list);
-  const note=document.createElement('p');note.setAttribute('role','status');modal.append(note);
-  const add=document.createElement('button');add.type='button';add.className='is-primary';add.textContent=t('picker.add');add.disabled=!documents.length;
-  const cancel=document.createElement('button');cancel.type='button';cancel.className='is-secondary';cancel.textContent=t('picker.cancel');cancel.addEventListener('click',()=>modal.close());
-  add.addEventListener('click',()=>{
-    try {
-      const chosen=checkboxes.filter(checkbox=>checkbox.checked);if(!chosen.length){note.textContent=t('picker.choose');return;}
-      if(ctx.sessions.binding(sessionId)!==binding){note.textContent=t('picker.closed');return;}
-      const input=ctx.conversation.input.for(binding.ctx);
-      const references=chosen.map(checkbox=>{const doc=documents.find(item=>item.id===checkbox.value);const ref=spaceReferenceFor(doc.id);return {source:'space',ref,label:doc.title,appearance:'file',clipboardText:ref};});
-      if(!insertReferences(input,references)){note.textContent=t('picker.failed');return;}
-      modal.close();input.focus();
-    } catch {
-      note.textContent=t('picker.failed');
-    }
-  });
-  const actions=document.createElement('div');actions.className='space-picker-actions';actions.append(cancel,add);modal.append(actions);modal.addEventListener('close',()=>modal.remove(),{once:true});document.body.append(modal);modal.showModal();
-}
-
 export function apply(ctx) {
   const t=ctx.locale.bind(NS);
   const sendBridge=createSendBridge(ctx);
   const capabilities=resolveDshCapabilities(ctx,sendBridge);
+  const service = name => (typeof ctx.get === 'function' ? ctx.get(name) : undefined);
+  const documents = createDocumentCache(() => request('listDocuments'));
+  const picker = createDocumentPicker();
+  const insertDocuments = createDocumentInserter({
+    service,
+    invalidate: () => documents.invalidate(),
+  });
+  const mainDocument=createMainDocumentStore();
   const adapter={
     core:{request:api},
     capabilities,
     conversation:sendBridge,
-    identity:{getCurrentUser:()=>api('getUser')},
+    // The review page gates its "let the Agent draft/review" actions on this
+    // object; `mcpReady` follows the Host's tool registration probe.
+    prompts:{mcpReady:true},
+    identity:{getCurrentUser:()=>api('getUser',{locale:ctx.locale.getSnapshot().active})},
     files:{saveExport},
     clipboard:{writeText:text=>navigator.clipboard.writeText(text)},
     navigation:{
       openDocument:docId=>openSpaceDocument(ctx,docId),
       createDocumentLink:dshSpaceResourceFor,
       parseDocumentLink:documentIdFromDshResource,
+      getDocumentId:()=>mainDocument.get(),
+      setDocumentId:docId=>{mainDocument.set(docId);selectSpacesPanel(ctx);},
+      subscribeDocumentId:listener=>mainDocument.subscribe(listener),
+      openDocumentInPage:docId=>{mainDocument.set(docId);selectSpacesPanel(ctx);},
     },
   };
+  void api('status').then(status=>{adapter.prompts.mcpReady=status?.mcpReady!==false;}).catch(()=>{});
+  registerSpaceToolViews(ctx);
+  registerSpaceTabMenu(ctx,adapter);
+  ctx.inject(['actionCards'],scope=>{
+    const cards=scope.actionCards;
+    // Without the card UI the kind stays host-only and cards fall back to their
+    // dismiss-only frame.
+    if(!cards||typeof cards.register!=='function') return;
+    scope.effect(()=>cards.register({
+      action:REVIEW_CARD_ACTION,locale:NS,Body:createReviewCardBody({adapter,t}),
+    }),'dsh-space: review card body');
+  });
   ctx.effect(()=>ctx.locale.register(NS,{zh,en}),'dsh-space: dictionaries');
   ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:'spaces',locale:NS},function SpaceMain({t:translate}){
     const current=ctx.uiSession?.adapter?.current;
     const state=useSyncExternalStore(current?.subscribe || (()=>()=>{}),current?.getSnapshot || (()=>null),()=>null);
     return <SpaceApp t={translate} adapter={{...adapter,conversation:{...sendBridge,current:state?.key?{id:state.key}:null,canCreate:sendBridge.canCreate&&capabilities.available.includes('conversation.create')}}}/>;
   }));
-  ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'spaces',order:20,label:()=> BRAND.name.en},SpaceIcon));
+  ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'spaces',order:20,label:()=> t('panel.label')},SpaceIcon));
 
   // Sent references stay protocol text; this rule turns each complete token into
   // one document card instead of leaving `space:<docId>` in the bubble.
@@ -211,7 +201,7 @@ export function apply(ctx) {
   // One resource tab type per document; the persisted address is the document
   // identity, so a reload restores the same document rather than a blank page.
   ctx.effect(()=>ctx.sidebarRightTabs.register({
-    id:SIDEBAR_ID, kind:SIDEBAR_KIND, patterns:[SIDEBAR_PATTERN], priority:'extension',
+    id:SIDEBAR_ID, kind:SIDEBAR_KIND, patterns:[SIDEBAR_PATTERN], priority:'extension', multiple:true, keepMounted:true,
     canOpen:address=>adapter.navigation.parseDocumentLink(address)!==null,
     title:address=>documentTitle(adapter.navigation.parseDocumentLink(address),api) || t('sidebar.title'),
   }),'dsh-space: sidebar document type');
@@ -229,18 +219,35 @@ export function apply(ctx) {
     inject:()=>({adapter}),
   },DshSpaceSidebarTitle));
 
+  // One overlay owns the picker; the /space command only opens it for a Session.
+  ctx.slots.inject('shell.overlay',()=>ctx.slots.register({
+    name:'shell.overlay', id:SIDEBAR_ID, order:60, locale:NS,
+    inject:()=>({picker, documents, insertDocuments}),
+  },SpaceDocumentPicker));
+
   ctx.inject(['inputTriggers'],scope=>{
     scope.effect(()=>scope.inputTriggers.registerSource({
-      trigger:'@',name:'space',candidates:async()=>[],onPick:()=>undefined,
+      trigger:'@',name:REFERENCE_SOURCE,order:10,
+      warm:()=>{ void documents.load().catch(()=>{}); },
+      candidates:async(_session,req)=>{
+        let list;
+        try { list=await documents.load(); } catch { return []; }
+        return filterDocuments(list,req.query).map(documentCandidate);
+      },
+      onPick:pick=>{
+        const id=pick.candidate.value ?? pick.candidate.name;
+        if(typeof id!=='string'||id==='') return undefined;
+        return {insert:referenceInsertFor({id,title:pick.candidate.label})};
+      },
       // A click on the draft chip opens the same document view before sending.
       openReference:(_session,reference)=>{
         const docId=documentIdFromReference(reference?.ref);
         return docId===null ? false : openSpaceDocument(scope,docId);
       },
       codec:{clipboardText:ref=>ref,serialize:async ref=>ref},
-    }),'dsh-space: reference codec');
+    }),'dsh-space: reference source');
   });
-  ctx.inject(['commandUi','sessions','conversation','inputTriggers'],scope=>{
-    scope.effect(()=>scope.commandUi.register({name:'space',label:()=>t('command.label'),description:()=>t('command.description'),icon:SpaceIcon,available:session=>!!scope.sessions.binding(session.sessionId),ui:{kind:'action',run:session=>{openSpacePicker(scope,session.sessionId,t).catch(error=>{const binding=scope.sessions.binding(session.sessionId);if(binding) scope.conversation.input.for(binding.ctx).notify('error',errorText(error,t));});}}}),'dsh-space: composer action');
+  ctx.inject(['commandUi','sessions'],scope=>{
+    scope.effect(()=>scope.commandUi.register({name:'space',label:()=>t('command.label'),description:()=>t('command.description'),icon:SpaceIcon,available:session=>!!scope.sessions.binding(session.sessionId),ui:{kind:'action',run:session=>{picker.open(session.sessionId);}}}),'dsh-space: composer action');
   });
 }
