@@ -35,7 +35,7 @@ function canonicalPathIncludingMissingSegments(target) {
 
 function appDataRoot(env, platform) {
   if (platform === 'win32') return env.LOCALAPPDATA || path.join(homedir(), 'AppData', 'Local');
-  if (platform === 'darwin') return path.join(homedir(), 'Library', 'Application Support');
+  if (platform === 'darwin') return path.join(env.HOME || homedir(), 'Library', 'Application Support');
   return env.XDG_DATA_HOME || path.join(homedir(), '.local', 'share');
 }
 
