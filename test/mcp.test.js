@@ -160,3 +160,70 @@ test('the Space MCP server scopes tools to named documents and processes comment
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('space_suggest links a comment and settles it one suggestion at a time', async () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'space-mcp-link-'));
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [fileURLToPath(new URL('../adapters/dsh/server/mcp-entry.js', import.meta.url))],
+    env: { ...process.env, DSH_SPACE_HOME: home },
+  });
+  const client = new Client({ name: 'space-link-test', version: '1.0.0' });
+  try {
+    await client.connect(transport);
+    const created = await call(client, 'space_document_create', { text: '# Link\n\nOne two', operationId: 'link-create' });
+    const service = new SpaceService(home);
+    let comment;
+    try {
+      comment = service.createComment({ docId: created.id, quote: 'One', body: 'Be specific', anchor: { from: 8, to: 11, version: 0 } });
+    } finally { service.close(); }
+
+    const first = await call(client, 'space_suggest', {
+      docId: created.reference, baseVersion: 0, from: 8, to: 11, expected: 'One', replacement: 'First',
+      operationId: 'link-suggest-1', commentId: comment.id,
+    });
+    assert.equal(first.comment.commentId, comment.id);
+    assert.deepEqual(first.comment.suggestionIds, [first.suggestion.id]);
+    assert.equal(first.comment.replay, false);
+
+    // A comment that needs two edits settles through two suggestions.
+    const second = await call(client, 'space_suggest', {
+      docId: created.reference, baseVersion: 0, from: 12, to: 15, expected: 'two', replacement: 'Second',
+      operationId: 'link-suggest-2', commentId: comment.id,
+    });
+    assert.deepEqual(second.comment.suggestionIds, [first.suggestion.id, second.suggestion.id].sort((a, b) => a - b));
+
+    // Retrying the same suggestion is a replay, not a duplicate link.
+    const replay = await call(client, 'space_suggest', {
+      docId: created.reference, baseVersion: 0, from: 8, to: 11, expected: 'One', replacement: 'First',
+      operationId: 'link-suggest-1', commentId: comment.id,
+    });
+    assert.equal(replay.suggestion.id, first.suggestion.id);
+    assert.equal(replay.comment.replay, true);
+    assert.deepEqual(replay.comment.suggestionIds, second.comment.suggestionIds);
+
+    const check = new SpaceService(home);
+    try {
+      const [linked] = check.listComments(created.id);
+      assert.equal(linked.status, 'processed');
+      assert.deepEqual(linked.processing.suggestionIds, second.comment.suggestionIds);
+    } finally { check.close(); }
+
+    const read = await call(client, 'space_document_read', { id: created.reference });
+    assert.equal(read.comments.length, 1);
+    assert.equal(read.comments[0].status, 'processed');
+
+    const before = (await call(client, 'space_suggestion_list', { docId: created.id })).suggestions.length;
+    const missing = await client.callTool({ name: 'space_suggest', arguments: {
+      docId: created.reference, baseVersion: 0, from: 0, to: 0, expected: '', replacement: 'X',
+      operationId: 'link-suggest-3', commentId: 'comment-that-does-not-exist',
+    } });
+    assert.equal(missing.isError, true);
+    assert.equal(payload(missing).error.code, 'COMMENT_NOT_FOUND');
+    const after = (await call(client, 'space_suggestion_list', { docId: created.id })).suggestions.length;
+    assert.equal(after, before);
+  } finally {
+    await client.close().catch(() => {});
+    rmSync(home, { recursive: true, force: true });
+  }
+});

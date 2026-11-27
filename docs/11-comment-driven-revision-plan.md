@@ -40,7 +40,7 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 
 ## 工具与契约提案
 
-扩展现有 `space_document_read`，并新增语义独立的 `space_comment_complete` 操作。在 `packages/transport-mcp/server.js` 中统一实现，DSH 与 WorkBuddy 复用同一契约；两者仍绑定各自 SpaceService 和独立数据库。`space_suggest` 只负责提交建议，不接收评论处理状态或来源评论参数。
+扩展现有 `space_document_read`，并新增语义独立的 `space_comment_complete` 操作。在 `packages/transport-mcp/server.js` 中统一实现，DSH 与 WorkBuddy 复用同一契约；两者仍绑定各自 SpaceService 和独立数据库。`space_suggest` 只负责提交建议，不接收评论处理状态；可选的 `commentId` 只用于把该建议关联到它所回应的评论（见下文）。
 
 本次改造同时要求精简现有工具清单。移除 `space_list` 和 `space_documents`：Agent 不枚举文档，只能读取和建议修改用户明确指定的 `space:<docId>` 文档。没有指定文档时，Agent 应询问用户或请用户从 Space UI 选择，不得自行搜索、挑选文档。显式创建新文档仍由 `space_document_create` 支持。WorkBuddy 专属的 `space_status` 与 `space_review_open` 都启动/检查审阅 sidecar 并返回状态或页面地址；合并为一个 `space_review_open`，保留可选文档 ID，并在返回中包含可用状态。精简后 DSH 有 5 个共享工具；WorkBuddy 有 6 个（另含 `space_review_open`）。
 
@@ -50,7 +50,7 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 |---|---|---|
 | `space_document_create` | DSH、WorkBuddy | 创建文档 |
 | `space_document_read` | DSH、WorkBuddy | 默认读取指定文档的正文、建议和评论 |
-| `space_suggest` | DSH、WorkBuddy | 仅提交建议，不管理评论状态 |
+| `space_suggest` | DSH、WorkBuddy | 提交建议；可选 `commentId` 关联评论 |
 | `space_suggestion_list` | DSH、WorkBuddy | 查询建议状态 |
 | `space_comment_complete` | DSH、WorkBuddy | 将评论标记为已处理并记录关联建议 |
 | `space_review_open` | WorkBuddy | 打开审阅页并返回服务可用状态 |
@@ -60,17 +60,17 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 | 现有工具 | 提案调整 | 关键契约 |
 |---|---|---|
 | `space_document_read` | 默认返回文档评论 | 不增加参数；每次读取指定文档都返回正文、建议及评论，评论包含稳定 ID、引用、锚点有效性和处理状态 |
-| `space_suggest` | 不改变评论语义 | 只提交建议，不读写评论处理状态，也不接收评论 ID |
+| `space_suggest` | 可选来源评论 | 仍只提交建议、不读写评论处理状态；传入 `commentId` 时在同一响应里记录评论—建议关联并把评论置为 `processed`，可重复提交以追加关联 |
 | `space_comment_complete` | 新增独立完成操作 | 输入文档 ID、稳定 `operationId` 和每条评论关联的一个或多个建议 ID；验证评论和建议属于同一文档，按操作 ID 幂等，并将评论状态置为 `processed` |
 | `space_suggestion_list` | 保持现有建议查询职责 | 继续列出建议及决策状态；评论关联由评论处理记录查询/展示，不改变建议工具语义 |
 
-评论随指定文档的读取结果默认返回；读取不等于处理授权。只有用户明确要求处理评论时，Agent 才依据评论生成建议：用户指定评论 ID 时仅处理这些评论；未指定 ID 时处理读取结果中状态为待处理的全部评论。Agent 在建议提交后调用 `space_comment_complete` 记录评论 ID 与建议 ID 的关联。未明确要求处理时，Agent 不得因为读到了评论就自行提交建议或完成评论。无法安全转成建议时，在对话中询问用户并保持评论未完成。用户补充说明后可重新处理。
+评论随指定文档的读取结果默认返回；读取不等于处理授权。只有用户明确要求处理评论时，Agent 才依据评论生成建议：用户指定评论 ID 时仅处理这些评论；未指定 ID 时处理读取结果中状态为待处理的全部评论。Agent 在提交建议时传入 `commentId` 记录评论 ID 与建议 ID 的关联；未带 `commentId` 提交的建议可用 `space_comment_complete` 事后补录。未明确要求处理时，Agent 不得因为读到了评论就自行提交建议或完成评论。无法安全转成建议时，在对话中询问用户并保持评论未完成。用户补充说明后可重新处理。
 
-评论使用单一状态贯穿发送与 Agent 处理。`space_comment_complete` 将评论标记为 `processed` 并记录评论—建议关联；完成记录只表示 Agent 已提交关联建议，不代表正文已修改，也不代表建议已接受。已处理评论从审阅页隐藏，建议继续保留各自的决策状态。多个建议可关联同一评论；一个建议可关联多条评论，以支持拆分和合并处理。该操作不领取评论、不代替 `space_suggest`，也不直接修改正文。
+评论使用单一状态贯穿发送与 Agent 处理。`space_comment_complete` 或带 `commentId` 的 `space_suggest` 将评论标记为 `processed` 并记录评论—建议关联；完成记录只表示 Agent 已提交关联建议，不代表正文已修改，也不代表建议已接受。已处理评论从审阅页隐藏，建议继续保留各自的决策状态。多个建议可关联同一评论；一个建议可关联多条评论，以支持拆分和合并处理。该操作不领取评论、不代替 `space_suggest`，也不直接修改正文。
 
 ## 一致性、安全与失败处理
 
-- 每条评论有稳定 ID；建议提交和评论处理完成各使用稳定操作 ID。`space_comment_complete` 验证评论、文档和建议之间的归属，并按操作 ID 幂等；相同操作重试不得重复写入处理记录。
+- 每条评论有稳定 ID；建议提交和评论处理完成各使用稳定操作 ID。`space_comment_complete` 与带 `commentId` 的 `space_suggest` 都验证评论、文档和建议之间的归属；同一建议重复关联同一条评论时按重放处理，不重复写入，也不新增关联记录。
 - 同一评论可能由多个建议分别落实；已关联评论仍应可从显式读取结果和建议历史追踪。Agent 再次处理时默认只处理尚无建议关联的评论；用户明确要求重做时，应先检查已有建议与决策，避免机械重复。
 - 读取评论时同时返回文档当前版本。锚点失效时将评论的引用和失效标志交给 Agent，要求重新定位；禁止将猜测的范围提交为建议。
 - Agent 只能读评论、提建议并关联建议；工具不提供接受/拒绝建议或直接改正文的能力。
@@ -100,7 +100,7 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 
 - 会话消息/复制提示词中不包含评论正文；Agent 从 `space_document_read` 的指定文档读取结果中取得评论。
 - `space_document_read` 默认返回评论；用户没有明确要求处理时，Agent 不因读取到评论而生成建议或标记完成。
-- 两个宿主使用同一套评论处理契约，但数据目录、文档和评论保持隔离；Agent 不能枚举文档，只处理用户明确指定的文档。`space_suggest` 只提建议，评论处理记录由 `space_comment_complete` 管理。
+- 两个宿主使用同一套评论处理契约，但数据目录、文档和评论保持隔离；Agent 不能枚举文档，只处理用户明确指定的文档。`space_suggest` 只提建议，评论处理记录由 `space_comment_complete` 或带 `commentId` 的 `space_suggest` 管理。
 - 每条已完成评论可追溯到一个或多个建议 ID；用户能在 UI 区分建议生成、用户决策和正文已接受三种状态。
 - 评论处理完成操作按稳定操作 ID 幂等；建议创建仍按建议操作 ID 幂等；失效锚点不会导致猜测式修改。
 - Agent 从不直接修改已有文档正文，仍由用户接受或拒绝每条建议。
@@ -110,3 +110,7 @@ WorkBuddy 路径继续采用用户手动发送作为传输手段；评论正文�
 - UI 当前处理全部未完成评论；是否增加逐条选择处理需要独立产品需求。
 - 用户在 Agent 处理期间删除或编辑评论时的冲突策略尚未定义。
 - 本机测试覆盖 shared contract、MCP、UI copy flow 和 WorkBuddy sidecar 接口；DSH/WorkBuddy 宿主真实会话端到端验证仍需安排。
+
+## 变更记录
+
+- 2026-11-27：`space_suggest` 新增可选 `commentId`。原先由 `space_comment_complete` 独占的评论—建议关联改为两条入口共用：建议提交时携带来源评论即可当场关联，`space_comment_complete` 继续用于补录（含无需修改的评论）。关联改为增量追加，同一条评论可分多轮关联多个建议；同一建议重复关联按重放处理。删除评论仍为物理删除，不向 Agent 暴露历史。

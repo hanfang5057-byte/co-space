@@ -209,6 +209,26 @@ export class CommentStore {
       return {...result,replay:false};
     });
   }
+  /**
+   * Link one suggestion to the comment it answers and settle the comment.
+   * Existing links are kept so a comment that needs several edits can be
+   * settled one suggestion at a time; linking the same suggestion twice is a
+   * no-op, which makes a retried `space_suggest` safe.
+   */
+  linkSuggestion({docId,commentId,suggestionId,operationId}) {
+    if(!nonempty(docId)||!nonempty(commentId)||!Number.isSafeInteger(suggestionId)||suggestionId<=0) fail('INVALID_INPUT','Document, comment and suggestion are required');
+    return this.transaction(()=>{
+      if(!this.db.prepare('SELECT id FROM space_comments WHERE id=? AND doc_id=?').get(commentId,docId)) fail('COMMENT_NOT_FOUND','Comment not found',{commentId});
+      if(!this.db.prepare('SELECT id FROM review_suggestions WHERE id=? AND doc_id=?').get(suggestionId,docId)) fail('SUGGESTION_NOT_FOUND','Suggestion does not belong to this document',{suggestionId});
+      const prior=this.db.prepare('SELECT suggestion_ids,operation_id FROM space_comment_results WHERE comment_id=?').get(commentId);
+      const existing=prior?parse(prior.suggestion_ids):[];
+      const replay=existing.includes(suggestionId);
+      const suggestionIds=replay?existing:[...existing,suggestionId].sort((a,b)=>a-b);
+      if(!replay) this.db.prepare('INSERT INTO space_comment_results(comment_id,doc_id,suggestion_ids,operation_id,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(comment_id) DO UPDATE SET suggestion_ids=excluded.suggestion_ids,operation_id=excluded.operation_id,updated_at=excluded.updated_at').run(commentId,docId,JSON.stringify(suggestionIds),nonempty(operationId)?operationId:(prior?.operation_id||`link:${suggestionId}`),new Date().toISOString());
+      this.db.prepare("UPDATE space_comments SET status='processed' WHERE id=? AND doc_id=?").run(commentId,docId);
+      return {commentId,suggestionIds,replay};
+    });
+  }
   findSend(operationId) {
     if(!nonempty(operationId)) return undefined;
     const row=this.db.prepare('SELECT session_id,status FROM space_comment_sends WHERE id=?').get(operationId);

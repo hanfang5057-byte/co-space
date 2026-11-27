@@ -62,6 +62,7 @@ export class SpaceService {
   deleteComment(input) { return this.repository.deleteComment(input); }
   listComments(docId) { return this.repository.listComments(docId); }
   completeCommentProcessing(input) { return this.repository.completeCommentProcessing(input); }
+  linkCommentSuggestion(input) { return this.repository.linkCommentSuggestion(input); }
   findSend(id) { return this.repository.findSend(id); }
   prepareSend(input) { return this.repository.prepareSend(input); }
   finishSend(input) { return this.repository.finishSend(input); }

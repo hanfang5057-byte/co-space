@@ -49,10 +49,24 @@ for (const target of ['dsh', 'local']) {
       const human = new SpaceService(dataHome);
       try { human.decide({ docId: created.body.id, suggestionId: proposed.body.suggestion.id, decision: 'accept', operationId: 'accept' }); }
       finally { human.close(); }
-      assert.equal((await invoke('space_document_read', { id: ref })).body.content, '# Contract\n\nHello Space');
+      const acceptedRead = await invoke('space_document_read', { id: ref });
+      assert.equal(acceptedRead.body.content, '# Contract\n\nHello Space');
       assert.equal((await invoke('space_suggestion_list', { docId: ref })).body.suggestions[0].status, 'accepted');
       const stale = await invoke('space_suggest', { ...input, operationId: 'stale' });
       assert.equal(stale.body.error.code, 'VERSION_CONFLICT');
+
+      // A suggestion can carry its source comment, and the link survives both transports.
+      const spaceFrom = acceptedRead.body.content.indexOf('Space');
+      const human2 = new SpaceService(dataHome);
+      let comment;
+      try { comment = human2.createComment({ docId: created.body.id, quote: 'Space', body: 'Name it', anchor: { from: spaceFrom, to: spaceFrom + 5, version: 1 } }); }
+      finally { human2.close(); }
+      const linkedInput = { docId: ref, baseVersion: 1, from: spaceFrom, to: spaceFrom + 5, expected: 'Space', replacement: 'World', operationId: 'suggest-linked', commentId: comment.id };
+      const linked = await invoke('space_suggest', linkedInput);
+      assert.equal(linked.error, false);
+      assert.deepEqual(linked.body.comment.suggestionIds, [linked.body.suggestion.id]);
+      assert.equal((await invoke('space_suggest', linkedInput)).body.comment.replay, true);
+      assert.equal((await invoke('space_document_read', { id: ref })).body.comments[0].status, 'processed');
     } finally {
       await client.close().catch(() => {});
       await server?.close().catch(() => {});

@@ -47,6 +47,8 @@ async function dispatchMcp(space, collaboration, method, args = {}) {
     case 'propose': return space.propose(args);
     case 'listSuggestions': return space.listSuggestions(args.id, args.status || 'all');
     case 'completeCommentProcessing': return space.completeCommentProcessing(args);
+    case 'listComments': return space.listComments(args.id);
+    case 'linkCommentSuggestion': return space.linkCommentSuggestion(args);
     case 'readInstructions': return collaboration.readInstructions(args.docId);
     default: throw Object.assign(new Error('未知 MCP 操作'), { code: 'METHOD_NOT_FOUND' });
   }

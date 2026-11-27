@@ -21,6 +21,7 @@ export class SpaceRepository {
   deleteComment(input) { return this.comments.delete(input); }
   listComments(docId) { return this.comments.list(docId); }
   completeCommentProcessing(input) { return this.comments.completeProcessing(input); }
+  linkCommentSuggestion(input) { return this.comments.linkSuggestion(input); }
   findSend(id) { return this.comments.findSend(id); }
   prepareSend(input) { return this.comments.prepareSend(input); }
   finishSend(input) { return this.comments.finishSend(input); }

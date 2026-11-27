@@ -40,6 +40,8 @@ export function createRemoteServices(endpoint) {
       propose: args => call('propose', args),
       listSuggestions: (id, status) => call('listSuggestions', { id, status }),
       completeCommentProcessing: args => call('completeCommentProcessing', args),
+      listComments: id => call('listComments', { id }),
+      linkCommentSuggestion: args => call('linkCommentSuggestion', args),
     },
     collaboration: { readInstructions: docId => call('readInstructions', { docId }) },
   };
