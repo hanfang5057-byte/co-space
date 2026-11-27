@@ -17,7 +17,7 @@ The former hand-run release sequences are deprecated and must not be used for a 
 
 ## Release tracks and shared rules
 
-The workspace root is private and must never be published. DSH and Desktop keep independent version sources, tags, artifacts and release gates. A coordinated release may intentionally assign the same version to both products (the current preparation ships the DSH track at `0.1.21` while the desktop track stays staged at `0.1.20`), but each product still follows its own publish or release sequence; never move or reuse a tag. A matching number does not mean the artifacts must ship together.
+The workspace root is private and must never be published. DSH and Desktop keep independent version sources, tags, artifacts and release gates. A coordinated release may intentionally assign the same version to both products (the current preparation aligns both tracks at `0.1.21`), but each product still follows its own publish or release sequence; never move or reuse a tag. A matching number does not mean the artifacts must ship together.
 
 | Product | Artifact | Version source | Git tag |
 | --- | --- | --- | --- |
