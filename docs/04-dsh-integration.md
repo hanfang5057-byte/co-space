@@ -32,7 +32,7 @@
 | 接入点 | 实现方式 | 当前状态 |
 |---|---|---|
 | Agent 工具 | `mcpManager.register('space', { transport:'stdio', toolLoading:'eager' })`；工具为 `space_document_create`、`space_document_read`、`space_suggest`、`space_suggestion_list`、`space_comment_complete` | 已注册；不支持文档枚举；MCP stdio 和评论处理契约由 Node 测试覆盖 |
-| UI API | `webServer.register({ kind:'prefix', path:'/cospace-api' })`，POST 请求先经 `ctx.connection.requestRejection` 准入，再分发到文档新建、读取、决策、评论、账号名称/头像和发送目标服务 | 已注册；路由准入在 0.1.8 加入并有单元测试；新建文档入口、插件页、详情预览图、侧边栏 CoSpace 入口和空状态已加载 |
+| UI API | `webServer.register({ kind:'prefix', path:'/cospace-api', auth:'required' })`；宿主在分发前完成 Host/Origin 与浏览器凭据准入（无法判定时 503），通过后分发到文档新建、读取、决策、评论、账号名称/头像和发送目标服务 | 已注册；路由准入由宿主承担并有单元测试；新建文档入口、插件页、详情预览图、侧边栏 CoSpace 入口和空状态已加载 |
 | 左侧入口 | Client slot `main`（key `spaces`）与 `sidebar.panellist`（id `spaces`） | 已在 DSH 页面渲染 |
 | 输入框多选 | `commandUi.register` 打开原生对话框；`inputTriggers.registerSource` 提供引用编解码，引用格式 `space:<docId>` | 已注册；真实对话中的插入与 Agent 引用解析仍待验收 |
 | 发送引用渲染 | `uiConversation.userText.register` 匹配完整 `space:<docId>`；`conversation.user.text.node` 注册文档卡片；只读场景保持卡片但不可点击 | 已在本地构建中渲染卡片 |

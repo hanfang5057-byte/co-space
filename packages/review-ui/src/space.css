@@ -327,6 +327,8 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 .space-dialog-content .space-collab-save-status { min-block-size:1.4em; margin:-7px 0 0; color:var(--space-muted,#656b77); font-size:12px; }
 .space-dialog-content .space-collab-error { padding:10px 12px; border:1px solid color-mix(in srgb,#b91c1c 25%,transparent); border-radius:9px; background:color-mix(in srgb,#b91c1c 7%,#fff); color:#b91c1c; }
 .space-dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin:0; }
+.space-alert-dialog { inline-size:min(440px,calc(100vw - 32px)); }
+.space-alert-dialog .space-alert-dialog-message { margin:0; color:var(--space-text,#25262b); font-size:14px; line-height:1.65; overflow-wrap:anywhere; }
 .space-send-options { display:grid; gap:8px; margin:18px 0 0; padding:0; border:0; }
 .space-send-options legend { margin-block-end:8px; color:var(--space-muted); font-size:12px; }
 .space-send-option { display:flex; align-items:flex-start; gap:10px; padding:11px 12px; border:1px solid var(--space-border); border-radius:10px; cursor:pointer; }

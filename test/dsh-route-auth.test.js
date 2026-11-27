@@ -5,11 +5,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { apply } from '../adapters/dsh/index.js';
 
-function createHarness(connection) {
+/**
+ * Minimal Host context: admission belongs to `webServer.register`, so the
+ * harness only records the registration and never supplies `connection`.
+ */
+function createHarness() {
   let route;
   const disposers = [];
   const ctx = {
-    get: name => (name === 'connection' ? connection : undefined),
+    get: () => undefined,
     inject: (_deps, callback) => callback(ctx),
     effect: callback => {
       const dispose = callback();
@@ -27,33 +31,36 @@ function createHarness(connection) {
   return { route, dispose: () => disposers.reverse().forEach(dispose => dispose?.()) };
 }
 
-function invoke(handler, headers) {
-  const res = {
+function request(body) {
+  return {
+    method: 'POST',
+    url: '/cospace-api',
+    headers: {},
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from(JSON.stringify(body));
+    },
+  };
+}
+
+function response() {
+  return {
     status: 0,
     body: '',
     writeHead(status) { this.status = status; },
     end(body) { this.body = body; },
   };
-  handler({ method: 'POST', url: '/cospace-api', headers }, res);
-  return res;
 }
 
-test('the CoSpace HTTP route applies the DSH connection admission check', () => {
+test('the CoSpace HTTP route delegates admission to the Host with auth required', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'space-route-auth-'));
   const previous = process.env.DSH_SPACE_HOME;
   process.env.DSH_SPACE_HOME = home;
-  let seenHeaders;
-  const { route, dispose } = createHarness({
-    requestRejection: ({ headers }) => {
-      seenHeaders = headers;
-      return headers['x-space-test'] === 'deny' ? 403 : undefined;
-    },
-  });
+  const { route, dispose } = createHarness();
   try {
-    const rejected = invoke(route.handler, { 'x-space-test': 'deny' });
-    assert.equal(seenHeaders['x-space-test'], 'deny');
-    assert.equal(rejected.status, 403);
-    assert.equal(JSON.parse(rejected.body).error.code, 'FORBIDDEN');
+    assert.equal(route.kind, 'prefix');
+    assert.equal(route.path, '/cospace-api');
+    assert.equal(route.auth, 'required');
+    assert.equal(typeof route.handler, 'function');
   } finally {
     dispose();
     if (previous === undefined) delete process.env.DSH_SPACE_HOME;
@@ -62,44 +69,14 @@ test('the CoSpace HTTP route applies the DSH connection admission check', () => 
   }
 });
 
-test('the CoSpace HTTP route fails closed without the DSH connection service', () => {
-  const home = mkdtempSync(path.join(tmpdir(), 'space-route-auth-missing-'));
-  const previous = process.env.DSH_SPACE_HOME;
-  process.env.DSH_SPACE_HOME = home;
-  const { route, dispose } = createHarness(undefined);
-  try {
-    const response = invoke(route.handler, {});
-    assert.equal(response.status, 503);
-    assert.equal(JSON.parse(response.body).error.code, 'UNAVAILABLE');
-  } finally {
-    dispose();
-    if (previous === undefined) delete process.env.DSH_SPACE_HOME;
-    else process.env.DSH_SPACE_HOME = previous;
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test('an admitted request still reaches the CoSpace API', async () => {
+test('an admitted request reaches the CoSpace API without the connection service', async () => {
   const home = mkdtempSync(path.join(tmpdir(), 'space-route-auth-allow-'));
   const previous = process.env.DSH_SPACE_HOME;
   process.env.DSH_SPACE_HOME = home;
-  const { route, dispose } = createHarness({ requestRejection: () => undefined });
+  const { route, dispose } = createHarness();
   try {
-    const req = {
-      method: 'POST',
-      url: '/cospace-api',
-      headers: {},
-      async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify({ method: 'listDocuments' }));
-      },
-    };
-    const res = {
-      status: 0,
-      body: '',
-      writeHead(status) { this.status = status; },
-      end(body) { this.body = body; },
-    };
-    await route.handler(req, res);
+    const res = response();
+    await route.handler(request({ method: 'listDocuments' }), res);
     assert.equal(res.status, 200);
     assert.deepEqual(JSON.parse(res.body), { result: [] });
   } finally {

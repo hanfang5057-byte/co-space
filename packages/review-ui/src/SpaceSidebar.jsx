@@ -4,6 +4,7 @@ import { useCurrentUser } from './current-user.js';
 import { rememberDocumentTitle, useDocumentTitle } from './document-titles.js';
 import { translate, zh } from './locale.js';
 import { documentIdFromResource } from './space-reference.js';
+import { SpaceAlertDialog } from './SpaceDialog.jsx';
 import { ReviewSendButton, ReviewZoomControls, SpaceReviewSurface, useSpaceReview } from './SpaceApp.jsx';
 
 const fallbackT = (key, vars) => translate(zh, key, vars);
@@ -39,6 +40,7 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT }) {
       <SpaceReviewSurface review={review} user={user} t={t}/>
     </main>
     <div className="space-message" role="status" aria-live="polite">{review.doc ? review.message : ''}</div>
+    <SpaceAlertDialog open={Boolean(review.error)} title={t('dialog.errorTitle')} description={review.error} closeLabel={t('dialog.close')} confirmLabel={t('dialog.dismiss')} onClose={review.dismissError}/>
   </div>;
 }
 

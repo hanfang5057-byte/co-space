@@ -5,6 +5,8 @@ export const NS = 'space';
 
 export const zh = {
   'dialog.close':'关闭弹窗',
+  'dialog.errorTitle':'操作失败',
+  'dialog.dismiss':'知道了',
   'collab.open':'风格偏好', 'collab.globalOpen':'全局风格偏好', 'collab.title':'风格偏好', 'collab.globalTitle':'全局风格偏好', 'collab.documentTitle':'本文档风格偏好', 'collab.close':'关闭风格偏好', 'collab.placeholder':'例如：面向谁写作、语气、术语、格式和表达习惯', 'collab.save':'保存', 'collab.saving':'正在保存…', 'collab.saved':'已保存', 'collab.saveError':'保存失败', 'collab.loading':'正在读取风格偏好…', 'collab.backendOutdated':'协作服务尚未加载。请在宿主应用中重新加载 CoSpace 插件后重试。',
   'brand.name': BRAND.name.zh,
   'brand.nameEnglish': BRAND.name.en,
@@ -212,6 +214,9 @@ export const zh = {
   'error.limitExceeded': '请求内容过大。',
   'error.methodNotFound': '该操作不受支持。',
   'error.sessionUnavailable': '当前对话发送能力不可用。',
+  'error.unauthorized': '登录状态已失效，请刷新页面后重试。',
+  'error.forbidden': '请求未通过访问检查。',
+  'error.unavailable': '服务暂时不可用，请稍后重试。',
   'picker.title': `选择 ${BRAND.name.en} 文档`,
   'picker.description': '选择一个或多个文档，添加到当前对话。',
   'picker.documents': '文档',
@@ -230,6 +235,8 @@ export const zh = {
 
 export const en = {
   'dialog.close':'Close dialog',
+  'dialog.errorTitle':'Something went wrong',
+  'dialog.dismiss':'Got it',
   'collab.open':'Style preferences', 'collab.globalOpen':'Global style preferences', 'collab.title':'Style preferences', 'collab.globalTitle':'Global style preferences', 'collab.documentTitle':'Document style preferences', 'collab.close':'Close style preferences', 'collab.placeholder':'For example: audience, tone, terminology, formatting, and expression preferences', 'collab.save':'Save', 'collab.saving':'Saving…', 'collab.saved':'Saved', 'collab.saveError':'Could not save', 'collab.loading':'Loading style preferences…', 'collab.backendOutdated':'The collaboration service is not loaded. Reload the CoSpace plugin in the host app and try again.',
   'brand.name': BRAND.name.zh,
   'brand.nameEnglish': BRAND.name.en,
@@ -437,6 +444,9 @@ export const en = {
   'error.limitExceeded': 'The request is too large.',
   'error.methodNotFound': 'This operation is not supported.',
   'error.sessionUnavailable': 'Sending to the conversation is unavailable.',
+  'error.unauthorized': 'Your sign-in is no longer valid. Refresh the page and try again.',
+  'error.forbidden': 'The request did not pass the access check.',
+  'error.unavailable': 'The service is unavailable. Try again shortly.',
   'picker.title': `Choose ${BRAND.name.en} documents`,
   'picker.description': 'Choose one or more documents to add to the current conversation.',
   'picker.documents': 'Documents',
@@ -459,6 +469,9 @@ const ERROR_KEYS = {
   LIMIT_EXCEEDED: 'error.limitExceeded',
   METHOD_NOT_FOUND: 'error.methodNotFound',
   SESSION_UNAVAILABLE: 'error.sessionUnavailable',
+  UNAUTHORIZED: 'error.unauthorized',
+  FORBIDDEN: 'error.forbidden',
+  UNAVAILABLE: 'error.unavailable',
   SEND_TARGET_UNAVAILABLE: 'send.createUnavailable',
   EDIT_REQUIRES_UNANNOTATED_DOCUMENT: 'edit.unavailable',
   VERSION_CONFLICT: 'edit.versionConflict',

@@ -107,7 +107,7 @@ test('document picker inserts the checked documents into the bound conversation'
    head:{append(){}},
  };
  const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
-   fetch:async()=>({ok:true,json:async()=>({result:[{id:'doc-1',title:'Selected document'}]})})};
+   fetch:async()=>({ok:true,status:200,text:async()=>JSON.stringify({result:[{id:'doc-1',title:'Selected document'}]})})};
  vm.runInNewContext(bundle,context);
  const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
  const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});
@@ -147,7 +147,7 @@ test('document picker reports a failed insertion instead of throwing',async()=>{
     head:{append(){}},
   };
   const context={window:{__ModuleLoader__:{load:value=>{descriptor=value;}}},document,console,
-    fetch:async()=>({ok:true,json:async()=>({result:[{id:'doc-1',title:'Selected document'}]})})};
+    fetch:async()=>({ok:true,status:200,text:async()=>JSON.stringify({result:[{id:'doc-1',title:'Selected document'}]})})};
   vm.runInNewContext(bundle,context);
   const react={createContext(){return {}},forwardRef(fn){return fn},createElement(){},useCallback(){},useEffect(){},useMemo(){},useRef(){},useState(){},useSyncExternalStore(){}};
   const client=descriptor.factory(name=>name==='react'?react:name==='react/jsx-runtime'?{jsx(){},jsxs(){}}:{});

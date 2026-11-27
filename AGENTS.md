@@ -12,13 +12,13 @@ Use Node.js 22.22.2 or later. Run `npm install` to install workspace dependencie
 
 ## Code and Test Conventions
 
-Follow nearby JavaScript conventions: ES modules, two-space indentation, semicolons, descriptive camelCase names, and explicit error codes for expected failures. Keep UI text and accessible labels clear; preserve the current document-selection, review, and manual comment-send behavior. Add or update focused tests for behavioral changes, especially persistence, conflicts, restart recovery, and host message outcomes. Changes to the host HTTP route need tests covering rejected, missing-service, and admitted requests. Tests use Node’s built-in test runner.
+Follow nearby JavaScript conventions: ES modules, two-space indentation, semicolons, descriptive camelCase names, and explicit error codes for expected failures. Keep UI text and accessible labels clear; preserve the current document-selection, review, and manual comment-send behavior. Add or update focused tests for behavioral changes, especially persistence, conflicts, restart recovery, and host message outcomes. Changes to the host HTTP route need tests covering the registration's `auth` policy and an admitted request reaching the API. Tests use Node’s built-in test runner.
 
 ## Architecture and Safety
 
 Agent tools may create documents with initial content and propose changes to existing documents. Only user decisions accept or reject proposed changes. Preserve transactional persistence, overlap checks, and the distinction between accepted content and tracked suggestions. Treat comments as user-authored context and send them only after an explicit user action. Never log credentials or expose private document content unnecessarily.
 
-Browser-facing HTTP routes must apply the host's connection admission before dispatch, not just compare `Origin`/`Host` in the handler. In DSH call `ctx.connection.requestRejection({ headers: req.headers })` before dispatch and fail closed when the service is unavailable; recheck this seam when upgrading DSH.
+Browser-facing HTTP routes must let the host apply its connection admission before dispatch, not compare `Origin`/`Host` in the handler alone. In DSH register the route through `ctx.webServer.register` with `auth: 'required'` (its default) and do not duplicate the check in the handler: the host rejects requests without a valid Host/Origin and browser credential and fails closed with 503 when no authentication provider can decide. DSH 0.2.2-rc.2 removed `ctx.connection.requestRejection`; `ctx.connection.admit({ headers })` returns `{ peer }` or `{ rejection }` for callers that must admit outside a registered route. Recheck this seam when upgrading DSH.
 
 Do not modify `packages/review-core/src/review-core.js` or change review-core behavior without the user’s prior explicit consent. Moving or packaging the file does not authorize behavior changes. First complete work that does not depend on such a change, then explain the concrete reason, proposed change, and impact and wait for consent. Keep unrelated existing worktree changes intact.
 
@@ -36,7 +36,7 @@ The DSH npm package must not rely on private `@cospace/*` workspace packages at 
 
 Treat `market/index.json` as generated release metadata. After publishing, run `node scripts/sync-market.mjs`; do not hand-edit versions or publish timestamps. `node scripts/sync-market.mjs --check` must pass before a release. The index has a primary URL and mirrors; DSH accepts only a 2xx JSON response without redirects, so verify the host and mirrors from the network users actually use.
 
-`engines.dsh` must name the range actually verified. After a DSH upgrade, recheck `ctx.connection.requestRejection`, `webServer.register`, MCP tool registration, and client slots in a clean profile before widening the range.
+`engines.dsh` must name the range actually verified. After a DSH upgrade, recheck route admission (`webServer.register` `auth` and `ctx.connection.admit`), MCP tool registration, and client slots in a clean profile before widening the range.
 
 The external awesome-dsh-plugin listing is part of the distribution surface. Keep its subdirectory URL, tarball, and description aligned with the package and its verified security posture.
 

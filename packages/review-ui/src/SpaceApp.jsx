@@ -11,6 +11,7 @@ import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
 import { supportsCapability } from '../../adapter-contract/src/index.js';
 import { autonomousReviewPrompt, commentProcessingPrompt } from '../../adapter-contract/src/prompts.js';
+import { SpaceAlertDialog, SpaceDialog } from './SpaceDialog.jsx';
 import './space.css';
 
 const h = createElement;
@@ -99,36 +100,6 @@ function ReviewToolsMenu({ exporting, onExport, onReview, onPreferences, canExpo
   </div>;
 }
 
-/** Shared accessible modal surface for all workbench dialogs. */
-function SpaceDialog({ open, onClose, labelledBy, title, closeLabel, className = '', closeOnBackdrop = false, actions, children }) {
-  const dialogRef=useRef(null);
-  const onCloseRef=useRef(onClose);
-  onCloseRef.current=onClose;
-  useEffect(()=>{
-    if(!open||typeof document==='undefined')return;
-    const dialog=dialogRef.current;
-    const previousFocus=document.activeElement;
-    const previousOverflow=document.body.style.overflow;
-    document.body.style.overflow='hidden';
-    const focusable=()=>[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex]:not([tabindex="-1"])')];
-    const initial=dialog.querySelector('[autofocus]')||focusable()[0]||dialog;
-    initial.focus();
-    const onKeyDown=event=>{
-      if(event.key==='Escape'){event.preventDefault();onCloseRef.current?.();return}
-      if(event.key!=='Tab')return;
-      const items=focusable();
-      if(!items.length){event.preventDefault();dialog.focus();return}
-      const first=items[0],last=items.at(-1);
-      if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog)){event.preventDefault();last.focus()}
-      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
-    };
-    document.addEventListener('keydown',onKeyDown);
-    return()=>{document.removeEventListener('keydown',onKeyDown);document.body.style.overflow=previousOverflow;if(previousFocus instanceof HTMLElement&&previousFocus.isConnected)previousFocus.focus()};
-  },[open]);
-  if(!open||typeof document==='undefined')return null;
-  return <div className="space-dialog-backdrop" onMouseDown={event=>{if(closeOnBackdrop&&event.target===event.currentTarget)onClose()}}><section ref={dialogRef} className={`space-dialog ${className}`} role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1} onMouseDown={event=>event.stopPropagation()}><header className="space-dialog-header"><h2 id={labelledBy}>{title}</h2><button type="button" className="space-dialog-close" aria-label={closeLabel} onClick={()=>onCloseRef.current?.()}><X size={17} aria-hidden="true"/></button></header><div className="space-dialog-content">{children}</div>{actions&&<footer className="space-dialog-actions">{actions}</footer>}</section></div>;
-}
-
 /**
  * Load and drive one document's review state.
  *
@@ -154,6 +125,9 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
   const [zoom,setZoom]=useState(1);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
+  // Failures are reported through the shared alert dialog; `message` keeps
+  // only non-blocking notices such as "prompt copied".
+  const [error,setError]=useState('');
   const [editing,setEditing]=useState(false);
   const [editSaveError,setEditSaveError]=useState('');
   const [editDirty,setEditDirty]=useState(false);
@@ -199,12 +173,12 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     if (!docId) {
       loadSequence.current++;
       snapshot.current=null;
-      setDoc(null);setComments([]);setActive(null);setActiveComment(null);setSelection(null);setDraft('');setMessage('');
+      setDoc(null);setComments([]);setActive(null);setActiveComment(null);setSelection(null);setDraft('');setMessage('');setError('');
       return;
     }
     snapshot.current=null;
-    setDoc(null);setMessage('');
-    reload(docId).catch(e=>setMessage(errorText(e,translateNow.current)));
+    setDoc(null);setMessage('');setError('');
+    reload(docId).catch(e=>setError(errorText(e,translateNow.current)));
   },[docId,reload]);
   useEffect(()=>()=>{loadSequence.current++;},[]);
   useEffect(()=>{busyRef.current=busy},[busy]);
@@ -227,7 +201,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
   const statusText=item=>statusKeys[item.status] ? t(statusKeys[item.status]) : item.status;
   const chooseCard=id=>{setActiveComment(null);setActive(id);const item=doc?.suggestions?.find(suggestion=>suggestion.id===id);if(!item||!scrollToSourceOffset(surface.current,item.from,doc?.content||''))setMessage(t('suggestion.unavailable'));};
   const chooseFromText=id=>{setActiveComment(null);setActive(id);cardRefs.current.get(id)?.scrollIntoView({block:'nearest',behavior:'auto'});};
-  const perform=async fn=>{setBusy(true);setMessage('');try{return await fn()}catch(e){setMessage(errorText(e,translateNow.current));return null}finally{setBusy(false)}};
+  const perform=async(fn,{inline=false,silent=false}={})=>{setBusy(true);if(inline)setMessage('');else if(!silent)setError('');try{return await fn()}catch(e){const text=errorText(e,translateNow.current);if(inline)setMessage(text);else if(!silent)setError(text);return null}finally{setBusy(false)}};
   const decide=(suggestionId,decision)=>perform(async()=>{await call('decide',{docId,suggestionId,decision,operationId:requestId()});await reload(docId)});
   const markEditDirty=()=>{
     const session=editSessionRef.current;
@@ -238,14 +212,14 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
   const persistEdit=useCallback(async({showError=false}={})=>{
     while(true){
       const session=editSessionRef.current;
-      if(!session||session.docId!==docId||session.baseVersion===null) throw Object.assign(new Error(t('edit.unavailable')),{code:'EDIT_REQUIRES_UNANNOTATED_DOCUMENT'});
+      if(!session||session.docId!==docId||session.baseVersion===null){const error=Object.assign(new Error(t('edit.unavailable')),{code:'EDIT_REQUIRES_UNANNOTATED_DOCUMENT'});if(showError)setEditSaveError(errorText(error,translateNow.current));throw error;}
       if(session.saving){
         try{await session.saving;}catch(error){if(showError)setEditSaveError(errorText(error,translateNow.current));throw error;}
         if(!session.dirty)return true;
         continue;
       }
       const content=editorRef.current?.getMarkdown();
-      if(typeof content!=='string') throw Object.assign(new Error(t('edit.editorNotReady')),{code:'EDITOR_NOT_READY'});
+      if(typeof content!=='string'){const error=Object.assign(new Error(t('edit.editorNotReady')),{code:'EDITOR_NOT_READY'});if(showError)setEditSaveError(errorText(error,translateNow.current));throw error;}
       if(content===session.baseContent){session.dirty=false;setEditDirty(false);setEditSaveState('saved');return true;}
       const revision=session.revision;
       setEditSaveState('saving');
@@ -279,13 +253,14 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     return()=>clearTimeout(timer);
   },[editSaveState]);
   const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}setMessage('');setEditSaveError('');setSelection(null);editSessionRef.current={docId,baseVersion:doc.version,baseContent:doc.content,revision:0,dirty:false,saving:null};setEditInitialContent(doc.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditing(true)};
+  // `persistEdit({showError:true})` owns its own dialog, so this action stays silent to avoid stacking two modals.
   const switchToReview=()=>perform(async()=>{
     await persistEdit({showError:true});
     setEditing(false);editSessionRef.current=null;setEditInitialContent(null);setEditDirty(false);setEditSaveState('idle');editorRef.current=null;
     setEditSaveError('');
     await reload(docId);
     return true;
-  });
+  },{silent:true});
   const discardEditDraftAndReload=async()=>{
     try{
       const latest=await reload(docId);
@@ -293,14 +268,14 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
       editSessionRef.current={docId,baseVersion:latest.version,baseContent:latest.content,revision:0,dirty:false,saving:null};
       setEditInitialContent(latest.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditSaveError('');
       return true;
-    }catch(error){setMessage(errorText(error,translateNow.current));return false;}
+    }catch(error){setError(errorText(error,translateNow.current));return false;}
   };
   const dismissEditSaveError=()=>{setEditSaveError('');setMessage('')};
   const addComment=()=>perform(async()=>{
     if(!selection || !draft.trim()) throw Error(t('comment.required'));
     const created=await call('createComment',{docId,quote:selection.quote,body:draft.trim(),anchor:{from:selection.from,to:selection.to,version:selection.version}});
     setDraft('');await reload(docId);setActiveComment(created.id);return created;
-  });
+  },{inline:true});
   const canCopy=supportsCapability(adapter?.capabilities,'clipboard.write') && typeof adapter?.clipboard?.writeText==='function';
   const canSend=supportsCapability(adapter?.capabilities,'conversation.send');
   const canCreate=supportsCapability(adapter?.capabilities,'conversation.create') && sendTarget?.canCreate===true;
@@ -337,7 +312,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,markEditDirty};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,error,setError,dismissError:()=>setError(''),surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,markEditDirty};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -752,7 +727,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
 export function SpaceApp({ adapter, t = defaultT }) {
   const sessionId=adapter.conversation?.current?.id || null;
   const api=adapter.core.request;
-  const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(()=>adapter.navigation?.getDocumentId?.() || null), [message,setMessage]=useState(''), [busy,setBusy]=useState(false);
+  const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(()=>adapter.navigation?.getDocumentId?.() || null), [error,setError]=useState(''), [busy,setBusy]=useState(false);
   const [autoEditDocId,setAutoEditDocId]=useState(null);
   const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
   const [deleteTarget,setDeleteTarget]=useState(null);
@@ -785,7 +760,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
   },[adapter.navigation]);
   const documentsSnapshot=useRef(null);
   const reloadDocs=useCallback(async()=>{const list=await call('listDocuments');const signature=JSON.stringify(list);if(signature!==documentsSnapshot.current){documentsSnapshot.current=signature;setDocuments(list)}return list;},[call]);
-  useEffect(()=>{let cancelled=false;reloadDocs().catch(e=>{if(!cancelled)setMessage(errorText(e,translateNow.current))});return()=>{cancelled=true}},[reloadDocs]);
+  useEffect(()=>{let cancelled=false;reloadDocs().catch(e=>{if(!cancelled)setError(errorText(e,translateNow.current))});return()=>{cancelled=true}},[reloadDocs]);
   useEffect(()=>{
     if(docId) return;
     let stopped=false;
@@ -795,26 +770,26 @@ export function SpaceApp({ adapter, t = defaultT }) {
     return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',sync)};
   },[docId,reloadDocs]);
   const newDocument=async()=>{
-    setBusy(true);setMessage('');
+    setBusy(true);setError('');
     try {
       const created=await call('createDocument',{title:t('document.untitled'),operationId:requestId()});
       await reloadDocs();setAutoEditDocId(created.id);selectDocument(created.id);
-    } catch (e) { setMessage(errorText(e,t)); }
+    } catch (e) { setError(errorText(e,t)); }
     finally { setBusy(false); }
   };
   const deleteDocument=async()=>{
     if(!deleteTarget) return;
-    setBusy(true);setMessage('');
+    setBusy(true);setError('');
     try {
       await call('deleteDocument',{docId:deleteTarget.id});
       await reloadDocs();
       setDeleteTarget(null);
       if(docId===deleteTarget.id) selectDocument(null);
-    } catch (e) { setMessage(errorText(e,translateNow.current)); }
+    } catch (e) { setError(errorText(e,translateNow.current)); }
     finally { setBusy(false); }
   };
   const exportDocument=async (format)=>{
-    setExporting(true);setMessage('');
+    setExporting(true);setError('');
     try {
       const snapshot=await call('readDocument',{docId});
       if(!snapshot || typeof snapshot.content!=='string') throw new Error('Document unavailable');
@@ -828,7 +803,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
       const saved=await adapter.files.saveExport(file);
       if(saved!==true) throw new Error('Export saving was not accepted');
     } catch {
-      setMessage(t('export.failed'));
+      setError(t('export.failed'));
     }
     finally { setExporting(false); }
   };
@@ -881,7 +856,7 @@ export function SpaceApp({ adapter, t = defaultT }) {
             <span className="space-home-card-footer">{item.pending>0?<span className="space-home-pending"><i aria-hidden="true"/>{t('annotations.suggestions',{count:item.pending})}</span>:<span className="space-home-clear">{t('home.noPending')}</span>}<span className="space-home-open-icon" aria-hidden="true">↗</span></span>
           </button><button type="button" className="space-home-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title||item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><TrashIcon size={15}/></button>
         </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
-      </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
+      </section>
     </main> : <>
       <header className="space-top space-preview-top">
         <div className="space-preview-brand"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton><BrandLockup versionIndicator={versionIndicator}/></div>
@@ -897,7 +872,8 @@ export function SpaceApp({ adapter, t = defaultT }) {
       </header>
       {!review.doc ? <main className="space-preview-loading" aria-live="polite">{review.message||t('empty.loading')}</main> : <main className="space-main"><SpaceReviewSurface review={review} user={user} t={t}/></main>}
     </>}
-    {!home&&<div className="space-message" role="status" aria-live="polite">{review.editSaveError ? '' : message || (review.doc ? review.message : '')}</div>}
+    {!home&&<div className="space-message" role="status" aria-live="polite">{review.editSaveError ? '' : review.doc ? review.message : ''}</div>}
+    <SpaceAlertDialog open={Boolean(error||review.error)} title={t('dialog.errorTitle')} description={error||review.error} closeLabel={t('dialog.close')} confirmLabel={t('dialog.dismiss')} onClose={()=>{setError('');review.dismissError()}}/>
     <SpaceDialog open={Boolean(promptTask)} onClose={()=>{setPromptTask(null);setCopiedPrompt(false)}} labelledBy="space-agent-prompt-title" title="发送给 Agent 的提示词" closeLabel={t('dialog.close')} actions={<><button type="button" onClick={()=>{setPromptTask(null);setCopiedPrompt(false)}}>{t('dialog.close')}</button><button type="button" className="is-primary" onClick={copyPrompt}>{copiedPrompt?'已复制':'复制提示词'}</button></>}>{adapter.prompts?.mcpReady===false&&<p>请先在 Agent 接入设置中配置 CoSpace MCP。</p>}<textarea readOnly rows="8" value={promptText}/></SpaceDialog>
     <SpaceDialog open={Boolean(deleteTarget)} onClose={()=>setDeleteTarget(null)} labelledBy={deleteTitleId} title={t('document.deleteTitle')} closeLabel={t('dialog.close')} className="space-delete-dialog" actions={<><button type="button" autoFocus disabled={busy} onClick={()=>setDeleteTarget(null)}>{t('document.deleteCancel')}</button><button type="button" className="is-danger" disabled={busy} onClick={deleteDocument}>{t('document.deleteConfirm')}</button></>}>
       <p>{t('document.deleteDescription',{title:deleteTarget?.title || deleteTarget?.id || ''})}</p>

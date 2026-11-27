@@ -31,19 +31,13 @@ export function apply(ctx) {
       resolveTarget:createSendTargetResolver(ctx),
     });
     const dispatch=createHttpHandler(api);
-    const respond=(res,status,code,message)=>{
-      res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
-      res.end(JSON.stringify({error:{code,message}}));
-    };
-    const handler=(req,res)=>{
-      const connection=scope.get('connection');
-      if(!connection){respond(res,503,'UNAVAILABLE','宿主连接服务不可用');return;}
-      let rejection;
-      try{rejection=connection.requestRejection({headers:req.headers});}
-      catch{respond(res,503,'UNAVAILABLE','无法校验请求来源');return;}
-      if(rejection){respond(res,rejection,rejection===401?'UNAUTHORIZED':'FORBIDDEN','请求未通过宿主访问检查');return;}
-      return dispatch(req,res);
-    };
-    scope.effect(()=>{const dispose=scope.webServer.register({kind:'prefix',path:COSPACE_API_PATH,handler});return ()=>{dispose();api.close();}},'dsh-space: UI API');
+    // The host owns admission. A `required` route (the default) applies the
+    // Host/Origin source check and the browser credential before this handler
+    // runs, passes the admitted Peer as the trailing argument, and fails closed
+    // with 503 when no authentication provider can decide. DSH 0.2.2-rc.2
+    // removed `connection.requestRejection`, so calling it here threw and every
+    // authenticated request answered 503 "无法校验请求来源".
+    const handler=(req,res)=>dispatch(req,res);
+    scope.effect(()=>{const dispose=scope.webServer.register({kind:'prefix',path:COSPACE_API_PATH,auth:'required',handler});return ()=>{dispose();api.close();}},'dsh-space: UI API');
   });
 }
