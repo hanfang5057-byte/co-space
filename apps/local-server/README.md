@@ -21,6 +21,8 @@ Restart or reconnect the Agent after changing its MCP configuration. MCP documen
 
 Launching a newer CLI also requests a switch to its staged version. Older services that lack the upgrade protocol cannot switch automatically: save edits, close review pages, disconnect Agents, then run `npx -y @hanfang5057/co-space@latest service restart` once. An incompatible old service may not be able to detect open review pages, so close them before restarting. User data is kept in its existing data directory. If a candidate fails its health check, the service attempts to restart the previous runtime; data migrations must be independently compatible with rollback.
 
+The updater downloads and verifies the npm package using the running Node runtime; it does not invoke a system npm or Node executable. The runtime executable must remain available for the service to switch versions. A WorkBuddy-managed Node runtime requires separate verification in the target WorkBuddy environment.
+
 ## Manage the local service
 
 ```sh

@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { startLocalService } from '../../../packages/local-runtime/src/service.js';
 import { resolveDataHome, resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
-import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import * as tar from 'tar';
+import semver from 'semver';
 import { requestRuntimeUpgrade, installRuntimeVersion } from '../../../packages/local-runtime/src/manager.js';
 
 async function run() {
@@ -25,18 +27,6 @@ async function run() {
   const port = Number(process.env.COSPACE_DEV_PORT || process.env.COSPACE_UPDATE_PORT || 0);
   const service = await startLocalService({ dataHome, runtimeHome, versionHome, version, port, fallbackPort: Boolean(process.env.COSPACE_UPDATE_PORT && !process.env.COSPACE_DEV_PORT), updaterEnabled, onEnableUpdater: enableUpdater });
   let checking = false;
-  const npmInstall = args => new Promise((resolve, reject) => {
-    const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    const timer = setTimeout(() => child.kill(), 120000);
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
-    child.once('error', error => { clearTimeout(timer); reject(error); });
-    child.once('close', code => {
-      clearTimeout(timer);
-      if (code === 0) resolve();
-      else reject(new Error(stderr || `npm exited with status ${code}`));
-    });
-  });
   checkForUpdate = async () => {
     if (checking) return;
     checking = true;
@@ -55,11 +45,31 @@ async function run() {
       service.setUpdateStatus({ state: 'downloading', targetVersion: candidate });
       phase = 'download';
       temp = await mkdtemp(path.join(os.tmpdir(), 'cospace-update-'));
-      await npmInstall(['install', '--engine-strict', '--ignore-scripts', '--no-audit', '--no-fund', '--registry', registry, '--prefix', temp, `@hanfang5057/co-space@${candidate}`]);
-      const packageDir = path.join(temp, 'node_modules', '@hanfang5057', 'co-space');
+      const tarballUrl = new URL(manifest.dist.tarball);
+      const registryUrl = new URL(registry);
+      if (tarballUrl.protocol !== 'https:' && !(registryUrl.protocol === 'http:' && tarballUrl.origin === registryUrl.origin && ['127.0.0.1', 'localhost', '[::1]'].includes(registryUrl.hostname))) throw new Error('Invalid tarball URL');
+      const download = await fetch(tarballUrl, { signal: AbortSignal.timeout(120000), redirect: 'error' });
+      if (!download.ok || !download.body) throw new Error('Package download failed');
+      const chunks = []; let size = 0;
+      for await (const chunk of download.body) { size += chunk.length; if (size > 50 * 1024 * 1024) throw new Error('Package exceeds size limit'); chunks.push(chunk); }
+      const archive = Buffer.concat(chunks);
+      const expected = Buffer.from(manifest.dist.integrity.slice(7), 'base64');
+      const actual = createHash('sha512').update(archive).digest();
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new Error('Package integrity mismatch');
+      const archivePath = path.join(temp, 'package.tgz');
+      await writeFile(archivePath, archive);
+      const allowed = new Set(['package/package.json', 'package/dist/daemon.cjs', 'package/dist/web/index.html', 'package/dist/web/app.js', 'package/dist/web/app.css']);
+      const seen = new Set(); let extractedSize = 0;
+      await tar.x({ file: archivePath, cwd: temp, strict: true, filter: (name, entry) => {
+        if (!allowed.has(name)) return false;
+        if (entry.type !== 'File' || seen.has(name) || (extractedSize += entry.size) > 100 * 1024 * 1024) throw new Error('Invalid package entry');
+        seen.add(name); return true;
+      } });
+      if (seen.size !== allowed.size) throw new Error('Package assets are missing');
+      const packageDir = path.join(temp, 'package');
       const source = path.join(packageDir, 'dist');
       const packageJson = JSON.parse(await readFile(path.join(packageDir, 'package.json'), 'utf8'));
-      if (packageJson.name !== '@hanfang5057/co-space' || packageJson.version !== candidate || typeof packageJson.engines?.node !== 'string') throw new Error('Downloaded package metadata is invalid');
+      if (packageJson.name !== '@hanfang5057/co-space' || packageJson.version !== candidate || typeof packageJson.engines?.node !== 'string' || !semver.satisfies(process.versions.node, packageJson.engines.node)) throw new Error('Downloaded package metadata or Node compatibility is invalid');
       phase = 'stage';
       await installRuntimeVersion({ sourceVersionHome: source, runtimeHome, version: candidate });
       const result = await requestRuntimeUpgrade(runtimeHome, candidate);

@@ -41,7 +41,7 @@ test('updater downloads an npm package, waits for a page, and starts the candida
     await mkdir(runtimeHome, { recursive: true });
     const oldHome = path.join(runtimeHome, 'versions', '1.0.0');
     await cp(build, oldHome, { recursive: true });
-    daemon = spawn(process.execPath, [path.join(oldHome, 'daemon.cjs')], { env: { ...process.env, COSPACE_DATA_HOME: dataHome, COSPACE_RUNTIME_HOME: runtimeHome, COSPACE_VERSION_HOME: oldHome, COSPACE_PACKAGE_VERSION: '1.0.0', COSPACE_AUTO_UPDATE: '1', COSPACE_UPDATE_CHECK_DELAY_MS: '1500', COSPACE_NPM_REGISTRY: `http://127.0.0.1:${registry.address().port}` }, stdio: 'ignore' });
+    daemon = spawn(process.execPath, [path.join(oldHome, 'daemon.cjs')], { env: { ...process.env, PATH: path.join(temp, 'no-system-tools'), COSPACE_DATA_HOME: dataHome, COSPACE_RUNTIME_HOME: runtimeHome, COSPACE_VERSION_HOME: oldHome, COSPACE_PACKAGE_VERSION: '1.0.0', COSPACE_AUTO_UPDATE: '1', COSPACE_UPDATE_CHECK_DELAY_MS: '1500', COSPACE_NPM_REGISTRY: `http://127.0.0.1:${registry.address().port}` }, stdio: 'ignore' });
     const endpoint = await waitFor(async () => JSON.parse(await readFile(path.join(runtimeHome, 'endpoint.json'), 'utf8')));
     const base = `http://${endpoint.host}:${endpoint.port}`;
     const page = await (await fetch(`${base}/`)).text();

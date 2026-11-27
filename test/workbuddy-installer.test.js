@@ -12,6 +12,19 @@ const js = readFileSync(path.join(root, 'apps/local-server/installer/install.cjs
 const skill = readFileSync(path.join(root, 'apps/local-server/skills/cospace-review/SKILL.md'), 'utf8');
 const script = shell.replace('/* COSPACE_INSTALLER_SOURCE */', js.replace('/* COSPACE_SKILL_CONTENT */', JSON.stringify(skill)));
 
+test('WorkBuddy installer does not fall back to system Node', t => {
+  const home = mkdtempSync(path.join(tmpdir(), 'cospace-install-node-'));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  mkdirSync(path.join(home, '.workbuddy'));
+  const bin = path.join(home, 'bin');
+  mkdirSync(bin);
+  writeFileSync(path.join(bin, 'uname'), '#!/bin/sh\necho Darwin\n', { mode: 0o755 });
+  symlinkSync(process.execPath, path.join(bin, 'node'));
+  const result = spawnSync('/bin/bash', [], { input: script, encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:/usr/bin:/bin` } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /no compatible installer runtime was found in WorkBuddy/);
+});
+
 test('WorkBuddy installer installs idempotently and preserves unrelated configuration', t => {
   const home = mkdtempSync(path.join(tmpdir(), 'cospace-install-test-'));
   t.after(() => rmSync(home, { recursive: true, force: true }));

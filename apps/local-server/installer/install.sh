@@ -18,9 +18,6 @@ for candidate in "$HOME"/.workbuddy/binaries/node/versions/*/bin/node; do
     break
   fi
 done
-if [ -z "$installer_node" ] && command -v node >/dev/null 2>&1 && node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)' >/dev/null 2>&1; then
-  installer_node="$(command -v node)"
-fi
 if [ -z "$installer_node" ]; then
   echo 'CoSpace: no compatible installer runtime was found in WorkBuddy. Open WorkBuddy and try again.' >&2
   exit 1
