@@ -88,22 +88,30 @@ jobs:
         if: env.DSH_PUBLISH_NEEDED == 'true'
         run: |
           published=""
-          for attempt in 1 2 3 4 5; do
+          for attempt in $(seq 1 10); do
             published="$(npm view "dsh-plugin-space@$DSH_VERSION" version 2>/dev/null || true)"
             if [ "$published" = "$DSH_VERSION" ]; then
               break
             fi
-            echo "Registry is not showing $DSH_VERSION yet (attempt $attempt)."
-            sleep 15
+            echo "Registry is not showing $DSH_VERSION yet (attempt $attempt of 10)."
+            sleep 30
           done
           if [ "$published" != "$DSH_VERSION" ]; then
-            echo "::error::dsh-plugin-space@$DSH_VERSION is not visible on the npm registry."
+            echo "::error::dsh-plugin-space@$DSH_VERSION is not visible on the npm registry after 10 attempts."
             exit 1
           fi
           if [ "$DSH_DIST_TAG" = "latest" ]; then
-            tagged="$(npm view dsh-plugin-space dist-tags.latest 2>/dev/null || true)"
+            tagged=""
+            for attempt in $(seq 1 6); do
+              tagged="$(npm view dsh-plugin-space dist-tags.latest 2>/dev/null || true)"
+              if [ "$tagged" = "$DSH_VERSION" ]; then
+                break
+              fi
+              echo "The latest dist-tag has not settled yet (attempt $attempt of 6)."
+              sleep 10
+            done
             if [ "$tagged" != "$DSH_VERSION" ]; then
-              echo "::error::The latest dist-tag points at $tagged instead of $DSH_VERSION."
+              echo "::error::The latest dist-tag points at ${tagged:-nothing} instead of $DSH_VERSION."
               exit 1
             fi
           fi
