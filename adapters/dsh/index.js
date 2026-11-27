@@ -2,16 +2,35 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHostApi } from '../../packages/host-api/src/index.js';
+import { SpaceService } from '../../packages/review-core/src/space-service.js';
 import { createHttpHandler, COSPACE_API_PATH } from '../../packages/transport-http/http-handler.js';
 import { createSendTargetResolver } from './server/send-target.js';
 import { createUserResolver } from './server/user.js';
+import { registerReviewCard } from './server/review-card.js';
 
 export const name = 'dsh-space';
+/**
+ * Whether the MCP tools this plugin registers are live.
+ * @param {object} ctx - host plugin context.
+ * @returns {boolean} true when the tool registry already exposes the read tool.
+ */
+export function mcpReady(ctx) {
+  try {
+    const tools=ctx.get?.('tools');
+    if (!tools || typeof tools.get!=='function') return true;
+    return tools.get('mcp__space__space_document_read')!==undefined;
+  } catch { return true; }
+}
+
 export function resolveHome(ctx) {
   return path.resolve(process.env.DSH_SPACE_HOME || ctx.get('dshHomePath')?.('space') || path.join(process.env.DSH_HOME || path.join(homedir(),'.dsh'),'space'));
 }
 export function apply(ctx) {
   const home=resolveHome(ctx);
+  // One document service backs both the UI API and the review card so a user
+  // decision and an Agent read cannot disagree.
+  const space=new SpaceService(home);
+  ctx.effect(()=>()=>{try{space.close()}catch{}},'dsh-space: document service');
   const env={DSH_SPACE_HOME:home};
   if(process.versions.electron) env.ELECTRON_RUN_AS_NODE='1';
   ctx.inject(['mcpManager'],scope=>{
@@ -22,6 +41,8 @@ export function apply(ctx) {
   ctx.inject(['webServer'],scope=>{
     const api=createHostApi({
       home,
+      space,
+      status:()=>({mcpReady:mcpReady(ctx)}),
       prompt: async request=>{
         const controller=scope.get('sessionController');
         if(!controller) throw new Error('Session controller unavailable');
@@ -40,4 +61,5 @@ export function apply(ctx) {
     const handler=(req,res)=>dispatch(req,res);
     scope.effect(()=>{const dispose=scope.webServer.register({kind:'prefix',path:COSPACE_API_PATH,auth:'required',handler});return ()=>{dispose();api.close();}},'dsh-space: UI API');
   });
+  registerReviewCard(ctx,{space});
 }

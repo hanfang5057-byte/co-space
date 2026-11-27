@@ -1,24 +1,48 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import manifest from '../adapters/dsh/package.json' with { type: 'json' };
 import { createUserResolver } from '../adapters/dsh/server/user.js';
 
 const ctxWith = account => ({ get: name => name === 'deepseekAccount' ? account : undefined });
 
 test('a signed-in profile exposes only the display name and safe avatar', async () => {
-  let profileCalls = 0;
+  const seen = [];
   const user = createUserResolver(ctxWith({
     getState: async () => ({ status: 'credential-stored' }),
     getProfile: async client => {
-      profileCalls++;
-      assert.equal(client.version, '0.1.0');
-      assert.equal(typeof client.timezoneOffsetSeconds, 'number');
+      seen.push(client);
       return { status: 'ready', value: { id: 'u1', name: '  Ada  ', contact: 'a***@example.com', avatarUrl: 'https://example.com/a.png' } };
     },
+  }), { version: '9.9.9', locale: 'en' });
+  const expected = { signedIn: true, name: 'Ada', avatarUrl: 'https://example.com/a.png' };
+
+  assert.deepEqual(await user(), expected);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].version, '9.9.9');
+  assert.equal(seen[0].locale, 'en');
+  assert.equal(typeof seen[0].timezoneOffsetSeconds, 'number');
+
+  // The same language is served from the short-lived cache.
+  assert.deepEqual(await user('en-GB'), expected);
+  assert.equal(seen.length, 1);
+
+  // A different UI language is a different Platform payload, so it rereads.
+  assert.deepEqual(await user('zh'), expected);
+  assert.equal(seen.length, 2);
+  assert.equal(seen[1].locale, 'zh');
+});
+
+test('the shipped account client identifies this package version and a default language', async () => {
+  const seen = [];
+  const user = createUserResolver(ctxWith({
+    getState: async () => ({ status: 'credential-stored' }),
+    getProfile: async client => { seen.push(client); return { status: 'failed' }; },
   }));
-  assert.deepEqual(await user(), { signedIn: true, name: 'Ada', avatarUrl: 'https://example.com/a.png' });
-  // The second call is served from the short-lived cache.
-  assert.deepEqual(await user(), { signedIn: true, name: 'Ada', avatarUrl: 'https://example.com/a.png' });
-  assert.equal(profileCalls, 1);
+
+  await user();
+
+  assert.equal(seen[0].version, manifest.version);
+  assert.equal(seen[0].locale, 'zh');
 });
 
 test('an unsigned-in account has no comment identity', async () => {

@@ -4,7 +4,7 @@ import { SpaceService, documentWithTitle } from '../../review-core/src/space-ser
 import { CollaborationStore } from '../../review-core/src/collaboration-store.js';
 
 /** Host-facing façade. All mutations share the document store used by MCP. */
-export function createHostApi({ home, prompt, getUser, resolveTarget, space: providedSpace, collaboration: providedCollaboration, markInterrupted = true }) {
+export function createHostApi({ home, prompt, getUser, resolveTarget, status, space: providedSpace, collaboration: providedCollaboration, markInterrupted = true }) {
   const ownsSpace = !providedSpace;
   const ownsCollaboration = !providedCollaboration;
   const space = providedSpace || new SpaceService(home);
@@ -37,7 +37,15 @@ export function createHostApi({ home, prompt, getUser, resolveTarget, space: pro
         // Account reads are optional: an installation without the account
         // plugin simply has no signed-in identity to show on comment cards.
         if (typeof getUser !== 'function') return null;
-        try { return await getUser(); } catch { return null; }
+        // The requesting surface names its language so the Platform can localize
+        // the profile payload; a host without locale support ignores the argument.
+        try { return await getUser(args.locale); } catch { return null; }
+      }
+      case 'status': {
+        // Host-specific readiness the UI may gate controls on; a host without a
+        // probe reports nothing rather than inventing a state.
+        if (typeof status !== 'function') return {};
+        try { return await status(); } catch { return {}; }
       }
       case 'sendComments': {
         // Only an explicit UI action enters this method. Request IDs survive retries;
