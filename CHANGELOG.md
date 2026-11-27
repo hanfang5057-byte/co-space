@@ -2,6 +2,16 @@
 
 Changes to the DSH plugin `dsh-plugin-space` and coordinated CoSpace product releases are recorded here. DSH package versions follow Semantic Versioning.
 
+## 0.1.21
+
+First release published through the automated main-branch pipeline; npm artifacts now carry build provenance.
+
+- Require DSH `0.2.3-alpha.2` or later and keep browser access host-admitted through DSH connection admission (`ctx.connection.admit`), failing closed when no provider can decide.
+- Let `space_suggest` link the comment it answers and mark that comment processed, completing the comment-driven revision loop.
+- Share one review header across the page and sidebar, keep comment selections whole across inline formatting, and expose the shared review UI theme through the `--cospace-*` token contract.
+- Harden the shared runtime boundary, secure runtime upgrades and data migration, and prepare the Desktop product that replaces the retired Local Server.
+- Refresh the plugin market index from the npm registry after every publish, and automate CI, npm publishing, desktop staging, and update-manifest promotion from `main`.
+
 ## 0.1.9
 
 Coordinated CoSpace release across DSH, Local Server, and Desktop; all three product versions are aligned at `0.1.9`.
