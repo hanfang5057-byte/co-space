@@ -73,7 +73,7 @@ Unchanged staged pipeline, dispatched automatically on the release tag by `Build
 
 ### `Promote desktop release` (promote-desktop.yml)
 
-Manual dispatch on the published `desktop-vX.Y.Z` tag, inside the `desktop-release` environment — the environment's tag policy rejects branch refs, so the release tag is both the dispatch ref and the operation's target. The workflow cuts its promotion branch from `origin/main`, builds the update verifier, runs `prepare-promotion` (which itself verifies the published release, checksums, signatures, and re-downloads every updater URL), confirms `dsh-plugin-space` still resolves on npm, and opens a pull request updating `apps/site/desktop/latest.json`. The PR is the review surface required by 16-release-process.md; merging it triggers the Pages deployment that publishes the live update manifest.
+Manual dispatch on the published `desktop-vX.Y.Z` tag, inside the `desktop-release` environment — the environment's tag policy rejects branch refs, so the release tag is both the dispatch ref and the operation's target. A `workflow_dispatch` run uses the workflow file from the selected ref; release tags are cut at main's tip, so they carry the current workflow definitions. The workflow cuts its promotion branch from `origin/main`, builds the update verifier, runs `prepare-promotion` (which itself verifies the published release, checksums, signatures, and re-downloads every updater URL), confirms `dsh-plugin-space` still resolves on npm, and opens a pull request updating `apps/site/desktop/latest.json`. The PR is the review surface required by 16-release-process.md; merging it triggers the Pages deployment that publishes the live update manifest.
 
 ### `Deploy site and plugin index` (pages.yml)
 
@@ -95,6 +95,7 @@ Unchanged. Deploys on `main` pushes that change the site or market metadata, and
 
 - **A verify step failed during a release push.** Nothing was published or tagged. Fix on `main`; for DSH re-run the workflow (dispatch converges on the new head); for desktop dispatch `Build CoSpace Desktop` with `route: release`.
 - **npm published, but the run failed before market sync / tag / release.** Re-run the workflow; every remaining step is an ensure step and will complete the release without republishing.
+- **Signed staging failed before any draft existed (for example, misconfigured signing-secret values).** Fix the environment configuration, then re-dispatch `Stage signed desktop release` on the same tag. No version bump is needed: the tag checks passed and no draft was created, so nothing was burned.
 - **The desktop draft is signed but acceptance failed.** Do not publish the draft. Fix, bump the desktop version, and push again — the tag guard rejects reusing `desktop-vX.Y.Z`, which is intentional.
 - **A market sync commit raced another push.** The sync job rebases onto `origin/main` before committing; a lost race fails the push and the next re-run converges.
 - **Never**: publish from the workspace root, move or recreate an existing tag, hand-edit `market/index.json` or `dist/`, or publish a site that references an unpublished npm package.

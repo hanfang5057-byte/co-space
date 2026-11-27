@@ -13,7 +13,7 @@ CoSpace has two product entry points. Check the [website](https://hanfang5057-by
 | Entry point | Use case | Installation and status |
 | --- | --- | --- |
 | DSH plugin | Reference documents and review suggestions in DSH conversations | npm package `dsh-plugin-space`; add it from DSH's Plugins page or run `dsh plugin add dsh-plugin-space`. The published version requires Node.js 24+ and DSH `0.2.3-alpha.2` or later. |
-| Desktop | Provide a local document workbench to agents that support stdio MCP | [Desktop documentation](apps/desktop/README.md); see the website for availability. The legacy Local Server npm package remains available to existing users. |
+| Desktop | Provide a local document workbench to agents that support stdio MCP | Released: macOS (arm64/x64) and Linux (deb/AppImage) installers are available from [Releases](https://github.com/hanfang5057-byte/co-space/releases); see the [website](https://hanfang5057-byte.github.io/co-space/) and [Desktop documentation](apps/desktop/README.md) for installation and migration. The legacy Local Server npm package remains available to existing users. |
 
 To discover the DSH plugin in its market, add the [market index](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json) to DSH's Custom plugin indexes.
 
