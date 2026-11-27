@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
+import { DATA_LAYOUT_VERSION } from '../../review-core/src/data-layout.js';
 
 // Version 2 requires the shared review/collaboration database layout.
 export const LOCAL_PROTOCOL_VERSION = 2;
+// Increment when a runtime changes the on-disk layout incompatibly.
+export const LOCAL_DATA_LAYOUT_VERSION = DATA_LAYOUT_VERSION;
 
 export function resolveDataHome(env = process.env) {
   return path.resolve(env.COSPACE_WEB_HOME || path.join(homedir(), '.cospace', 'webapp'));

@@ -7,6 +7,7 @@ import { SpaceService } from '../../review-core/src/space-service.js';
 import { createHostApi } from '../../host-api/src/index.js';
 import { createHttpHandler } from '../../transport-http/http-handler.js';
 import { endpointFile, LOCAL_PROTOCOL_VERSION, secretFile } from './paths.js';
+import { readDataLayout, DATA_LAYOUT_VERSION } from '../../review-core/src/data-layout.js';
 
 const MAX_RPC_BODY = 1024 * 1024;
 const MCP_SESSION_TTL_MS = 60_000;
@@ -57,6 +58,8 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
     mkdir(dataHome, { recursive: true, mode: 0o700 }),
     mkdir(runtimeHome, { recursive: true, mode: 0o700 }),
   ]);
+  const existingLayout = readDataLayout(dataHome);
+  if (existingLayout > DATA_LAYOUT_VERSION) throw Object.assign(new Error('CoSpace data was created by an incompatible newer runtime'), { code: 'DATA_LAYOUT_MISMATCH' });
   const secrets = await loadSecrets(runtimeHome);
   const space = new SpaceService(dataHome);
   const collaboration = new CollaborationStore(dataHome);
@@ -114,7 +117,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       if (!expectedHost || req.headers.host !== expectedHost) { res.writeHead(403); res.end(); return; }
       if (req.method === 'GET' && req.url === '/__cospace/health') {
         pruneSessions();
-        json(res, 200, { ready: !upgradeRunning, runtimeId, version, protocolVersion: LOCAL_PROTOCOL_VERSION, updaterEnabled: automaticUpdatesEnabled, activeMcpClients: mcpSessions.size, activeUiSessions: uiSessions.size, update: pendingUpgrade && !upgradeRunning ? { state: 'waiting', targetVersion: pendingUpgrade } : updateStatus });
+        json(res, 200, { ready: !upgradeRunning, runtimeId, version, protocolVersion: LOCAL_PROTOCOL_VERSION, safeUpgradeProtocol: 1, updaterEnabled: automaticUpdatesEnabled, activeMcpClients: mcpSessions.size, activeUiSessions: uiSessions.size, update: pendingUpgrade && !upgradeRunning ? { state: 'waiting', targetVersion: pendingUpgrade } : updateStatus });
         return;
       }
       if (upgradeRunning) { json(res, 503, { error: { code: 'UPDATE_IN_PROGRESS', message: 'Service update in progress' } }); return; }
@@ -259,7 +262,7 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       const targetHome = path.join(path.dirname(versionHome), target);
       const child = spawn(process.execPath, [path.join(targetHome, 'daemon.cjs')], {
         detached: true, stdio: 'ignore', windowsHide: true,
-        env: { ...process.env, COSPACE_DATA_HOME: dataHome, COSPACE_RUNTIME_HOME: runtimeHome, COSPACE_VERSION_HOME: targetHome, COSPACE_PACKAGE_VERSION: target, COSPACE_AUTO_UPDATE: automaticUpdatesEnabled ? '1' : '0', COSPACE_UPDATE_PORT: String(endpoint.port), COSPACE_UPDATE_RESULT: target === endpoint.version ? 'failed' : 'updated' },
+        env: { ...process.env, COSPACE_DATA_HOME: dataHome, COSPACE_RUNTIME_HOME: runtimeHome, COSPACE_VERSION_HOME: targetHome, COSPACE_PACKAGE_VERSION: target, COSPACE_AUTO_UPDATE: automaticUpdatesEnabled ? '1' : '0', COSPACE_UPDATE_PORT: String(endpoint.port), COSPACE_UPDATE_RESULT: target === endpoint.version ? 'failed' : 'updated', COSPACE_UPGRADE_SUPERVISOR: 'layout-aware-v1' },
       });
       child.once('error', error => { void appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} ${target}: ${error.stack || error.message}\n`, { mode: 0o600 }); });
       child.once('exit', (code, signal) => { void appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} ${target} exited code=${code} signal=${signal}\n`, { mode: 0o600 }); });
@@ -289,6 +292,19 @@ export async function startLocalService({ dataHome, runtimeHome, versionHome, ve
       await Promise.race([new Promise(resolve => candidateProcess.once('exit', resolve)), new Promise(resolve => setTimeout(resolve, 2000))]);
     }
     await rm(endpointPath, { force: true });
+    if (candidateProcess.exitCode === null && candidateProcess.signalCode === null) {
+      await writeFile(path.join(runtimeHome, 'upgrade-failure.json'), JSON.stringify({ code: 'CANDIDATE_STILL_RUNNING', targetVersion: version, previousVersion: endpoint.version }), { mode: 0o600 });
+      if (ownsUpgradeLock) { await rm(lockPath, { force: true }); ownsUpgradeLock = false; }
+      process.exit(1);
+    }
+    let compatible = false;
+    try { compatible = readDataLayout(dataHome) === DATA_LAYOUT_VERSION; } catch {}
+    if (!compatible) {
+      await writeFile(path.join(runtimeHome, 'upgrade-failure.json'), JSON.stringify({ code: 'ROLLBACK_DATA_LAYOUT_MISMATCH', targetVersion: version, previousVersion: endpoint.version }), { mode: 0o600 });
+      await appendFile(path.join(runtimeHome, 'upgrade.log'), `${new Date().toISOString()} rollback blocked: incompatible data layout\n`, { mode: 0o600 });
+      if (ownsUpgradeLock) { await rm(lockPath, { force: true }); ownsUpgradeLock = false; }
+      process.exit(1);
+    }
     launch(process.env.COSPACE_PREVIOUS_VERSION || endpoint.version);
     await healthy(process.env.COSPACE_PREVIOUS_VERSION || endpoint.version);
     process.exit(1);

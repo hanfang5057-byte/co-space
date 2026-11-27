@@ -25,6 +25,8 @@ export async function installRuntimeVersion({ sourceVersionHome, runtimeHome, ve
     return [name, createHash('sha256').update(content).digest('hex')];
   })));
   const expectedHashes = await digests(sourceVersionHome);
+  const sourceMetadata = await readFile(path.join(sourceVersionHome, 'package.json'), 'utf8').then(JSON.parse).catch(() => ({}));
+  const dataLayoutVersion = Number.isInteger(sourceMetadata.dataLayoutVersion) ? sourceMetadata.dataLayoutVersion : null;
   try {
     const marker = JSON.parse(await readFile(path.join(versionHome, 'runtime.json'), 'utf8'));
     if (marker.version === version && marker.protocolVersion === LOCAL_PROTOCOL_VERSION && JSON.stringify(marker.hashes) === JSON.stringify(expectedHashes)) {
@@ -44,7 +46,7 @@ export async function installRuntimeVersion({ sourceVersionHome, runtimeHome, ve
     await rm(staging, { recursive: true, force: true });
     throw Object.assign(new Error('CoSpace runtime copy failed its integrity check'), { code: 'RUNTIME_INTEGRITY_FAILED' });
   }
-  await writeFile(path.join(staging, 'runtime.json'), `${JSON.stringify({ version, protocolVersion: LOCAL_PROTOCOL_VERSION, hashes: installedHashes })}\n`, { mode: 0o600 });
+  await writeFile(path.join(staging, 'runtime.json'), `${JSON.stringify({ version, protocolVersion: LOCAL_PROTOCOL_VERSION, dataLayoutVersion, hashes: installedHashes })}\n`, { mode: 0o600 });
   try { await rename(staging, versionHome); }
   catch (error) {
     await rm(staging, { recursive: true, force: true });
@@ -65,13 +67,13 @@ async function reachableEndpoint(runtimeHome) {
     const response = await fetch(`http://${endpoint.host}:${endpoint.port}/__cospace/health`, { signal: AbortSignal.timeout(700) });
     const health = await response.json();
     if (!response.ok || health.ready !== true || health.runtimeId !== endpoint.runtimeId) return null;
-    return { ...endpoint, version: health.version, protocolVersion: health.protocolVersion, updaterEnabled: health.updaterEnabled === true, activeMcpClients: health.activeMcpClients || 0, activeUiSessions: health.activeUiSessions || 0, update: health.update || null };
+    return { ...endpoint, version: health.version, protocolVersion: health.protocolVersion, safeUpgradeProtocol: health.safeUpgradeProtocol, updaterEnabled: health.updaterEnabled === true, activeMcpClients: health.activeMcpClients || 0, activeUiSessions: health.activeUiSessions || 0, update: health.update || null };
   } catch { return null; }
 }
 
 function assertCompatible(endpoint) {
   if (endpoint && endpoint.protocolVersion !== LOCAL_PROTOCOL_VERSION) {
-    throw Object.assign(new Error(`CoSpace Local Server protocol ${endpoint.protocolVersion} is incompatible with this client. Stop or upgrade the service before reconnecting.`), { code: 'LOCAL_SERVER_PROTOCOL_MISMATCH' });
+    throw Object.assign(new Error(`CoSpace Local Server protocol ${endpoint.protocolVersion} is incompatible with this client. Save and close review pages, disconnect Agents, then run: npx -y @hanfang5057/co-space@latest service restart`), { code: 'LOCAL_SERVER_PROTOCOL_MISMATCH' });
   }
 }
 
@@ -91,8 +93,15 @@ export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeH
     }
     return { ...current, dataHome, runtimeHome, rpcToken: secrets.rpcToken, uiToken: secrets.uiToken, upgradeNotice };
   };
+  const checkEndpoint = async current => {
+    if (current && current.protocolVersion !== LOCAL_PROTOCOL_VERSION && Number.isInteger(current.protocolVersion) && current.protocolVersion < LOCAL_PROTOCOL_VERSION && current.safeUpgradeProtocol === 1 && autoUpdate && scheduleUpgrade && /^\d+\.\d+\.\d+$/.test(version) && /^\d+\.\d+\.\d+$/.test(current.version || '') && version.localeCompare(current.version, 'en', { numeric: true }) > 0) {
+      const result = await requestRuntimeUpgrade(runtimeHome, version).catch(() => null);
+      if (result?.scheduled) throw Object.assign(new Error('CoSpace upgrade is scheduled. Close review pages and disconnect Agents, then reconnect.'), { code: 'LOCAL_SERVER_UPGRADE_PENDING' });
+    }
+    assertCompatible(current);
+  };
   let endpoint = await reachableEndpoint(runtimeHome);
-  assertCompatible(endpoint);
+  await checkEndpoint(endpoint);
   if (endpoint) {
     return useEndpoint(endpoint);
   }
@@ -103,7 +112,7 @@ export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeH
   let ownsLock = false;
   while (Date.now() < deadline) {
     endpoint = await reachableEndpoint(runtimeHome);
-    assertCompatible(endpoint);
+    await checkEndpoint(endpoint);
     if (endpoint) {
       return useEndpoint(endpoint);
     }
@@ -154,7 +163,7 @@ export async function ensureLocalDaemon({ dataHome = resolveDataHome(), runtimeH
 
   while (Date.now() < deadline) {
     endpoint = await reachableEndpoint(runtimeHome);
-    assertCompatible(endpoint);
+    await checkEndpoint(endpoint);
     if (endpoint) {
       return useEndpoint(endpoint);
     }

@@ -9,6 +9,11 @@ import semver from 'semver';
 import { requestRuntimeUpgrade, installRuntimeVersion } from '../../../packages/local-runtime/src/manager.js';
 
 async function run() {
+  // Old supervisors automatically roll back on failure without checking the
+  // data layout. Refuse their candidate before opening or migrating any data.
+  if (process.env.COSPACE_UPDATE_RESULT === 'updated' && process.env.COSPACE_UPGRADE_SUPERVISOR !== 'layout-aware-v1') {
+    throw Object.assign(new Error('This upgrade requires a manual service restart before data migration.'), { code: 'LOCAL_SERVER_MANUAL_RESTART_REQUIRED' });
+  }
   const dataHome = path.resolve(process.env.COSPACE_DATA_HOME || resolveDataHome());
   const runtimeHome = path.resolve(process.env.COSPACE_RUNTIME_HOME || resolveRuntimeHome({ dataHome }));
   const versionHome = path.resolve(process.env.COSPACE_VERSION_HOME || path.dirname(process.argv[1]));
@@ -58,7 +63,7 @@ async function run() {
       if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new Error('Package integrity mismatch');
       const archivePath = path.join(temp, 'package.tgz');
       await writeFile(archivePath, archive);
-      const allowed = new Set(['package/package.json', 'package/dist/daemon.cjs', 'package/dist/web/index.html', 'package/dist/web/app.js', 'package/dist/web/app.css']);
+      const allowed = new Set(['package/package.json', 'package/dist/package.json', 'package/dist/daemon.cjs', 'package/dist/web/index.html', 'package/dist/web/app.js', 'package/dist/web/app.css']);
       const seen = new Set(); let extractedSize = 0;
       await tar.x({ file: archivePath, cwd: temp, strict: true, filter: (name, entry) => {
         if (!allowed.has(name)) return false;

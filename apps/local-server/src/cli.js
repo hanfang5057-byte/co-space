@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureLocalDaemon, installRuntimeVersion, localServiceStatus, stopLocalDaemon, enableLocalUpdater } from '../../../packages/local-runtime/src/manager.js';
 import { resolveDataHome, resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
+import { readDataLayout } from '../../../packages/review-core/src/data-layout.js';
 
 const distRoot = path.dirname(fileURLToPath(import.meta.url));
 const metadata = JSON.parse(await readFile(path.join(distRoot, 'package.json'), 'utf8'));
@@ -39,7 +40,6 @@ async function rollbackService(targetVersion) {
   const dataHome = resolveDataHome();
   const runtimeHome = resolveRuntimeHome({ dataHome });
   const running = await localServiceStatus({ dataHome, runtimeHome });
-  if (running.running) await stopLocalDaemon({ dataHome, runtimeHome });
   const versionsRoot = path.join(runtimeHome, 'versions');
   const names = await readdir(versionsRoot).catch(() => []);
   const installed = [];
@@ -47,12 +47,13 @@ async function rollbackService(targetVersion) {
     if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(name)) continue;
     try {
       const marker = JSON.parse(await readFile(path.join(versionsRoot, name, 'runtime.json'), 'utf8'));
-      if (marker.version === name && marker.protocolVersion === metadata.protocolVersion) installed.push(name);
+      if (marker.version === name && marker.protocolVersion === metadata.protocolVersion && marker.dataLayoutVersion === readDataLayout(dataHome)) installed.push(name);
     } catch {}
   }
   const currentVersion = running.version || metadata.version;
   const target = targetVersion || installed.filter(version => version.localeCompare(currentVersion, 'en', { numeric: true }) < 0).sort((left, right) => right.localeCompare(left, 'en', { numeric: true }))[0];
-  if (!target || !installed.includes(target)) throw new Error(targetVersion ? `Local Server runtime ${targetVersion} is not installed` : 'No previous Local Server runtime is available to roll back to');
+  if (!target || !installed.includes(target)) throw new Error(targetVersion ? `Local Server runtime ${targetVersion} is not installed or is incompatible with the current data layout` : 'No previous Local Server runtime is compatible with the current data layout');
+  if (running.running) await stopLocalDaemon({ dataHome, runtimeHome });
   const sourceVersionHome = path.join(versionsRoot, target);
   const versionHome = await installRuntimeVersion({ sourceVersionHome, runtimeHome, version: target });
   const endpoint = await ensureLocalDaemon({ dataHome, runtimeHome, versionHome, version: target, autoUpdate: true });
@@ -68,7 +69,8 @@ async function runMcp() {
 async function runService(command, argument) {
   if (command === 'status') {
     const status = await localServiceStatus();
-    process.stdout.write(status.running ? `CoSpace Local Server ${status.version}\n${status.url}\nActive Agent connections: ${status.activeMcpClients}\nActive review pages: ${status.activeUiSessions}\nUpdate: ${status.update?.state || (status.updaterEnabled ? 'checking' : 'unavailable')}${status.update?.targetVersion ? ` (${status.update.targetVersion})` : ''}${status.update?.reason ? ` (${status.update.reason})` : ''}\n` : 'CoSpace Local Server is not running.\n');
+    const failure = !status.running ? await readFile(path.join(resolveRuntimeHome(), 'upgrade-failure.json'), 'utf8').then(JSON.parse).catch(() => null) : null;
+    process.stdout.write(status.running ? `CoSpace Local Server ${status.version}\n${status.url}\nActive Agent connections: ${status.activeMcpClients}\nActive review pages: ${status.activeUiSessions}\nUpdate: ${status.update?.state || (status.updaterEnabled ? 'checking' : 'unavailable')}${status.update?.targetVersion ? ` (${status.update.targetVersion})` : ''}${status.update?.reason ? ` (${status.update.reason})` : ''}\n` : `CoSpace Local Server is not running.${failure ? ` Last upgrade failed: ${failure.code}. Restore a compatible runtime or backup before restarting.` : ''}\n`);
     return;
   }
   if (command === 'stop') {

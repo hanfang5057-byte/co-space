@@ -2,6 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { DATA_LAYOUT_VERSION } from './data-layout.js';
+import { migrateLegacyCollaboration } from './migrate-legacy-collaboration.js';
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const MAX_INSTRUCTIONS = 12000;
@@ -11,7 +13,13 @@ export class CollaborationStore {
   constructor(home) {
     mkdirSync(home, { recursive: true, mode: 0o700 });
     this.db = new DatabaseSync(path.join(home, 'review.sqlite'), { timeout: 5000 });
-    this.db.exec(`
+    try {
+      const hasLayout = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cospace_data_layout'").get();
+      const currentLayout = hasLayout && this.db.prepare('SELECT version FROM cospace_data_layout WHERE id=1').get()?.version;
+      if (currentLayout !== undefined && currentLayout !== false && currentLayout !== DATA_LAYOUT_VERSION) throw Object.assign(new Error('Incompatible CoSpace data layout'), { code: 'DATA_LAYOUT_MISMATCH' });
+      this.db.exec(`
+      CREATE TABLE IF NOT EXISTS cospace_data_layout (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL);
+      INSERT OR IGNORE INTO cospace_data_layout VALUES(1, ${DATA_LAYOUT_VERSION});
       CREATE TABLE IF NOT EXISTS collaboration_instructions (
         scope TEXT PRIMARY KEY,
         content TEXT NOT NULL,
@@ -23,7 +31,12 @@ export class CollaborationStore {
         fingerprint TEXT NOT NULL,
         result TEXT NOT NULL
       );
-    `);
+      `);
+      migrateLegacyCollaboration(home, this.db);
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   close() {
