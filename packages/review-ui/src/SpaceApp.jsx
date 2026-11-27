@@ -1,6 +1,6 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Pause, WifiOff } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
@@ -53,6 +53,10 @@ const displayVersion = localBuildVersion.split('+', 1)[0];
 
 export function CospaceMark({ className = '' }) {
   return <img className={className} src={cospaceIcon} alt="" aria-hidden="true"/>;
+}
+
+function BrandLockup({ versionIndicator }) {
+  return <div className="space-brand-lockup"><CospaceMark className="space-brand-lockup-icon"/><span className="space-brand-lockup-copy"><strong>{BRAND.name.en}</strong><span className="space-brand-lockup-version">{versionIndicator}</span></span></div>;
 }
 
 function TrashIcon({size=14}) {
@@ -269,6 +273,11 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     const timer=setTimeout(()=>{persistEdit().catch(()=>{});},700);
     return()=>clearTimeout(timer);
   },[editing,editDirty,editRevision,persistEdit]);
+  useEffect(()=>{
+    if(editSaveState!=='saved')return;
+    const timer=setTimeout(()=>setEditSaveState(state=>state==='saved'?'idle':state),2200);
+    return()=>clearTimeout(timer);
+  },[editSaveState]);
   const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}setMessage('');setEditSaveError('');setSelection(null);editSessionRef.current={docId,baseVersion:doc.version,baseContent:doc.content,revision:0,dirty:false,saving:null};setEditInitialContent(doc.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditing(true)};
   const switchToReview=()=>perform(async()=>{
     await persistEdit({showError:true});
@@ -849,12 +858,19 @@ export function SpaceApp({ adapter, t = defaultT }) {
   const failureReason=['check','download','stage','switch'].includes(updateInfo?.update?.reason)?`.${updateInfo.update.reason}`:'';
   const updateLabel=adapter.updates ? t(`update.${updateState}${updateState==='failed'?failureReason:''}`,{version:updateInfo?.update?.targetVersion||'',agents:updateInfo?.activeMcpClients||0,pages:updateInfo?.activeUiSessions||0}) : '';
   const currentVersion=updateInfo?.version || displayVersion;
+  const UpdateStateIcon={
+    checking:LoaderCircle,current:CircleCheck,downloading:LoaderCircle,waiting:Download,
+    switching:LoaderCircle,updated:CircleCheck,failed:CircleAlert,offline:WifiOff,disabled:Pause,
+  }[updateState] || LoaderCircle;
+  const editSaveLabel=review.editSaveState==='error'?t('edit.autoSaveFailed'):review.editSaveState!=='idle'?t(`edit.${review.editSaveState}`):'';
+  const EditSaveIcon={saving:LoaderCircle,unsaved:CircleAlert,saved:CircleCheck,error:CircleAlert}[review.editSaveState] || CircleAlert;
+  const compactVersion=currentVersion.match(/^(\d+\.\d+\.\d+-dev)(?:[.+-].*)?$/)?.[1] || currentVersion;
   const versionIndicator=adapter.updates
-    ? <span className={`space-version-badge is-${updateState}`} title={`${t('update.versionTitle')} · ${updateLabel}`} aria-live={['waiting','updated','failed','offline'].includes(updateState)?'polite':'off'}><span className="space-version-number">v{currentVersion}</span><span className="space-version-status">{updateLabel}</span></span>
+    ? <span className={`space-version-badge is-${updateState}`} role="img" title={`${t('update.versionTitle')}: v${currentVersion} · ${updateLabel}`} aria-label={`${t('update.versionTitle')}: v${currentVersion}. ${updateLabel}`} aria-live={['waiting','updated','failed','offline'].includes(updateState)?'polite':'off'}><UpdateStateIcon size={12} strokeWidth={2.2} aria-hidden="true"/><span className="space-version-number">v{compactVersion}</span></span>
     : <span className="space-build-version" title={t('build.versionTitle')}>{localBuildVersion}</span>;
   return <div className="space-app">
     {home ? <main className="space-home" aria-labelledby="space-home-title">
-      <header className="space-home-header"><div className="space-brand"><CospaceMark className="space-brand-icon"/><span className="space-brand-names"><strong>{t('brand.name')}</strong><small>{t('brand.nameEnglish')} {versionIndicator}</small></span></div><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
+      <header className="space-home-header"><BrandLockup versionIndicator={versionIndicator}/><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
         {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
@@ -867,14 +883,15 @@ export function SpaceApp({ adapter, t = defaultT }) {
         </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section><div className="space-message space-home-message" role="status" aria-live="polite">{message}</div>
     </main> : <>
-      <header className="space-top space-preview-top"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={18} aria-hidden="true"/></IconButton><div className="space-preview-heading"><span>{t('home.eyebrow')} {versionIndicator}</span><h1 title={review.doc?.title||selectedDocument?.title||docId}>{review.doc?.title||selectedDocument?.title||docId}</h1></div>
+      <header className="space-top space-preview-top">
+        <div className="space-preview-brand"><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton><BrandLockup versionIndicator={versionIndicator}/></div>
             <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
               {review.doc&&<ReviewToolsMenu exporting={exporting} onExport={exportDocument} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>openCollaboration('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/>}
               {review.doc&&<div className="space-toolbar-group is-view">
                 <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
+                {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} title={editSaveLabel} role="status" aria-label={editSaveLabel}><EditSaveIcon size={15} strokeWidth={2.1} aria-hidden="true"/>{review.editSaveState==='error'&&<span>{t('edit.autoSaveFailedShort')}</span>}</span>}
                 <ReviewZoomControls review={review} t={t}/>
               </div>}
-              {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} role="status">{t(`edit.${review.editSaveState==='error'?'autoSaveFailed':review.editSaveState}`)}</span>}
               {!review.editing&&visibleComments.length>0&&<ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t}/>}
             </div>
       </header>
