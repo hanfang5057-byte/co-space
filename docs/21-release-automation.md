@@ -88,6 +88,7 @@ Unchanged. Deploys on `main` pushes that change the site or market metadata, and
 | `COSPACE_UPDATER_PUBLIC_KEY` | `desktop-release` environment variable | Persistent updater public key. |
 | `TAURI_SIGNING_PRIVATE_KEY` / `..._PASSWORD` | `desktop-release` environment secrets | Updater signing key; back it up outside the repository. |
 | Branch protection on `main` | repo settings | The publish job pushes the market sync commit with `GITHUB_TOKEN` as `github-actions[bot]`; if protection blocks it, allow that actor, or recover once by hand-running `node scripts/sync-market.mjs` and committing (a deprecated manual step; see [16-release-process.md](16-release-process.md)). |
+| PR creation by Actions | repo Settings → Actions → General → Workflow permissions | Enable "Allow GitHub Actions to create and approve pull requests" so `Promote desktop release` can open the manifest pull request itself; merging stays a human decision. |
 | Workflow permissions | repo settings | The workflows declare least-privilege `permissions` per job; no repo-wide write defaults are required. |
 
 ## Failure and recovery playbook
