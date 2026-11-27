@@ -1,0 +1,26 @@
+name: Publish DSH plugin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global npm@11.5.1
+      - run: npm ci
+      - run: npm run check
+      - run: npm run pack:dsh
+      - name: Verify target package version
+        run: node -e "const expected = require('./release/npm-version.json').version; const actual = require('./dist/dsh-plugin/package.json').version; if (expected !== actual) throw new Error('Staged package version mismatch: ' + actual + ' !== ' + expected); console.log('Publishing dsh-plugin-space@' + actual)"
+      - run: npm publish ./dist/dsh-plugin --provenance
