@@ -46,7 +46,7 @@ DSH remains on its historical `vX.Y.Z` tag convention. Local Server uses a prefi
 
 ### Prepare and verify
 
-1. Set the intended semver version in `apps/local-server/package.json`; keep the Local Server version independent from `release/npm-version.json`.
+1. Set the intended semver version in `apps/local-server/package.json` and the Local Server adapter declaration in `apps/local-server/src/client/main.jsx`, and synchronize `package-lock.json`; keep the Local Server version independent from `release/npm-version.json`.
 2. Build the runtime bundle, daemon bundle, and review web assets using the Local Server build script. The resulting package must contain the executable MCP entry, daemon entry, and static web assets, but no user databases, runtime credentials, npm tokens, unrelated workspaces, or generated release artifacts.
 3. Run `npm run check` and `npm run local-server:verify-package`.
 4. Inspect `npm pack --dry-run` for the Local Server package and install the staged tarball into a clean temporary directory. Verify the declared Node engine, `bin`, `files`, CLI modes, npx invocation, cache-independent daemon copy, and `service status` output.

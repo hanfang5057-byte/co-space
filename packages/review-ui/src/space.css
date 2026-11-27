@@ -747,8 +747,8 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent, #3
 /* Preview toolbar: keep frequent controls visible and tuck secondary tools away. */
 .space-preview-top .space-header-tools { justify-content: flex-end; flex: 0 1 auto; gap: 6px; min-block-size: 36px; padding: 1px 3px; border: 1px solid var(--space-border); border-radius: 10px; background: var(--space-card); box-shadow: 0 2px 8px color-mix(in srgb, var(--space-text) 5%, transparent); }
 .space-preview-top .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.space-preview-top .space-mode-switch { display: inline-flex; align-items: center; column-gap: 3px; min-block-size: 30px; block-size: 30px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 8px; background: transparent; }
-.space-app .space-preview-top .space-mode-switch button { min-block-size: 28px; padding-inline: 12px; border-radius: 7px; font-size: 13px; line-height: 1; }
+.space-preview-top .space-mode-switch { display: inline-flex; align-items: center; column-gap: 3px; min-block-size: 34px; block-size: 34px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 9px; background: transparent; }
+.space-app .space-preview-top .space-mode-switch button { min-block-size: 30px; padding-inline: 12px; border-radius: 7px; font-size: 12px; line-height: 1; }
 .space-preview-top .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--space-border); border-radius: 0; background: transparent; }
 .space-app .space-preview-top .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
 .space-preview-top .space-zoom-tools span { min-inline-size: 40px; color: var(--space-text); font-size: 12px; }
