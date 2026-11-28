@@ -1,6 +1,6 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Lock, Pause, Pencil, WifiOff } from 'lucide-react';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Lock, Pause, Pencil, Send, WifiOff } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
@@ -475,7 +475,7 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
   const confirmKey=mode==='copy'?'send.copyConfirm':mode==='new'?'send.newSessionConfirm':'send.confirm';
   if(!sendable.length || (!canCurrent&&!canCreate&&!canCopy)) return null;
   return <>
-    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint || t('send.buttonHint')} onClick={open}><MessageSquare size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
+    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint || t('send.buttonHint')} onClick={open}><Send size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
     <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} title={t('send.chooseTitle')} closeLabel={t('dialog.close')} className="space-send-dialog" actions={<><button type="button" autoFocus onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button><button type="button" className="is-primary" disabled={review.busy || !sendable.length || (mode==='current'&&!canCurrent) || (mode==='new'&&!canCreate)} onClick={()=>{setConfirming(false);void review.send(mode);}}>{t(confirmKey)}</button></>}>
       <p>{t('send.chooseDescription',{count:sendable.length})}</p>
       <fieldset className="space-send-options"><legend>{t('send.destination')}</legend>

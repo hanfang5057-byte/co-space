@@ -591,7 +591,7 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-preview-top .space-header-tools { justify-content: flex-end; flex: 0 1 auto; gap: 6px; min-block-size: 34px; }
 .space-sidebar-toolbar .space-header-tools { gap: 4px; max-inline-size: 100%; min-block-size: 34px; padding: 3px 5px; border: 1px solid var(--cospace-border); border-radius: 12px; background: var(--cospace-surface-raised); box-shadow: 0 1px 6px color-mix(in srgb, var(--cospace-shadow) 8%, transparent); }
 .space-preview-top .space-toolbar-group, .space-sidebar-toolbar .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.space-preview-top .space-zoom-tools, .space-sidebar-toolbar .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--cospace-border); border-radius: 0; background: transparent; }
+.space-preview-top .space-zoom-tools, .space-sidebar-toolbar .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline: 5px; gap: 2px; border: 0; border-inline: 1px solid var(--cospace-border); border-radius: 0; background: transparent; }
 .space-app .space-preview-top .space-zoom-tools button, .space-app .space-sidebar-toolbar .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
 .space-preview-top .space-zoom-tools span, .space-sidebar-toolbar .space-zoom-tools span { min-inline-size: 40px; color: var(--cospace-text-primary); font-size: 12px; }
 .space-tools-menu { position: relative; z-index: 30; display: grid; place-items: center; inline-size: 34px; block-size: 34px; margin-inline-start: 2px; padding-inline-start: 5px; border-inline-start: 1px solid var(--cospace-border); }
@@ -610,10 +610,11 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-app .space-preview-top .space-send-header:hover:not(:disabled) { filter: brightness(1.08); }
 /* The one explicit send action hands the document's unsent comments to the Agent.
    It only appears while comments wait, names what it does, and stays a quiet text
-   action between two rules: no colour and no bold of its own, and the header's
-   own hover background is the whole of its emphasis. */
+   action: no colour and no bold of its own, and the header's own hover background
+   is the whole of its emphasis. The rule between it and the zoom capsule belongs
+   to the capsule, so the hover chip never touches that line. */
 .space-app .space-preview-top .space-send-header,
-.space-app .space-sidebar-toolbar .space-send-compact { display: inline-flex; align-items: center; justify-content: center; gap: 6px; block-size: 30px; min-block-size: 30px; box-sizing: border-box; margin: 0; padding-inline: 9px; border: 0; border-inline-start: 1px solid var(--cospace-border); border-radius: 0 8px 8px 0; background: transparent; color: var(--cospace-text-primary); font-size: 12px; font-weight: 400; line-height: 1; white-space: nowrap; box-shadow: none; filter: none; }
+.space-app .space-sidebar-toolbar .space-send-compact { display: inline-flex; align-items: center; justify-content: center; gap: 6px; block-size: 30px; min-block-size: 30px; box-sizing: border-box; margin: 0; padding-inline: 9px; border: 0; border-radius: 8px; background: transparent; color: var(--cospace-text-primary); font-size: 12px; font-weight: 400; line-height: 1; white-space: nowrap; box-shadow: none; filter: none; }
 .space-app .space-preview-top .space-send-header:hover:not(:disabled),
 .space-app .space-sidebar-toolbar .space-send-compact:hover:not(:disabled) { filter: none; background: color-mix(in srgb, var(--cospace-text-primary) 5%, var(--cospace-surface-raised)); }
 .space-app .space-preview-top .space-send-header:disabled,
