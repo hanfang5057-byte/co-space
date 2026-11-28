@@ -82,7 +82,7 @@ Unchanged. Deploys on `main` pushes that change the site or market metadata, and
 | npm trusted publishing | npmjs.com → package settings | Repository `hanfang5057-byte/co-space`, workflow `.github/workflows/publish-dsh.yml`. No `NPM_TOKEN` secret is used. |
 | Release metadata GitHub App | repo settings → Developer settings → GitHub Apps | Install only on `co-space`; grant repository Contents read/write and Pull requests read/write. Save the App ID as `COSPACE_RELEASE_APP_ID` and its private key as `COSPACE_RELEASE_APP_PRIVATE_KEY`. This App token makes bot PR checks run without manual approval. |
 | Auto-merge | repo Settings → General → Pull Requests | Enable Allow auto-merge; generated metadata PRs use squash auto-merge after checks pass. |
-| `main` ruleset | repo Settings → Rules → Rulesets | Require PRs and `CI / Verify workspace`; require zero approvals; block force pushes and branch deletion. Do not require the path-filtered desktop preview check for every PR. |
+| `main` ruleset | repo Settings → Rules → Rulesets | Require PRs and `Verify workspace` check from the `CI` workflow; require zero approvals; block force pushes and branch deletion. Do not require the path-filtered desktop preview check for every PR. |
 | `desktop-release` environment | repo settings | Restricted to `desktop-v*` tags and holds updater key material. Do not configure required reviewers; publication follows successful automated verification. |
 | `COSPACE_UPDATER_PUBLIC_KEY` | `desktop-release` environment variable | Persistent updater public key. |
 | `TAURI_SIGNING_PRIVATE_KEY` / `..._PASSWORD` | `desktop-release` environment secrets | Updater signing key; back it up outside the repository. |
