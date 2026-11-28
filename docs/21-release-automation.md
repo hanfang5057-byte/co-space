@@ -25,7 +25,7 @@ The mapping to industry practice:
 | --- | --- | --- | --- |
 | Progress save, shared code only | push to `main` (paths) | `CI` verify + desktop sidecar smoke | None |
 | Progress save touching desktop code | push to `main` (paths) | `CI` + `Build CoSpace Desktop` preview matrix (unsigned, 14-day artifacts) | None |
-| Pull request | PR (paths) | `CI` + `Build CoSpace Desktop` preview matrix | None |
+| Integration pull request | PR into `dev` or `main` (paths) | `CI` + `Build CoSpace Desktop` preview matrix | None |
 | DSH prerelease preview | push with `release/npm-version.json` = `X.Y.Z-rc.n` | `Publish DSH plugin` | npm dist-tag `rc` + prerelease GitHub Release; `latest` untouched |
 | DSH stable release | push with `release/npm-version.json` = `X.Y.Z` | `Publish DSH plugin` | npm `latest` + market sync commit + tag `vX.Y.Z` + GitHub Release |
 | Desktop release | push bumping the six desktop version sources | `Build CoSpace Desktop` verify → authorize tag → `Stage signed desktop release` | Published signed GitHub Release + verified update manifest commit and Pages deployment |
@@ -58,13 +58,13 @@ Every numbered step is an *ensure* step: a re-run repairs whatever is missing an
 
 ### `Build CoSpace Desktop` (build-desktop.yml)
 
-PRs always build the preview matrix. Pushes to `main` first resolve **intent** (`apps/desktop/scripts/release-intent.mjs`):
+Pull requests into `dev` or `main` build the preview matrix. Pushes to `main` first resolve **intent** (`apps/desktop/scripts/release-intent.mjs`):
 
 - `release` — the desktop version changed in the pushed range: run the shared checks and sidecar smoke, verify all six version sources agree, verify the tag is new and increasing, then create the annotated `desktop-vX.Y.Z` tag and dispatch `Stage signed desktop release` on it. A tag pushed with `GITHUB_TOKEN` does not fire push events, so the dispatch is explicit — the same limitation the DSH publish workflow handles for the Pages deployment.
 - `preview` — desktop code changed without a version bump: run the checks, then build the unsigned matrix (macOS arm64, Linux x64) and upload 14-day artifacts, including the Linux deb/AppImage launcher smokes.
 - `none` — only shared code changed: leave it to `CI`; the desktop matrix is not spent on it.
 
-`workflow_dispatch` offers the same two routes manually, so a release whose push failed after the version bump can be resumed with `route: release` once the fix is pushed — the tag guard rejects anything that was already tagged. Runs on the same ref are serialized (never cancelled mid-release); recovery for a broken release push is fix → push (progress) → dispatch with `route: release`.
+`dev` is the shared integration branch: short-lived work branches merge into it by PR, then `dev` merges into `main` by PR without a version bump. Once `main` checks pass, a separate version-only commit on `main` triggers publication. Direct pushes to `dev` do not trigger these workflows; PRs into `dev` and `main` run CI and preview builds. `workflow_dispatch` offers the two build routes manually, so a release whose push failed after the version bump can be resumed with `route: release` once the fix is pushed — the tag guard rejects anything that was already tagged. Runs on the same ref are serialized (never cancelled mid-release); recovery for a broken release push is fix → push (progress) → dispatch with `route: release`.
 
 ### `Stage signed desktop release` (stage-desktop-release.yml)
 

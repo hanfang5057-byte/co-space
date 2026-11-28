@@ -47,19 +47,19 @@ For local desktop development, run `npm run dev:desktop`; UI changes rebuild and
 
 ## Branching and daily work
 
-Releases are decided by version files, not by branches, so the repository has no long-lived integration branch.
+Use `dev` as the shared integration branch. Create short-lived work branches from `dev` and open pull requests into `dev`; after integration, open a pull request from `dev` to `main`. Pull requests run CI and the desktop preview matrix. Direct pushes to `dev` do not run the configured checks, so use pull requests for integration.
 
 | Work | What runs |
 | --- | --- |
 | Push to `main` | `CI`; changes under packages, the desktop app, scripts, or tests also run the unsigned **preview** matrix |
-| Push to any other branch | Nothing — use a short-lived branch to park work in progress without spending CI |
-| Pull request to `main` | `CI` plus the unsigned preview matrix, with 14-day artifacts for installation testing |
+| Push to `dev` or a work branch | Nothing — use pull requests to run checks |
+| Pull request to `dev` or `main` | `CI` plus the unsigned preview matrix, with 14-day artifacts for installation testing |
 | Push that changes the DSH release version files or the desktop version sources | That product's release route |
 | Push that changes only documentation | Nothing |
 
-Keep feature branches short-lived and merge them within days. A long-running integration branch makes the desktop release intent compare a very wide commit range, and raises review and conflict cost.
+Keep work branches short-lived and merge them within days. Keep `dev` current with `main` after releases so new work starts from the latest production code.
 
-**Two-stage releases.** Push the content first so `CI` and the preview matrix verify it, then push the version-only commit to trigger the release. The desktop decision compares the version before and after the pushed range, so a squash merge that carries the bump still releases correctly.
+**Two-stage releases.** First merge code from `dev` to `main` without changing product versions. After the merged code passes `main` checks, make a separate version-only commit on `main`: update `release/npm-version.json` for DSH or run `npm run version:desktop -- X.Y.Z` for Desktop. That commit triggers the release. Keeping the version bump separate makes release intent explicit and lets CI verify the product changes before publication.
 
 Rules that a failed attempt will not teach gently:
 
