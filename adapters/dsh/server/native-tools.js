@@ -19,7 +19,10 @@ export function toToolDefinition(name, spec) {
   return {
     name,
     description: spec.description,
-    parameters: z.toJSONSchema(z.object(spec.inputSchema)),
+    // zod's JSON Schema projection carries a non-enumerable `~standard` vendor
+    // marker that the host's lossless-JSON projection rejects; round-trip to a
+    // plain record and drop the `$schema` preamble the model does not need.
+    parameters: plainJsonSchema(z.toJSONSchema(z.object(spec.inputSchema))),
     output: {
       schema: { type: 'object' },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
@@ -32,4 +35,11 @@ export function toToolDefinition(name, spec) {
       }
     },
   };
+}
+
+/** Plain, losslessly JSON-serializable copy of one generated schema. */
+function plainJsonSchema(schema) {
+  const parameters = JSON.parse(JSON.stringify(schema));
+  delete parameters.$schema;
+  return parameters;
 }

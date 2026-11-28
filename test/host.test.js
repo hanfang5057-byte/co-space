@@ -174,6 +174,12 @@ test('plugin registers native agent tools and the web route against the same hom
       assert.equal(typeof definition.description, 'string');
       assert.ok(definition.parameters && definition.parameters.type === 'object');
       assert.equal(definition.output.schema.type, 'object');
+      // The host projects parameters through a lossless-JSON snapshot that
+      // rejects non-enumerable own keys and `$schema` preambles.
+      const parameters = definition.parameters;
+      assert.deepEqual(JSON.parse(JSON.stringify(parameters)), parameters);
+      assert.ok(Reflect.ownKeys(parameters).every(key => Object.prototype.propertyIsEnumerable.call(parameters, key)));
+      assert.equal(parameters.$schema, undefined);
     }
     // Success renders one JSON text block, the payload the client cards parse.
     const read = registeredTools.find(definition => definition.name === 'space_document_read');
