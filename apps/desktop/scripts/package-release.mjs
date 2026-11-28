@@ -16,8 +16,9 @@ await rm(releaseDir, { recursive: true, force: true });
 await mkdir(releaseDir, { recursive: true });
 
 if (process.platform === 'darwin') {
+  if (process.arch !== 'arm64') throw new Error('macOS release packaging supports Apple silicon only');
   const app = path.join(bundle, 'macos/CoSpace.app');
-  const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
+  const arch = 'aarch64';
   const dmgDir = path.join(bundle, 'dmg');
   const dmg = path.join(dmgDir, `CoSpace_${config.version}_${arch}.dmg`);
   // Tauri signs before generating updater archives; re-signing here would

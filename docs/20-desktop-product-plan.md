@@ -34,7 +34,7 @@
 
 首次通过浏览器下载安装未公证的应用时，Gatekeeper 可能阻止打开，用户可能需要在系统设置中确认。通过应用内 updater 安装新版时，是否再次出现拦截取决于 macOS 版本、安装方式和设备策略，不能承诺仅首次提示；浏览器重新下载 DMG 也可能触发新的检查。Tauri 更新签名验证发布者持有更新私钥，但不等同于 Apple 开发者身份或公证。受管理设备可能不允许用户自行放行；不建议关闭全局安全功能或以移除隔离属性作为默认安装步骤。若未来申请麦克风、辅助功能等系统权限，还需验证 ad-hoc 更新后是否需要重新授权。
 
-发布前在干净、启用 Gatekeeper 的 Mac 上，用浏览器下载正式路径的 A 版，记录首次安装和打开提示；用实际 GitHub Actions 产物及正式 updater 清单从 A 升级到 B，验证签名、安装、重启、再次启动和内置 Node/MCP，记录是否再次提示。再测试浏览器重新下载 B、至少一次 B 到 C 更新，以及有代表性的受管理设备策略；按实际支持范围覆盖 macOS 版本和 arm64/x64。记录环境与结果，发布说明如实描述，不能据单台结果保证所有设备表现相同。参见 [Apple 安全打开应用](https://support.apple.com/en-us/102445)及 [Tauri macOS 签名](https://v2.tauri.app/distribute/sign/macos/)。
+发布前在干净、启用 Gatekeeper 的 Mac 上，用浏览器下载正式路径的 A 版，记录首次安装和打开提示；用实际 GitHub Actions 产物及正式 updater 清单从 A 升级到 B，验证签名、安装、重启、再次启动和内置 Node/MCP，记录是否再次提示。再测试浏览器重新下载 B、至少一次 B 到 C 更新，以及有代表性的受管理设备策略；按实际支持范围覆盖 macOS 版本和 arm64。记录环境与结果，发布说明如实描述，不能据单台结果保证所有设备表现相同。参见 [Apple 安全打开应用](https://support.apple.com/en-us/102445)及 [Tauri macOS 签名](https://v2.tauri.app/distribute/sign/macos/)。
 
 ## Local Server 剥离边界
 
@@ -62,18 +62,18 @@
 
 GitHub Actions 可实现此流程；[Tauri 官方提供 GitHub Actions 工作流](https://v2.tauri.app/distribute/pipelines/github/)。PR 只构建、测试并上传临时产物，不接触发布密钥；发布从受保护的版本 tag 和环境执行，最小化 `contents: write` 权限，固定并审查第三方 action 版本。发布任务使用一致的桌面版本来源和 `desktop-vX.Y.Z` tag，不复用 DSH tag。
 
-当前首发构建目标为 macOS arm64/x64 和 Linux x64 的 deb、AppImage；Windows 暂停发布，本地仍可构建 Windows 调试包。后续恢复 Windows 发布前，需配置代码签名证书，并在干净系统验证 MSI/NSIS 安装、更新与签名。验收后可增加其他 Linux 包格式。其他架构和 UOS 在对应 runner、系统依赖和目标机器上验证后再宣称支持。Linux deb 默认由包管理器或手动安装更新；AppImage 可使用 Tauri updater，不应把两者的更新路径混同。确认各平台的安装格式和 Tauri updater 产物一一匹配。
+当前首发构建目标为 macOS arm64 和 Linux x64 的 deb、AppImage；Windows 暂停发布，本地仍可构建 Windows 调试包。后续恢复 Windows 发布前，需配置代码签名证书，并在干净系统验证 MSI/NSIS 安装、更新与签名。验收后可增加其他 Linux 包格式。其他架构和 UOS 在对应 runner、系统依赖和目标机器上验证后再宣称支持。Linux deb 默认由包管理器或手动安装更新；AppImage 可使用 Tauri updater，不应把两者的更新路径混同。确认各平台的安装格式和 Tauri updater 产物一一匹配。
 
-流水线先安装锁定依赖、运行共享检查和桌面测试，随后在目标平台构建并验证内置 Node 架构、sidecar、stdio MCP、安装资产和更新签名；产物集中到 draft release。当前没有 Apple 开发者账号，macOS 先使用 ad-hoc 签名，不公证；GitHub Actions 无需 Apple 证书即可构建。该签名不能证明开发者身份或消除 Gatekeeper 提示，用户可能需要在“隐私与安全性”中确认打开，受管理设备可能不允许。发布页应如实说明，并在干净 macOS 上验证下载、首次启动及更新后启动；以后取得 Developer ID 时再升级为正式签名和公证。恢复 Windows 发布时，再配置正式代码签名并验证证书与时间戳；Tauri 更新签名与系统代码签名相互独立，仍须验证。所有签名密钥使用受保护 secrets，禁止输出到日志或暴露给不受信任 PR。
+流水线先安装锁定依赖、运行共享检查和桌面测试，随后在目标平台构建并验证内置 Node 架构、sidecar、stdio MCP、安装资产和更新签名；验证通过后自动发布 GitHub Release 并更新站点清单。当前没有 Apple 开发者账号，macOS 先使用 ad-hoc 签名，不公证；GitHub Actions 无需 Apple 证书即可构建。该签名不能证明开发者身份或消除 Gatekeeper 提示，用户可能需要在“隐私与安全性”中确认打开，受管理设备可能不允许。发布页应如实说明，并在干净 macOS 上验证下载、首次启动及更新后启动；以后取得 Developer ID 时再升级为正式签名和公证。恢复 Windows 发布时，再配置正式代码签名并验证证书与时间戳；Tauri 更新签名与系统代码签名相互独立，仍须验证。所有签名密钥使用受保护 secrets，禁止输出到日志或暴露给不受信任 PR。
 
-所有矩阵构建成功后，验证每个平台的版本、摘要、签名、安装与升级，并在干净系统或对应测试环境完成人工验收；再发布 Release。发布后从公开版本下载并验证全部更新产物，准备官网的 `apps/site/desktop/latest.json`，经审阅后随 Pages 整站部署切换正式更新清单。清单引用的所有文件必须先可下载且与签名匹配，避免部分发布；验证目标用户网络可访问 Release 和更新地址，必要时提供经验证的镜像。未通过平台验收的构建只能标为测试产物；macOS 未公证状态及安装限制必须明确披露。GitHub Actions 可自动化构建和签名，但不能代替证书准备、目标设备验收和发布授权。详细步骤见 `docs/16-release-process.md`。
+所有矩阵构建成功后，流水线检查版本、摘要、签名、安装器与更新资产；检查通过后自动发布 Release，再下载公开资产复核其内容和可访问性，更新官网的 `apps/site/desktop/latest.json` 并部署 Pages。清单只包含当前支持的平台，且引用的所有文件必须与签名匹配；验证目标用户网络可访问 Release 和更新地址，必要时提供经验证的镜像。发布说明明确披露 macOS 未公证和 Apple 芯片限定。GitHub Actions 自动化不包含证书准备和平台兼容性验证。详细步骤见 `docs/16-release-process.md`。
 
 ## 验收与实施顺序
 
 1. 对照 dev 和当前 main 梳理差异，恢复桌面壳并适配当前共享服务；确认数据目录、入口路径、进程归属和网络安全设计。
 2. 实现内置 Node、多平台构建和 WorkBuddy 接入；在无系统 Node/npx 的干净环境验证安装、创建文档、Agent 修改、用户审阅和退出恢复。
 3. 实现安全迁移和更新协调，覆盖旧 npm daemon 正在运行、多 Agent、窗口关闭、崩溃、异常重启和不兼容数据布局。
-4. 配置签名、CI draft release 与 updater，执行至少一次真实的旧版到新版更新及失败恢复；检查敏感信息不进入产物和日志。
+4. 配置签名、CI 自动发布与 updater，执行至少一次真实的旧版到新版更新及失败恢复；检查敏感信息不进入产物和日志。
 5. 验收完成并发布桌面版后，再切换网站、README、发布文档和 npm 下线指引。实现过程中保持 DSH 包构建和宿主集成边界不变。
 
 参考：[Tauri Updater](https://v2.tauri.app/plugin/updater/)、[GitHub Actions 发布](https://v2.tauri.app/distribute/pipelines/github/)、[macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Windows 签名](https://v2.tauri.app/distribute/sign/windows/)。

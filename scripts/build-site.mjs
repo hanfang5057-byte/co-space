@@ -32,11 +32,10 @@ const desktopVersion = typeof desktop?.version === 'string' && /^\d+\.\d+\.\d+$/
   : null;
 
 function installers() {
-  if (!desktopVersion) return { dmgArm: releasesUrl, dmgX64: releasesUrl, deb: releasesUrl, appimage: releasesUrl };
+  if (!desktopVersion) return { dmgArm: releasesUrl, deb: releasesUrl, appimage: releasesUrl };
   const url = name => `${releasesUrl}/download/desktop-v${desktopVersion}/${encodeURIComponent(name)}`;
   return {
     dmgArm: url(`macos-arm64--CoSpace_${desktopVersion}_aarch64.dmg`),
-    dmgX64: url(`macos-x64--CoSpace_${desktopVersion}_x64.dmg`),
     deb: url(`linux-x64--CoSpace_${desktopVersion}_amd64.deb`),
     appimage: url(`linux-x64--CoSpace_${desktopVersion}_amd64.AppImage`),
   };
@@ -47,7 +46,6 @@ const replacements = {
   '{{RELEASES}}': releasesUrl,
   '{{DESKTOP_VERSION}}': desktopVersion ?? '即将发布',
   '{{DMG_ARM64}}': links.dmgArm,
-  '{{DMG_X64}}': links.dmgX64,
   '{{DEB}}': links.deb,
   '{{APPIMAGE}}': links.appimage,
 };

@@ -4,7 +4,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const platformTargets = {
+// Keep the retired Intel target here only so the verifier can validate legacy releases.
+export const platformTargets = {
   'macos-arm64': ['darwin-aarch64-app'],
   'macos-x64': ['darwin-x86_64-app'],
   'windows-x64': ['windows-x86_64-msi', 'windows-x86_64-nsis'],
