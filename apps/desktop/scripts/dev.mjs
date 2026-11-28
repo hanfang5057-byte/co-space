@@ -28,10 +28,10 @@ const dataHome = resolveDataHome();
 const runtimeHome = resolveRuntimeHome({ dataHome });
 const service = await localServiceStatus({ dataHome, runtimeHome });
 if (service.running) {
-  if (service.activeMcpClients > 0 || service.activeUiSessions > 0) {
-    throw new Error(`CoSpace service ${service.version} is active (${service.activeMcpClients} Agent connection(s), ${service.activeUiSessions} review page(s)). Disconnect Agents and close review pages before starting the development app.`);
+  if (service.activeMcpClients > 0) {
+    throw new Error(`CoSpace service ${service.version} has ${service.activeMcpClients} active Agent connection(s). Disconnect Agents before starting the development app.`);
   }
-  await stopLocalDaemon({ dataHome, runtimeHome });
+  await stopLocalDaemon({ dataHome, runtimeHome, allowActiveUiSessions: true });
 }
 try {
   await stat(endpointFile(runtimeHome));
