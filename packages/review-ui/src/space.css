@@ -674,8 +674,8 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-mode-switch-knob.is-error { color:var(--cospace-danger); }
 .space-mode-switch-knob.is-saving svg { animation:space-update-spin 1.1s linear infinite; }
 
-/* Chrome 139+ lets a host reshape every corner: DSH paints a superellipse on
-   `*`, which turns this thumb into a rounded square. A thumb, a capsule and an
+/* Some themes reshape every corner on `*`, which can turn this thumb into a
+   rounded square. A thumb, a capsule and an
    avatar are geometry rather than a corner style, so CoSpace keeps those round
    while ordinary rounded rectangles still follow the host's shape language. */
 .space-app .space-mode-switch,
@@ -774,6 +774,11 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
   line-height:1.7;
   box-shadow:0 1px 2px color-mix(in srgb, var(--cospace-shadow) 4%, transparent),0 20px 48px color-mix(in srgb, var(--cospace-shadow) 6%, transparent);
 }
+/* Crepe hides the native top bar with an inline display:none in read-only
+   mode. Keep its responsive row in flow but invisible, so toggling modes does
+   not move the first line of the document. */
+.space-app .space-milkdown-root .milkdown-top-bar { box-sizing:border-box; block-size:44px; min-block-size:44px; }
+.space-app .space-milkdown-root.is-readonly .milkdown-top-bar { display:flex !important; visibility:hidden; pointer-events:none; }
 .space-app .space-milkdown-root .milkdown .ProseMirror {
   box-sizing:border-box;
   min-block-size:1121px;
