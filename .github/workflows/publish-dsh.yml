@@ -32,11 +32,11 @@ jobs:
       actions: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -117,7 +117,7 @@ jobs:
             fi
           fi
       - id: release-app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           app-id: ${{ vars.COSPACE_RELEASE_APP_ID }}
           private-key: ${{ secrets.COSPACE_RELEASE_APP_PRIVATE_KEY }}
@@ -153,7 +153,9 @@ jobs:
           if git ls-remote --tags origin "refs/tags/$tag" | grep -q .; then
             echo "Tag $tag already exists; keeping the original (release tags are never moved)."
           else
-            git tag -a "$tag" -m "dsh-plugin-space $DSH_VERSION"
+            git -c user.name=github-actions[bot] \
+              -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+              tag -a "$tag" -m "dsh-plugin-space $DSH_VERSION"
             git push origin "$tag"
           fi
       - name: Ensure the GitHub release and tarball assets
@@ -187,7 +189,7 @@ jobs:
           fi
           for asset in "$tarball" "$tarball.sha256"; do
             name="$(basename "$asset")"
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.[].name' | grep -qx "$name"; then
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx "$name"; then
               echo "Asset $name is already attached to $tag."
             else
               gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY"

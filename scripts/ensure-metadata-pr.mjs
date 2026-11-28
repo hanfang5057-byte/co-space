@@ -33,20 +33,36 @@ if (metadataDiffersFromMain) {
 }
 
 const [owner] = repository.split('/');
-const findPullRequest = () => JSON.parse(execFileSync('gh', [
+const findPullRequests = () => JSON.parse(execFileSync('gh', [
   'pr', 'list', '--repo', repository, '--base', 'main', '--head', `${owner}:${branch}`, '--state', 'open', '--json', 'number,url',
 ], { encoding: 'utf8' }));
 
-let pullRequests = findPullRequest();
+const waitForPullRequest = async () => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const pullRequests = findPullRequests();
+    if (pullRequests.length) return pullRequests;
+    await new Promise(resolve => setTimeout(resolve, 5_000));
+  }
+  return [];
+};
+
+let pullRequests = findPullRequests();
 if (!pullRequests.length) {
   if (!metadataDiffersFromMain) {
     console.log(`No metadata changes or open pull request for ${branch}.`);
     process.exit(0);
   }
-  execFileSync('gh', [
-    'pr', 'create', '--repo', repository, '--base', 'main', '--head', branch, '--title', title, '--body', body,
-  ], { stdio: 'inherit' });
-  pullRequests = findPullRequest();
+  try {
+    const created = execFileSync('gh', [
+      'pr', 'create', '--repo', repository, '--base', 'main', '--head', branch, '--title', title, '--body', body,
+    ], { encoding: 'utf8' }).trim();
+    process.stdout.write(`${created}\n`);
+    const number = created.match(/\/pull\/(\d+)\/?$/)?.[1];
+    if (number) pullRequests = [{ number: Number(number), url: created }];
+  } catch (createError) {
+    console.log(`Pull request creation failed (${createError.message}); checking whether ${branch} already has an open PR.`);
+  }
+  if (!pullRequests.length) pullRequests = await waitForPullRequest();
 }
 if (pullRequests.length !== 1) throw new Error(`Expected one open metadata pull request for ${branch}, found ${pullRequests.length}`);
 
