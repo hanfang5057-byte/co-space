@@ -5,10 +5,6 @@
       "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.1.21/macos-arm64--CoSpace.app.tar.gz",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVVrV1NxcTVXb2JlbnBIU0cxcHg3TEtTQWlteks2R0F4VFp6Y291MHRzdVNMQjZxekphb1UwRjdwUDh4aGVYLzdpbXRXOHdBYzFJN0VUbGowVkIxR2c4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzkzNDk5CWZpbGU6Q29TcGFjZS5hcHAudGFyLmd6CXZlcnNpb246MC4xLjIxCkpjQk5zTDBmV05yRzV4WXVtQmZUNXFTYmlXY2ZBbFVOdm1WZVhtR0d3cE1HYXRJS2t2U2Z5YWprSXRPdmhuNUFicjBKamtabk51R2VaMS85Y1JCNkRnPT0K"
     },
-    "darwin-x86_64-app": {
-      "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.1.21/macos-x64--CoSpace.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVgxYzJaM3FlV3RlTGdVK0ErYU96ZmgwbTlhSWRPanFOc2h2dXh5alVOcnB0N0s5dnpHN3phaHZHNHkyU1pjKzRFWjQ2TjN4cE1VSWJrVWw1Y0VDT1FZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzkzOTY5CWZpbGU6Q29TcGFjZS5hcHAudGFyLmd6CXZlcnNpb246MC4xLjIxClY1QlJla1A5SnJkVStZWUtVVWVTTTlqUEhSbWdDZGd5eEdlaWE5OGJMdTZEQW9WcjQ5NGFJend0OFZFdW5vbjVvOGVBUDRxdUtHR3BRc2Zua003dEJ3PT0K"
-    },
     "linux-x86_64-appimage": {
       "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.1.21/linux-x64--CoSpace_0.1.21_amd64.AppImage",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVhYNDBlV1FKelE4bTllY0NWSS8xNEtjdjEwNldyS2VKd1JTNDlvSTFWSGJkOFlPbHgrOTl4d09mb1BrN002dHJ4OWd2SVRqNVEwSEFDMnpjNTltY2dvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzkzNjQyCWZpbGU6Q29TcGFjZV8wLjEuMjFfYW1kNjQuQXBwSW1hZ2UJdmVyc2lvbjowLjEuMjEKN0tQazhOQm0yUkE4WXFJVG8yN0ZLanR4a0czcHVId1htaVZOZE5UcW9HN1FuRHEzdVhWYVYwQ3ZzNGpsUk8yd24vcS9kNTg3WWtEUGxMY0V3bXJoQnc9PQo="

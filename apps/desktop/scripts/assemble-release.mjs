@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const specs = [
   { target: 'macos-arm64', platform: 'darwin-aarch64-app', update: /\.app\.tar\.gz$/, installer: /\.dmg$/ },
-  { target: 'macos-x64', platform: 'darwin-x86_64-app', update: /\.app\.tar\.gz$/, installer: /\.dmg$/ },
   { target: 'windows-x64', platform: 'windows-x86_64-msi', update: /\.msi$/ },
   { target: 'windows-x64', platform: 'windows-x86_64-nsis', update: /\.exe$/ },
   { target: 'linux-x64', platform: 'linux-x86_64-appimage', update: /\.AppImage$/i, installer: /\.deb$/ },

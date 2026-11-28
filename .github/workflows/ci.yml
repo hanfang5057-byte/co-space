@@ -15,16 +15,9 @@ on:
       - 'package.json'
       - 'package-lock.json'
   pull_request:
-    paths:
-      - '.github/workflows/ci.yml'
-      - 'adapters/**'
-      - 'apps/site/**'
-      - 'assets/**'
-      - 'packages/**'
-      - 'scripts/**'
-      - 'test/**'
-      - 'package.json'
-      - 'package-lock.json'
+    branches:
+      - main
+      - dev
 
 permissions:
   contents: read

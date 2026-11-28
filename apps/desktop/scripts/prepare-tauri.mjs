@@ -10,7 +10,7 @@ const tauri = path.join(appDir, 'src-tauri');
 const resources = path.join(tauri, 'resources');
 const binaries = path.join(tauri, 'binaries');
 const target = {
-  darwin: { arm64: 'aarch64-apple-darwin', x64: 'x86_64-apple-darwin' },
+  darwin: { arm64: 'aarch64-apple-darwin' },
   win32: { arm64: 'aarch64-pc-windows-msvc', x64: 'x86_64-pc-windows-msvc' },
   linux: { arm64: 'aarch64-unknown-linux-gnu', x64: 'x86_64-unknown-linux-gnu' },
 }[process.platform]?.[process.arch];

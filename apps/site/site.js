@@ -17,10 +17,8 @@ function currentDownloadKind() {
   const isMac = /mac/i.test(platform);
   const isLinux = /linux/i.test(platform) && !/android/i.test(platform);
   if (isMac) {
-    // Apple silicon is the common case; userAgentData exposes the architecture
-    // where available, and an Intel Mac still gets an explicit second link.
     const architecture = navigator.userAgentData?.architecture ?? '';
-    return architecture && /x86/i.test(architecture) ? 'mac-intel' : 'mac-arm';
+    return /arm/i.test(architecture) ? 'mac-arm' : null;
   }
   if (isLinux) return 'linux-appimage';
   return null;

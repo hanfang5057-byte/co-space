@@ -4,13 +4,13 @@ Tauri 桌面入口使用随包 Node 运行时、本地服务和共享审阅 UI�
 
 ## 安装
 
-桌面端已正式发布：从 [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases/latest) 下载对应平台安装包——macOS arm64/x64 `.dmg`，Linux amd64 `.deb` / `.AppImage`，附件含 `SHA256SUMS` 与各平台签名。AppImage 可通过内置更新通道自动升级；deb 建议使用系统包管理器升级。macOS 安装包为 ad-hoc 签名且未公证，首次启动如被 Gatekeeper 拦截，右键应用选择打开。Windows 暂停发布，本地调试构建仍可用。
+桌面端已正式发布：从 [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases/latest) 下载对应平台安装包——macOS Apple 芯片 `.dmg`，Linux amd64 `.deb` / `.AppImage`，附件含 `SHA256SUMS` 与各平台签名。Intel Mac 不在支持范围内。AppImage 可通过内置更新通道自动升级；deb 建议使用系统包管理器升级。macOS 安装包为 ad-hoc 签名且未公证，首次启动如被 Gatekeeper 拦截，右键应用选择打开。Windows 暂停发布，本地调试构建仍可用。
 
 WorkBuddy 接入使用已安装的 CoSpace 程序和 `--mcp` 参数，AppImage 不会把临时挂载目录写进配置。移动或卸载应用后需在桌面应用内重新接入。接入会保留其他 MCP 条目；同名配置或 Skill 无法确认归属时会停止并提示检查。
 
 ## 开发
 
-桌面端开发和打包需要 Node.js 24 或更高版本。在仓库根目录执行 `npm install` 后，运行 `npm run dev:desktop` 启动开发版，运行 `npm run smoke --workspace apps/desktop` 验证 sidecar 与 MCP。开发版会监视桌面 UI，改动后重新构建并整页刷新；Node 服务/MCP 或共享包改动需要重启开发命令。启动时会安全停止空闲的旧版本服务；若 Agent 或审阅页面仍连接，会提示先断开。`npm run package:desktop:local` 会按当前操作系统构建本机调试包并启动它：macOS 打开 `.app`，Windows 打开 NSIS 安装器，Linux 启动 AppImage。Linux 本地调试不构建 deb；正式构建矩阵包括 macOS arm64/x64 和 Linux deb/AppImage。完整桌面构建还需 Rust 工具链及相应平台依赖。
+桌面端开发和打包需要 Node.js 24 或更高版本。在仓库根目录执行 `npm install` 后，运行 `npm run dev:desktop` 启动开发版，运行 `npm run smoke --workspace apps/desktop` 验证 sidecar 与 MCP。开发版会监视桌面 UI，改动后重新构建并整页刷新；Node 服务/MCP 或共享包改动需要重启开发命令。启动时会安全停止空闲的旧版本服务；若 Agent 或审阅页面仍连接，会提示先断开。`npm run package:desktop:local` 会按当前操作系统构建本机调试包并启动它：Apple 芯片 macOS 打开 `.app`，Windows 打开 NSIS 安装器，Linux 启动 AppImage。Intel Mac 不受支持。Linux 本地调试不构建 deb；正式构建矩阵包括 macOS arm64 和 Linux deb/AppImage。完整桌面构建还需 Rust 工具链及相应平台依赖。
 
 ## 发布
 

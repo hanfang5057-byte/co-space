@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: read
 
 concurrency:
   group: publish-dsh
@@ -29,12 +30,12 @@ jobs:
       contents: write
       id-token: write
       actions: write
-    env:
-      GH_TOKEN: ${{ github.token }}
+      pull-requests: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -115,22 +116,37 @@ jobs:
               exit 1
             fi
           fi
-      - name: Sync and commit the market index
+      - id: release-app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ vars.COSPACE_RELEASE_APP_ID }}
+          private-key: ${{ secrets.COSPACE_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: co-space
+      - name: Configure GitHub App credentials
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "GH_TOKEN=$GH_TOKEN" >> "$GITHUB_ENV"
+          git config --local credential.helper '!f() { echo username=x-access-token; echo password="$GH_TOKEN"; }; f'
+      - name: Sync and automatically merge the market index pull request
+        timeout-minutes: 45
+        run: |
           git checkout -- adapters/dsh/package.json adapters/dsh/adapter.json package-lock.json
           git fetch origin main
-          git checkout -B market-sync origin/main
-          node scripts/sync-market.mjs
-          if git status --porcelain -- market/index.json market/icons | grep -q .; then
-            git add market/index.json market/icons
-            git commit -m "chore(market): sync dsh-plugin-space@$DSH_VERSION"
-            git push origin HEAD:main
-            echo "Committed the synced market index for dsh-plugin-space@$DSH_VERSION."
-          else
-            echo "market/index.json already reflects the published registry state."
+          branch="automation/market-index-${DSH_VERSION,,}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
           fi
+          git checkout -B "$branch" origin/main
+          node scripts/sync-market.mjs
+          RELEASE_METADATA_BRANCH="$branch" \
+          RELEASE_METADATA_TITLE="chore(market): sync dsh-plugin-space@$DSH_VERSION" \
+          RELEASE_METADATA_BODY="Automated market metadata for dsh-plugin-space@$DSH_VERSION. This PR is merged automatically after required checks pass." \
+          RELEASE_METADATA_FILES='["market/index.json","market/icons"]' \
+            node scripts/ensure-metadata-pr.mjs
+      - name: Return to the release commit
+        run: git checkout --detach "$GITHUB_SHA"
       - name: Ensure the annotated version tag
         run: |
           tag="v$DSH_VERSION"
@@ -178,4 +194,6 @@ jobs:
             fi
           done
       - name: Refresh the published site and plugin index
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh workflow run pages.yml --ref main

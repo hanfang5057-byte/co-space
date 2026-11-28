@@ -13,7 +13,6 @@ async function fixture(t) {
   const output = path.join(root, 'output');
   const targets = {
     'macos-arm64': ['CoSpace.app.tar.gz', 'CoSpace.app.tar.gz.sig', 'CoSpace_arm.dmg'],
-    'macos-x64': ['CoSpace.app.tar.gz', 'CoSpace.app.tar.gz.sig', 'CoSpace_x64.dmg'],
     'windows-x64': ['CoSpace.msi', 'CoSpace.msi.sig', 'CoSpace.exe', 'CoSpace.exe.sig'],
     'linux-x64': ['CoSpace.AppImage', 'CoSpace.AppImage.sig', 'CoSpace.deb'],
   };
@@ -28,9 +27,9 @@ async function fixture(t) {
 test('release assembly creates independent platform URLs, signatures and checksums', async t => {
   const f = await fixture(t);
   const result = await assembleRelease(f);
-  assert.equal(Object.keys(result.platforms).length, 5);
+  assert.equal(Object.keys(result.platforms).length, 4);
   assert.match(result.platforms['darwin-aarch64-app'].url, /desktop-v1\.2\.3\/macos-arm64--CoSpace\.app\.tar\.gz$/);
-  assert.match(result.platforms['darwin-x86_64-app'].url, /macos-x64--CoSpace\.app\.tar\.gz$/);
+  assert.equal(result.platforms['darwin-x86_64-app'], undefined);
   assert.equal(result.platforms['windows-x86_64-nsis'].signature, 'YWJjZA==');
   assert.match(await readFile(path.join(f.output, 'SHA256SUMS'), 'utf8'), /linux-x64--CoSpace\.deb/);
   const manifest = JSON.parse(await readFile(path.join(f.output, 'latest.json'), 'utf8'));
@@ -51,7 +50,7 @@ test('release verification validates all platform signatures and rejects altered
   const verifySignature = async (_artifact, _signature, version) => { assert.equal(version, f.version); checked++; };
   const manifest = await verifyRelease({ directory: f.output, repository: f.repository, verifySignature });
   assert.equal(manifest.version, f.version);
-  assert.equal(checked, 5);
+  assert.equal(checked, 4);
   await writeFile(path.join(f.output, 'linux-x64--CoSpace.deb'), 'modified');
   await assert.rejects(verifyRelease({ directory: f.output, repository: f.repository, verifySignature }), /Checksum mismatch/);
 });
