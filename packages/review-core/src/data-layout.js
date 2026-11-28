@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 
-export const DATA_LAYOUT_VERSION = 2;
+export const DATA_LAYOUT_VERSION = 3;
 
 // Missing markers in older databases are identified by their actual tables.
 // Invalid/unreadable databases throw so callers cannot roll back speculatively.
