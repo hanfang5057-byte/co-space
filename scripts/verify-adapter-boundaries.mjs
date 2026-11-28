@@ -26,7 +26,7 @@ assert.ok(rootManifest.workspaces.includes('packages/adapter-contract'), 'adapte
 assert.ok(rootManifest.workspaces.includes('packages/host-api'), 'shared host API must be a workspace package');
 assert.ok(rootManifest.workspaces.includes('apps/desktop'), 'the desktop app must be a workspace');
 assert.ok(!rootManifest.workspaces.includes('apps/local-server'), 'the retired local server must not be a workspace');
-assert.ok(!JSON.stringify(rootManifest).toLowerCase().includes('workbuddy'), 'removed adapters must not remain in current workspace configuration');
+assert.ok(!JSON.stringify(rootManifest).toLowerCase().includes('workbuddy-connector'), 'removed WorkBuddy Connector must not remain in current workspace configuration');
 
 const adapterEntries = await readdir(path.join(root, 'adapters'), { withFileTypes: true });
 const adapterDirectories = adapterEntries.filter(entry => entry.isDirectory()).map(entry => entry.name);
@@ -45,11 +45,11 @@ for (const { directory, file } of integrationDeclarations) {
 }
 
 const boundaries = [
-  ['packages/review-core/src', /(?:from\s*|import\s*\()["'][^"']*(?:adapters\/|adapter-contract|review-ui|transport-)|\b(?:Cordis|DSH|WorkBuddy|DeepSeek)\b|DSH_(?:HOME|SPACE_HOME)|\.dsh\b/i],
-  ['packages/host-api/src', /(?:from\s*|import\s*\()["'][^"']*adapters\/|\b(?:Cordis|DSH|WorkBuddy|DeepSeek)\b/i],
-  ['packages/transport-mcp', /(?:from\s*|import\s*\()["'][^"']*adapters\/|\b(?:Cordis|DSH|WorkBuddy|DeepSeek)\b/i],
-  ['packages/transport-http', /(?:from\s*|import\s*\()["'][^"']*adapters\/|\b(?:Cordis|DSH|WorkBuddy|DeepSeek)\b/i],
-  ['packages/review-ui/src', /(?:from\s*|import\s*\()["'][^"']*(?:adapters\/|transport-(?:http|mcp))|dsh-resource:|--dsw-alias-|\b(?:Cordis|DSH|WorkBuddy|DeepSeek)\b/i],
+  ['packages/review-core/src', /(?:from\s*|import\s*\()["'][^"']*(?:adapters\/|adapter-contract|review-ui|transport-)|\b(?:Cordis|DSH|DeepSeek)\b|DSH_(?:HOME|SPACE_HOME)|\.dsh\b/i],
+  ['packages/host-api/src', /(?:from\s*|import\s*\()["'][^"']*adapters\/|\b(?:Cordis|DSH|DeepSeek)\b/i],
+  ['packages/transport-mcp', /(?:from\s*|import\s*\()["'][^"']*adapters\/|\b(?:Cordis|DSH|DeepSeek)\b/i],
+  ['packages/transport-http', /(?:from\s*|import\s*\()["'][^"']*adapters\/|\b(?:Cordis|DSH|DeepSeek)\b/i],
+  ['packages/review-ui/src', /(?:from\s*|import\s*\()["'][^"']*(?:adapters\/|transport-(?:http|mcp))|dsh-resource:|--dsw-alias-|\b(?:Cordis|DSH|DeepSeek)\b/i],
 ];
 
 for (const [directory, forbidden] of boundaries) {
@@ -58,11 +58,10 @@ for (const [directory, forbidden] of boundaries) {
     // agent does not create a dependency on its host integration.
     const boundarySource = source
       .replace(/const\s+agentTypes\s*=\s*new\s+Set\(\[[^\]]+\]\);/, '')
-      .replace(/Agent identity:\s*workbuddy,\s*claude,\s*codex,\s*deepseek,\s*or glm/gi, 'Agent identity')
       .replace(/author:\s*z\.enum\(\[[^\]]+\]\)/g, 'author')
       .replace(/\[['"]workbuddy['"],\s*['"]claude['"],\s*['"]codex['"],\s*['"]deepseek['"],\s*['"]glm['"]\]/gi, 'agentTypes')
-      .replace(/'agent\.(?:workbuddy|deepseek)':\s*'(?:WorkBuddy|DeepSeek)'/g, '')
-      .replace(/\.is-agent-(?:workbuddy|deepseek)/gi, '.is-agent');
+      .replace(/'agent\.deepseek':\s*'DeepSeek'/g, '')
+      .replace(/\.is-agent-deepseek/gi, '.is-agent');
     assert.doesNotMatch(boundarySource, forbidden, `${file} crosses its host-neutral package boundary`);
   }
 }
@@ -71,12 +70,13 @@ for (const [directory, forbidden] of boundaries) {
 // dynamic imports. Resolve workspace aliases and relative paths before checking
 // the allowed package graph, so spelling an edge differently cannot bypass it.
 const allowed = {
+  'agent-contract': [],
   'review-core': [],
-  'adapter-contract': [],
+  'adapter-contract': ['agent-contract'],
   'host-api': ['review-core', 'adapter-contract'],
   'review-ui': ['adapter-contract', 'brand'],
   'transport-http': [],
-  'transport-mcp': ['review-core'],
+  'transport-mcp': ['review-core', 'agent-contract'],
   'local-runtime': ['review-core', 'host-api', 'transport-http', 'transport-mcp'],
 };
 const packageOf = file => {

@@ -24,7 +24,7 @@ flowchart LR
   HTTP --> CORE
 ```
 
-The dependency direction is inward from each product edge. The review core does not know which host is using it. DSH owns plugin registration, its resource URI, account lookup, conversation and workspace integration, service lifecycle, and plugin packaging. Desktop owns its Tauri shell, bundled Node runtime, MCP launcher, updates and packaging; the shared local runtime owns its daemon, HTTP/MCP services and endpoint protocol. The core owns document and review semantics. Shared UI receives a neutral adapter context and does not inspect DSH SDK objects or transport implementations.
+The dependency direction is inward from each product edge. The review core does not know which host is using it. DSH owns plugin registration, its resource URI, account lookup, conversation and workspace integration, service lifecycle, and plugin packaging. Desktop owns its Tauri shell, bundled Node runtime, MCP launcher, updates and packaging; the shared local runtime owns its daemon, HTTP/MCP services and endpoint protocol. Desktop can configure WorkBuddy as an Agent client, but that is a Desktop feature, not a WorkBuddy host adapter. The core owns document and review semantics. Shared UI receives a neutral adapter context and does not inspect DSH SDK objects or transport implementations.
 
 ## Package responsibilities
 
@@ -44,7 +44,7 @@ The dependency direction is inward from each product edge. The review core does 
 
 ## Adapter removal record
 
-WorkBuddy Connector was removed as an active product and adapter. Its implementation, build paths, website install flow, and current-product documentation are no longer part of the workspace. `docs/10-workbuddy-connector-development-plan.md` is retained only as a historical record and must not be treated as an implementation or release plan. Historical references do not participate in builds or runtime behavior.
+The standalone WorkBuddy Connector was removed as an active product and adapter. Its implementation, build paths, website install flow, and current-product documentation are no longer part of the workspace. `docs/10-workbuddy-connector-development-plan.md` and `docs/17-workbuddy-agent-install-design.md` are retained as historical records and must not be treated as implementation or release plans. Desktop's WorkBuddy MCP/Skill setup remains under `apps/desktop/`; it is an Agent client integration owned by the Desktop product, not a separate entry in `adapters/`. Historical references do not participate in builds or runtime behavior.
 
 The independent Local Server npm product has been retired from the workspace. Already published packages and user data remain available; the legacy website installer is retained until the desktop release and migration guidance are available. Desktop development and platform acceptance are tracked in [20 · Desktop Product Plan](20-desktop-product-plan.md).
 

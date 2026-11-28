@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {ReviewStore} from '../packages/review-core/src/review-core.js';
 import {SpaceService,documentFromMarkdown} from '../packages/review-core/src/space-service.js';
 import {CommentStore} from '../packages/review-core/src/comments.js';
@@ -125,15 +126,26 @@ test('unmarked review databases are rejected without deleting user data',async()
  }finally{s?.close();rmSync(dir,{recursive:true,force:true})}
 });
 
-test('version one databases migrate transactionally to version two',()=>{
+test('version one databases migrate transactionally to version three',()=>{
  const dir=mkdtempSync(path.join(tmpdir(),'md-v1-migration-'));let store;
  try{
+  const file=path.join(dir,'db');
+  const legacy=new DatabaseSync(file);
+  legacy.exec(`CREATE TABLE space_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+    INSERT INTO space_meta VALUES('schema','markdown-text-v1');
+    CREATE TABLE review_documents(id TEXT PRIMARY KEY,version INTEGER NOT NULL,content TEXT NOT NULL);
+    INSERT INTO review_documents VALUES('kept',0,'# Kept');
+    CREATE TABLE review_suggestions(id INTEGER PRIMARY KEY AUTOINCREMENT,doc_id TEXT NOT NULL,status TEXT NOT NULL,base_version INTEGER NOT NULL,from_pos INTEGER NOT NULL,to_pos INTEGER NOT NULL,expected TEXT NOT NULL,replacement TEXT NOT NULL,before_context TEXT NOT NULL,after_context TEXT NOT NULL,created_order INTEGER NOT NULL);
+    INSERT INTO review_suggestions VALUES(7,'kept','pending',0,2,6,'Kept','Safe','##','',1);
+    CREATE TABLE review_operations(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,result TEXT NOT NULL);
+    CREATE TABLE review_changes(doc_id TEXT NOT NULL,version INTEGER NOT NULL,from_pos INTEGER NOT NULL,to_pos INTEGER NOT NULL,inserted_length INTEGER NOT NULL,PRIMARY KEY(doc_id,version));`);
+  legacy.close();
   store=new ReviewStore(path.join(dir,'db'));
-  store.createDocument({id:'kept',content:'# Kept',operationId:'create-kept'});
-  store.db.prepare("UPDATE space_meta SET value='markdown-text-v1' WHERE key='schema'").run();
-  store.close();store=null;
-  store=new ReviewStore(path.join(dir,'db'));
-  assert.equal(store.db.prepare("SELECT value FROM space_meta WHERE key='schema'").get().value,'markdown-text-v2');
+  assert.equal(store.db.prepare("SELECT value FROM space_meta WHERE key='schema'").get().value,'markdown-text-v3');
   assert.equal(store.readDocument('kept').content,'# Kept');
+  assert.deepEqual(store.readDocument('kept').suggestions.map(({id,author,createdAt,explanation})=>({id,author,createdAt,explanation})),[{id:7,author:'agent',createdAt:null,explanation:''}]);
+  const backup=new DatabaseSync(path.join(dir,'db.pre-v3.bak'),{readOnly:true});
+  try { assert.equal(backup.prepare('SELECT content FROM review_documents WHERE id=?').get('kept').content,'# Kept'); }
+  finally { backup.close(); }
  }finally{store?.close();rmSync(dir,{recursive:true,force:true})}
 });

@@ -4,11 +4,11 @@ import { NS } from '../../../packages/review-ui/src/locale.js';
 import { cardMeta, toolCardModel } from './tool-view-model.js';
 import './tool-views.css';
 
-/** The MCP tool names `mcpManager.register('space', …)` exposes to the model. */
+/** The native CoSpace tool names the host tool registry exposes to the model. */
 export const SPACE_TOOL_NAMES = Object.freeze([
-  'mcp__space__space_document_read',
-  'mcp__space__space_suggest',
-  'mcp__space__space_suggestion_list',
+  'space_document_read',
+  'space_suggest',
+  'space_suggestion_list',
 ]);
 
 const cardProps = () => themeRootProps('inline', { className: 'space-tool-card' });

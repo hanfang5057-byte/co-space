@@ -7,7 +7,6 @@ on:
     paths:
       - 'apps/site/**'
       - 'assets/**'
-      - 'docs/preview.svg'
       - 'market/**'
       - 'packages/brand/**'
       - 'scripts/build-site.mjs'

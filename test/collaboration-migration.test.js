@@ -67,7 +67,7 @@ test('failed migration rolls back rows and completion marker and is retried', ()
     assert.throws(() => new CollaborationStore(home), /injected failure/);
     const db = new DatabaseSync(path.join(home, 'review.sqlite'));
     assert.equal(db.prepare('SELECT count(*) AS n FROM collaboration_instructions').get().n, 0);
-    assert.equal(db.prepare("SELECT 1 FROM sqlite_master WHERE name='cospace_migrations'").get(), undefined);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM cospace_migrations WHERE id=?').get('legacy-collaboration-v1').n, 0);
     db.exec('DROP TRIGGER fail_migration');
     db.close();
     store = new CollaborationStore(home);
@@ -85,7 +85,7 @@ test('concurrent processes serialize the one-time migration', async () => {
     await Promise.all(Array.from({ length: 4 }, () => promisify(execFile)(process.execPath, ['--input-type=module', '-e', script, home])));
     const db = new DatabaseSync(path.join(home, 'review.sqlite'));
     try {
-      assert.equal(db.prepare('SELECT count(*) AS n FROM cospace_migrations').get().n, 1);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM cospace_migrations WHERE id=?').get('legacy-collaboration-v1').n, 1);
       assert.equal(db.prepare('SELECT count(*) AS n FROM collaboration_instructions').get().n, 2);
     } finally { db.close(); }
   } finally { rmSync(home, { recursive: true, force: true }); }

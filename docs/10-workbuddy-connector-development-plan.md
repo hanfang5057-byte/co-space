@@ -93,10 +93,10 @@ Skill 流程须明确：
 
 ## 文件数据、安装与卸载
 
-- **同设备安装 DSH 插件与 WorkBuddy Connector 是支持的场景，但数据必须完全隔离。** DSH 通过 `adapters/dsh/index.js` 的 `resolveHome()` 解析 `DSH_SPACE_HOME`、宿主 `dshHomePath('space')` 或 `$DSH_HOME/space`（通常为 `~/.dsh/space`）；WorkBuddy 固定使用独立的平台应用数据目录下的 `space/`（macOS/Linux 建议 `~/.workbuddy/space`）。WorkBuddy 不提供 `WORKBUDDY_SPACE_HOME`、目录选择或指向其他宿主的配置入口。DSH 保留既有 `DSH_SPACE_HOME`，但适配器必须拒绝把它解析到 WorkBuddy 保留目录。
+- **同设备安装 DSH 插件与 WorkBuddy Connector 是支持的场景，但数据必须完全隔离。** DSH 通过插件 `Config.home` 解析数据目录，默认 `$DSH_HOME/space`（通常为 `~/.dsh/space`）；0.1.x 的 `DSH_SPACE_HOME` 覆盖由 0.2.x 的一次性迁移（`adapters/dsh/server/migration.js`）转写进 Config，0.3.0 起不再读取该环境变量；WorkBuddy 固定使用独立的平台应用数据目录下的 `space/`（macOS/Linux 建议 `~/.workbuddy/space`）。WorkBuddy 不提供 `WORKBUDDY_SPACE_HOME`、目录选择或指向其他宿主的配置入口。DSH 的 Config.home 与迁移残留的该环境变量同样必须拒绝被解析到 WorkBuddy 保留目录。
 - 显示名称固定为品牌名「智联文档空间 / CoSpace」。数据目录自动采用 WorkBuddy 专属默认路径；实现时验证各平台目录约定。页面可展示目录，不提供设置向导。
 - 不支持共享目录、共享数据库、跨宿主导入/迁移或自动发现另一宿主数据。WorkBuddy 不读取 DSH 环境变量、不扫描 DSH 目录；两边即使文档 ID 相同，也属于独立数据库且互不可见。
-- WorkBuddy runtime 仅能访问自己的固定数据根。初始化时解析真实路径并拒绝符号链接逃逸、与 DSH 保留路径相同或数据库文件别名；建议使用宿主标记文件/目录所有者标识，拒绝打开带有另一宿主标记的目录。DSH adapter 对 `DSH_SPACE_HOME` 做同等所有权检查，防止把 DSH 写入 WorkBuddy 专属目录。不得通过“只是高级设置”保留共享路径入口。
+- WorkBuddy runtime 仅能访问自己的固定数据根。初始化时解析真实路径并拒绝符号链接逃逸、与 DSH 保留路径相同或数据库文件别名；建议使用宿主标记文件/目录所有者标识，拒绝打开带有另一宿主标记的目录。DSH adapter 对解析后的数据目录（Config.home 或其迁移来源）做同等所有权检查，防止把 DSH 写入 WorkBuddy 专属目录。不得通过“只是高级设置”保留共享路径入口。
 - 两边默认 SQLite 文件不同，因此文档、建议、评论和 operation ID 完全隔离。WorkBuddy loopback 服务使用系统分配端口，不占用 DSH 插件服务器路由。SQLite 的 WAL、`synchronous=FULL`、5 秒 `busy_timeout` 和 `BEGIN IMMEDIATE` 仅在各自数据库内部生效，不构成跨宿主共享的支持理由。
 - 数据库升级由共享核心执行。删除 Connector 不自动删除数据；导出/备份、恢复和卸载说明应随包提供。
 - npm 包作为 `stdio` command 的分发载体，WorkBuddy 托管 Node runtime；用户不手动安装 Node、不手改 MCP 配置。构建 tarball/ZIP 时只打入 WorkBuddy runtime、共享核心/transports、网页静态产物、meta/mcp/icon/Skill 和运行依赖，不带 DSH 插件、Cordis 配置或 source maps。

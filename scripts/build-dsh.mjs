@@ -9,13 +9,12 @@ const output = path.join(root, 'dist/dsh-plugin');
 
 await rm(output, { recursive: true, force: true });
 await Promise.all([
-  mkdir(path.join(output, 'server'), { recursive: true }),
   mkdir(path.join(output, 'locale'), { recursive: true }),
+  mkdir(path.join(output, 'assets'), { recursive: true }),
 ]);
 await build({
   entryPoints: [
     path.join(adapter, 'index.js'),
-    path.join(adapter, 'server/mcp-entry.js'),
   ],
   outdir: output,
   outbase: adapter,
@@ -25,7 +24,7 @@ await build({
   platform: 'node',
   target: 'node22',
   packages: 'bundle',
-  external: ['@modelcontextprotocol/sdk', 'zod'],
+  external: ['zod', '@deepseek-ai/schemastery'],
   sourcemap: false,
   logLevel: 'info',
 });
@@ -48,6 +47,7 @@ for (const [locale, language] of [['zh', 'zh'], ['en', 'en']]) {
 await Promise.all([
   cp(path.join(adapter, 'cordis.patch.yml'), path.join(output, 'cordis.patch.yml')),
   cp(path.join(root, brand.icon), path.join(output, 'icon.svg')),
+  cp(path.join(root, 'assets/preview.png'), path.join(output, 'assets/preview.png')),
   cp(path.join(root, 'LICENSE'), path.join(output, 'LICENSE')),
   cp(path.join(adapter, 'README.md'), path.join(output, 'README.md')),
   cp(path.join(root, 'docs'), path.join(output, 'docs'), {

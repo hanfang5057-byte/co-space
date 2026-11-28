@@ -2,6 +2,16 @@
 
 Changes to the DSH plugin `dsh-plugin-space` and coordinated CoSpace product releases are recorded here. DSH package versions follow Semantic Versioning.
 
+## 0.2.0
+
+Major upgrade to the DSH integration and review workspace. Requires DSH `0.2.3-alpha.2` or later and Node.js 24 or later.
+
+- Register CoSpace agent tools through DSH's native tool API and preserve their JSON schemas.
+- Migrate 0.1.x `DSH_SPACE_HOME` installs into the plugin's `home` configuration on first upgrade, keeping the existing data location.
+- Upgrade the shared SQLite schema to v3 with serialized migrations and recovery backups.
+- Refine the document workspace, review controls, editor toolbar and Markdown reading layout.
+- Keep shared MCP tool definitions host-independent for Desktop and DSH.
+
 ## 0.1.21
 
 First release published through the automated main-branch pipeline; npm artifacts now carry build provenance.

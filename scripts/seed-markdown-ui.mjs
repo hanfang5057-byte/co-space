@@ -480,7 +480,7 @@ async function openClient() {
   const client = new Client({ name: 'space-markdown-ui-seed', version: '0.1.0' });
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [path.join(repo, 'adapters', 'dsh', 'server', 'mcp-entry.js')],
+    args: [path.join(repo, 'test', 'fixtures', 'mcp-stdio-entry.js')],
     env: { ...process.env, DSH_SPACE_HOME: home },
     stderr: 'pipe',
   });

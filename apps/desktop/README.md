@@ -2,6 +2,8 @@
 
 Tauri 桌面入口使用随包 Node 运行时、本地服务和共享审阅 UI。Agent 使用 stdio MCP；用户数据默认位于 `~/.cospace/desktop`，可通过 `COSPACE_DESKTOP_HOME` 指定。首次启动可选择导入旧 Local Server 数据或创建新空间。导入前需停止旧服务，源文件会保留；新旧空间不会同步。DSH 数据保持独立。
 
+[![CoSpace 桌面端：左侧文档工作台与 Agent 接入，右侧文档中高亮标出评论位置并浮出评论卡片。](../../assets/preview-desktop.png)](../../assets/preview-desktop.png)
+
 ## 安装
 
 桌面端已正式发布：从 [GitHub Releases](https://github.com/hanfang5057-byte/co-space/releases/latest) 下载对应平台安装包——macOS Apple 芯片 `.dmg`，Linux amd64 `.deb` / `.AppImage`，附件含 `SHA256SUMS` 与各平台签名。Intel Mac 不在支持范围内。AppImage 可通过内置更新通道自动升级；deb 建议使用系统包管理器升级。macOS 安装包为 ad-hoc 签名且未公证，首次启动如被 Gatekeeper 拦截，右键应用选择打开。Windows 暂停发布，本地调试构建仍可用。

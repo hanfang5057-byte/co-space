@@ -6,6 +6,10 @@ English | [中文](README.md)
 
 CoSpace is a workspace for agents and personal documents. An agent can read documents you name, create a new document, or propose versioned edits at specific text ranges. Existing documents change only after you accept a suggestion. Overlapping edits are rejected to protect concurrent work.
 
+[![CoSpace Desktop: the document workbench and agent connection on the left, with a comment highlighted in the document and its card floating on the right.](assets/preview-desktop.png)](assets/preview-desktop.png)
+
+*Desktop: the workbench in its own window, with comments left inline on the text.*
+
 ## Get started
 
 CoSpace has two product entry points. Check the [website](https://hanfang5057-byte.github.io/co-space/) for current availability and installation instructions:
@@ -16,6 +20,10 @@ CoSpace has two product entry points. Check the [website](https://hanfang5057-by
 | Desktop | Provide a local document workbench to agents that support stdio MCP | Released: macOS (Apple silicon only) and Linux (deb/AppImage) installers are available from [Releases](https://github.com/hanfang5057-byte/co-space/releases); Intel Macs are unsupported. See the [website](https://hanfang5057-byte.github.io/co-space/) and [Desktop documentation](apps/desktop/README.md) for installation and migration. The legacy Local Server is no longer distributed; Desktop imports its data on first launch. |
 
 To discover the DSH plugin in its market, add the [market index](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json) to DSH's Custom plugin indexes.
+
+In DSH, the same review looks like this:
+
+[![CoSpace open in DeepSeek Harness: the conversation proposes edits on the left, and the document marks each change in red and green for you to accept or reject.](assets/preview.png)](assets/preview.png)
 
 ## How it works
 
