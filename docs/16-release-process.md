@@ -78,4 +78,4 @@ The external [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-
 
 ## Retired Local Server
 
-Do not publish new `@hanfang5057/co-space` npm versions or remove existing published artifacts. The legacy installer remains in `apps/site/legacy-local/` only to keep the current site functional until the desktop release and migration guidance are available. Existing user data stays in its original directory until the user explicitly imports it into Desktop.
+Do not publish new `@hanfang5057/co-space` npm versions or remove existing published artifacts. The installer and its download surface are retired: the site no longer builds or serves `install.sh`, and Agent setup goes through Desktop, whose first-run flow imports Local Server data. Existing user data stays in its original directory until the user explicitly imports it into Desktop.

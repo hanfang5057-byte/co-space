@@ -1,6 +1,6 @@
 # WorkBuddy Agent 安装方案
 
-状态：历史记录；独立 Local Server 已退出当前工作区，桌面端接入以 [20](20-desktop-product-plan.md) 为准。本文以现有 Local Server 为基础；旧的 WorkBuddy Connector 探索记录见 [10](10-workbuddy-connector-development-plan.md)，不作为当前实现状态。
+状态：已退役。独立 Local Server、`apps/site/legacy-local/` 安装器与 `install.sh` 分发入口均已移除；WorkBuddy 等 stdio MCP 客户端改为通过桌面应用接入，以 [20](20-desktop-product-plan.md) 和 `apps/desktop/README.md` 为准。本文保留为历史设计记录；旧的 WorkBuddy Connector 探索记录见 [10](10-workbuddy-connector-development-plan.md)，不作为当前实现状态。
 
 ## 目标与交互
 
@@ -14,7 +14,7 @@
 curl -fsSL https://hanfang5057-byte.github.io/co-space/install.sh | bash
 ```
 
-稳定入口规划为 `https://hanfang5057-byte.github.io/co-space/install.sh`，由网站构建将 `apps/site/legacy-local/` 的安装器与仓库内 Skill 合成为单个脚本，随网站部署提供。发布前需确认 Pages 构建包含该文件、实际地址返回预期脚本，并在无系统 Node 的环境中完成端到端验收。该地址是可更新的入口，并非版本固定或完整性保证。不要在脚本及依赖的 npm 包发布验证前上线这段提示词。
+曾规划的稳定入口为 `https://hanfang5057-byte.github.io/co-space/install.sh`，由网站构建将安装器与仓库内 Skill 合成为单个脚本随站点部署。该入口已随 Local Server 退役一并移除，站点构建不再产出 `install.sh`。若未来重新提供脚本安装，需要重新验证 Pages 产物、无系统 Node 环境的端到端流程，并把入口作为可更新而非版本固定或完整性保证的地址对待。
 
 不在提示词中嵌入易过期的实现代码，也不把未发布地址当成可用链接。脚本需要清晰输出执行计划和变更结果，供 Agent 转达；在 Agent 非交互执行时，不依赖终端交互才能识别冲突。
 

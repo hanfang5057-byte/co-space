@@ -13,7 +13,7 @@ CoSpace 提供两个产品入口，当前可用状态和安装方式见[官网](
 | 入口 | 适用场景 | 安装与状态 |
 | --- | --- | --- |
 | DSH 插件 | 在 DSH 对话中引用文档并审阅建议 | npm 包 `dsh-plugin-space`；在 DSH 的 Plugins 页面添加，或运行 `dsh plugin add dsh-plugin-space`。当前发布版需要 Node.js 24+、DSH `0.2.3-alpha.2` 及以上。 |
-| 桌面端 | 为支持 stdio MCP 的 Agent 提供本地文档工作台 | 已发布：macOS（arm64/x64）与 Linux（deb/AppImage）安装包见 [Releases](https://github.com/hanfang5057-byte/co-space/releases)；安装与迁移说明见[官网](https://hanfang5057-byte.github.io/co-space/)与[桌面端说明](apps/desktop/README.md)。旧版 Local Server npm 包仍供现有用户使用。 |
+| 桌面端 | 为支持 stdio MCP 的 Agent 提供本地文档工作台 | 已发布：macOS（arm64/x64）与 Linux（deb/AppImage）安装包见 [Releases](https://github.com/hanfang5057-byte/co-space/releases)；安装与迁移说明见[官网](https://hanfang5057-byte.github.io/co-space/)与[桌面端说明](apps/desktop/README.md)。旧版 Local Server 已停止分发，其数据可在桌面端首次启动时导入。 |
 
 如需从插件市场发现 DSH 插件，可将[市场索引](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json)添加到 DSH 的 Custom plugin indexes。
 
