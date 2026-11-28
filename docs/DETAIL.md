@@ -1,1 +1,1 @@
-![Document text with highlighted suggestions beside three review cards that accept or reject them](preview.svg)
+![CoSpace open in DeepSeek Harness: the conversation proposes edits on the left, while the document on the right marks each change in red and green for you to accept or reject.](../assets/preview.png)

@@ -2,7 +2,7 @@
 
 Review agent-proposed Markdown edits in DeepSeek Harness: the agent proposes changes, and you accept or reject each suggestion. Comments stay in the document, and the agent reads them only when you ask it to.
 
-![CoSpace review interface: highlighted edits in the document and suggestion cards on the right](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/assets/preview.png)
+![CoSpace open in DeepSeek Harness: the agent conversation proposes edits on the left, while the document on the right marks each change in red and green for you to accept or reject](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/assets/preview.png)
 
 ## Install
 
