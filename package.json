@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "workspaces": [
+    "packages/agent-contract",
     "packages/review-core",
     "packages/host-api",
     "packages/review-ui",
@@ -23,7 +24,7 @@
     "test": "node --test test/*.test.js",
     "pretest:fast": "npm run build:client",
     "test:fast": "node scripts/test-fast.mjs",
-    "precheck": "npm run build:client && npm run verify:architecture",
+    "precheck": "node scripts/build-agent-skill.mjs --check && npm run build:client && npm run verify:architecture",
     "check": "node --test test/*.test.js",
     "build:client": "node scripts/build-client.mjs",
     "build:market": "node scripts/build-market.mjs",

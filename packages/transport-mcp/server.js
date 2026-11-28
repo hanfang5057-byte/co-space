@@ -2,8 +2,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { documentFromMarkdown } from '../review-core/src/space-service.js';
+import { COMMON_INSTRUCTIONS, TOOL_NAMES } from '../agent-contract/src/index.js';
+import { requireVersion, page, outline, readRange, findMatches } from './document-tools.js';
 
-const text = result => ({ content: [{ type: 'text', text: JSON.stringify(result) }] });
+const text = result => ({ content: [{ type: 'text', text: JSON.stringify(result) }], ...(result && typeof result === 'object' && !Array.isArray(result) ? { structuredContent: result } : {}) });
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const EXPECTED_ERRORS = new Set(['INVALID_INPUT', 'INVALID_RANGE', 'INVALID_CURSOR', 'LIMIT_EXCEEDED', 'VERSION_CONFLICT', 'ANCHOR_STALE', 'DOCUMENT_EXISTS', 'DOCUMENT_NOT_FOUND', 'COMMENT_NOT_FOUND', 'COMMENT_BUSY', 'COMMENT_ALREADY_PROCESSED', 'SUGGESTION_NOT_FOUND', 'OPERATION_ID_CONFLICT', 'OVERLAPPING_SUGGESTION', 'SERVICE_DRAINING', 'UPDATE_IN_PROGRESS']);
+const publicError = error => EXPECTED_ERRORS.has(error?.code)
+  ? { code: error.code, message: error.message, details: error.details || {} }
+  : { code: 'INTERNAL', message: 'CoSpace could not complete the operation.', details: {} };
 const id = z.string().min(1).max(200);
 export const resolveSpaceRef = value => { if (!value.startsWith('space:')) return value; try { return decodeURIComponent(value.slice(6)); } catch { throw Object.assign(new Error('Invalid Space reference'), {code:'INVALID_INPUT'}); } };
 const referenceFor = value => `space:${encodeURIComponent(value)}`;
@@ -13,7 +20,9 @@ const opId = id.describe('Generate a unique operation ID for each new operation 
 const status = z.enum(['all', 'pending', 'accepted', 'rejected', 'conflicted']).optional().describe('Decision status to return; omit or use "all" for the complete history.');
 
 const INSTRUCTIONS = [
-  'This CoSpace MCP server exposes tools, not MCP resources. Available tools: space_document_create, space_document_read, space_suggest, space_suggestion_list, and space_comment_complete. Call these tools directly; do not try resources/list or search for documents through other tools.',
+  `This CoSpace MCP server exposes tools, not MCP resources. Available tools: ${TOOL_NAMES.join(', ')}. Call these tools directly; do not search for documents through other tools.`,
+  COMMON_INSTRUCTIONS,
+  'For long documents use outline, range reads and literal search when available. The outline supplies style preferences. For multiple independent changes use space_suggest_batch when available and inspect each result. If new tools are unavailable, use the existing read and single suggestion tools.',
   'For any operation on an existing document, require the user to identify it with a space:<docId> reference. Never enumerate, search, or choose documents. The document tools accept either that reference or its decoded document ID. If the user asks to work on an existing document but provides no reference, ask them to provide one. Creating a new document is different: call space_document_create only when the user explicitly asks you to create one; no existing-document reference is needed.',
   'When a document tool returns a host-specific reviewUrl or documentLink, include that exact link in your reply so the user can open the document directly. Keep the space:<docId> reference for future tool calls; never invent a link when no link field is returned.',
   'When calling space_suggest, set author to your Agent identity: workbuddy, claude, codex, deepseek, or glm. Use agent if you cannot identify a matching type. Include a brief explanation (up to 200 characters) describing why the change is useful; keep it concise and specific.',
@@ -37,7 +46,7 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
     try {
       let result = await fn(args);
       if (result && typeof result === 'object' && !Array.isArray(result)) {
-        const documentReference = result.id ?? result.docId ?? args.docId ?? args.id;
+        const documentReference = result.docId ?? args.docId ?? (typeof result.id === 'string' ? result.id : args.id);
         const docId = typeof documentReference === 'string' ? resolveSpaceRef(documentReference) : documentReference;
         if (typeof docId === 'string' && docId.length > 0) {
           result = { ...result, reference: result.reference || referenceFor(docId) };
@@ -58,7 +67,7 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
       }
       return text(result);
     } catch (error) {
-      return { isError: true, ...text({ error: { code: error.code || 'INTERNAL', message: error.message, details: error.details || {} } }) };
+      return { isError: true, ...text({ error: publicError(error) }) };
     }
   };
   server.registerTool('space_document_create', {
@@ -70,6 +79,7 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
     return { ...result, reference: referenceFor(result.id) };
   }));
   server.registerTool('space_document_read', {
+    annotations: READ_ONLY,
     description: 'CoSpace: read the specified document only. Returns its accepted Markdown source, current version, pending suggestions, and concise comments with quoted text, body, anchor, and status. This does not authorize processing comments. Offsets are UTF-16 code units into markdown. Use space_suggestion_list for decided suggestions.',
     inputSchema: { id: id.describe('The user-provided space:<docId> reference or its decoded document ID.') },
   }, wrap(async ({ id }) => {
@@ -78,8 +88,49 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
     const preferences=await collaboration?.readInstructions(docId);
     return { ...document, comments: document.comments.map(agentComment), collaboration:preferences?{instructions:[preferences.global?.content,preferences.document?.content].filter(Boolean).join('\n\n')}:null };
   }));
+  const paging = { limit: z.number().int().min(1).max(100).optional(), cursor: z.string().max(1000).optional() };
+  const version = z.number().int().nonnegative();
+  const readTarget = async (docId, requestedVersion) => {
+    const document = await service.readDocument(resolveSpaceRef(docId));
+    if (requestedVersion !== undefined) requireVersion(document, requestedVersion);
+    return document;
+  };
+  server.registerTool('space_document_outline', {
+    annotations: READ_ONLY,
+    description: 'Read the heading outline of the specified document, with absolute UTF-16 ranges and style preferences. Use the returned version for range reads.',
+    inputSchema: { docId: id, ...paging },
+  }, wrap(async ({ docId, ...options }) => {
+    const document = await readTarget(docId);
+    const preferences = await collaboration?.readInstructions(resolveSpaceRef(docId));
+    return { docId: resolveSpaceRef(docId), version: document.version, ...page(outline(document.content), options, [docId, document.version, 'outline']), collaboration: preferences ? { instructions: [preferences.global?.content, preferences.document?.content].filter(Boolean).join('\n\n') } : null };
+  }));
+  server.registerTool('space_document_read_range', {
+    annotations: READ_ONLY,
+    description: 'Read a specified UTF-16 half-open range of accepted Markdown at the requested version; offsets are absolute in the full document.',
+    inputSchema: { docId: id, version, from: z.number().int().nonnegative(), to: z.number().int().nonnegative() },
+  }, wrap(async ({ docId, version: requestedVersion, from, to }) => {
+    const document = await readTarget(docId, requestedVersion);
+    return { docId: resolveSpaceRef(docId), version: document.version, from, to, content: readRange(document.content, from, to) };
+  }));
+  server.registerTool('space_document_find', {
+    annotations: READ_ONLY,
+    description: 'Find literal non-overlapping matches in the specified accepted document at the given version. Returns absolute UTF-16 offsets and bounded context.',
+    inputSchema: { docId: id, version, query: z.string().min(1).max(1000), caseSensitive: z.boolean().optional(), ...paging },
+  }, wrap(async ({ docId, version: requestedVersion, query, caseSensitive = true, ...options }) => {
+    const document = await readTarget(docId, requestedVersion);
+    return { docId: resolveSpaceRef(docId), version: document.version, ...page(findMatches(document.content, query, caseSensitive), options, [docId, document.version, query, caseSensitive]) };
+  }));
+  server.registerTool('space_comment_list', {
+    annotations: READ_ONLY,
+    description: 'Read selected comments in the specified document. Reading does not authorize processing comments.',
+    inputSchema: { docId: id, commentIds: z.array(id).max(100).optional(), status: z.string().max(40).optional(), ...paging },
+  }, wrap(async ({ docId, commentIds, status: requestedStatus, ...options }) => {
+    const document = await readTarget(docId);
+    const comments = document.comments.map(agentComment).filter(comment => (!commentIds || commentIds.includes(comment.id)) && (!requestedStatus || comment.status === requestedStatus));
+    return { docId: resolveSpaceRef(docId), version: document.version, ...page(comments, options, [docId, commentIds, requestedStatus, comments]) };
+  }));
   server.registerTool('space_suggest', {
-    description: 'CoSpace: propose exactly one replacement of expected Markdown source text in the given UTF-16 range. Use empty expected text for insertion and empty replacement for deletion. Submit independent changes as separate suggestions, each read against the current version. Include a concise explanation (max 200 characters) of why the change is useful and identify the calling Agent. This does not change accepted content until the user accepts. Pass commentId when this suggestion answers a specific comment: the comment is then linked to the suggestion and marked processed, so no separate space_comment_complete call is needed for that comment.',
+    description: 'CoSpace: propose exactly one replacement of expected Markdown source text in the given UTF-16 range. Use empty expected text for insertion and empty replacement for deletion. Submit independent changes as separate suggestions, each read against the current version. Include a concise explanation (max 200 characters) of why the change is useful and identify the calling Agent. This does not change accepted content until the user accepts. Pass commentId when this suggestion answers a specific comment: a successful link marks it processed. If commentLink.status is unknown, the suggestion was created but linking is unconfirmed; retry the exact same operation and arguments.',
     inputSchema: { docId: id.describe('The user-provided space:<docId> reference or its decoded document ID.'), baseVersion: z.number().int().nonnegative(), from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), expected: z.string(), replacement: z.string(), explanation: z.string().max(200).optional().describe('Brief reason for this suggestion, up to 200 characters.'), author: z.enum(['workbuddy','claude','codex','deepseek','glm','agent']).optional().describe('Calling Agent identity; use agent when unknown.'), commentId: id.optional().describe('Optional comment from space_document_read that this suggestion answers; links it and marks the comment processed.'), operationId: opId },
   }, wrap(async ({ docId, commentId, ...input }) => {
     const target = resolveSpaceRef(docId);
@@ -90,15 +141,60 @@ export function createMcpServer(service, collaboration = null, { reviewUrl, docu
     }
     const result = await service.propose({ ...input, docId: target });
     if (!commentId) return result;
-    const link = await service.linkCommentSuggestion({ docId: target, commentId, suggestionId: result.suggestion.id, operationId: input.operationId });
-    return { ...result, comment: link };
+    try {
+      const link = await service.linkCommentSuggestion({ docId: target, commentId, suggestionId: result.suggestion.id, operationId: input.operationId });
+      return { ...result, comment: link };
+    } catch {
+      // The suggestion has already committed. Its stable operation ID makes a
+      // retry safe even if the linking request committed before timing out.
+      return { ...result, commentLink: { status: 'unknown', commentId, message: 'Suggestion created; comment association could not be confirmed. Retry the same operation and arguments.' } };
+    }
   }));
   server.registerTool('space_suggestion_list', {
+    annotations: READ_ONLY,
     description: 'CoSpace: list every suggestion for a document with its decision status (pending, accepted, rejected, conflicted). Use this after the user reviews the document to learn which changes were accepted.',
     inputSchema: { docId: id.describe('The user-provided space:<docId> reference or its decoded document ID.'), status },
   }, wrap(async ({ docId, status: requestedStatus }) => {
     const result = await service.listSuggestions(resolveSpaceRef(docId), requestedStatus ?? 'all');
     return { ...result, reference: referenceFor(result.id) };
+  }));
+  const batchItem = z.object({ operationId: opId, from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), expected: z.string().max(100000), replacement: z.string().max(100000), explanation: z.string().max(200).optional(), author: z.enum(['workbuddy','claude','codex','deepseek','glm','agent']).optional() }).strict();
+  server.registerTool('space_suggest_batch', {
+    description: 'Submit independent suggestions sequentially, with partial success. Reuse each operationId and identical arguments when retrying. Comments cannot be linked in this tool; use the existing comment workflow.',
+    inputSchema: { docId: id, baseVersion: version, suggestions: z.array(batchItem).min(1).max(50) },
+  }, wrap(async ({ docId, baseVersion, suggestions }) => {
+    const target = resolveSpaceRef(docId);
+    const results = [];
+    for (const [index, item] of suggestions.entries()) {
+      try {
+        const proposed = await service.propose({ docId: target, baseVersion, ...item });
+        results.push({ index, operationId: item.operationId, success: true, suggestion: proposed.suggestion });
+      } catch (error) {
+        results.push({ index, operationId: item.operationId, success: false, error: publicError(error) });
+      }
+    }
+    return { docId: target, baseVersion, results };
+  }));
+  server.registerTool('space_suggestion_get', {
+    annotations: READ_ONLY,
+    description: 'Read one suggestion and its current user decision status for the specified document.',
+    inputSchema: { docId: id, suggestionId: z.number().int().positive() },
+  }, wrap(async ({ docId, suggestionId }) => {
+    const result = await service.listSuggestions(resolveSpaceRef(docId), 'all');
+    const suggestion = result.suggestions.find(item => item.id === suggestionId);
+    if (!suggestion) throw Object.assign(new Error('Suggestion not found'), { code: 'SUGGESTION_NOT_FOUND' });
+    return { docId: resolveSpaceRef(docId), version: result.version, suggestion };
+  }));
+  server.registerTool('space_review_summary', {
+    annotations: READ_ONLY,
+    description: 'Summarize suggestion and comment statuses for a specified document. Counts are not a cross-request snapshot.',
+    inputSchema: { docId: id },
+  }, wrap(async ({ docId }) => {
+    const target = resolveSpaceRef(docId);
+    const suggestions = await service.listSuggestions(target, 'all');
+    const comments = await service.listComments(target);
+    const count = items => items.reduce((counts, item) => { counts[item.status] = (counts[item.status] || 0) + 1; return counts; }, {});
+    return { docId: target, version: suggestions.version, observedAt: new Date().toISOString(), suggestions: count(suggestions.suggestions), comments: count(comments) };
   }));
   server.registerTool('space_comment_complete', {
     description: 'CoSpace: record the outcome for each comment after the user explicitly asked you to handle comments. Include every related suggestion ID when handled; pass an empty suggestionIds array when it remains unprocessed so it returns to pending. This does not mean suggestions were accepted or the document changed.',

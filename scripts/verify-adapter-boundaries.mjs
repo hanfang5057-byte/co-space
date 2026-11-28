@@ -71,12 +71,13 @@ for (const [directory, forbidden] of boundaries) {
 // dynamic imports. Resolve workspace aliases and relative paths before checking
 // the allowed package graph, so spelling an edge differently cannot bypass it.
 const allowed = {
+  'agent-contract': [],
   'review-core': [],
-  'adapter-contract': [],
+  'adapter-contract': ['agent-contract'],
   'host-api': ['review-core', 'adapter-contract'],
   'review-ui': ['adapter-contract', 'brand'],
   'transport-http': [],
-  'transport-mcp': ['review-core'],
+  'transport-mcp': ['review-core', 'agent-contract'],
   'local-runtime': ['review-core', 'host-api', 'transport-http', 'transport-mcp'],
 };
 const packageOf = file => {

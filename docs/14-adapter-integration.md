@@ -2,6 +2,10 @@
 
 This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The DSH plugin in `adapters/dsh/` and the desktop app in `apps/desktop/` declare their capabilities. Desktop supplies its review UI and MCP service through the shared local runtime. Product shells and their build scripts belong under `apps/<product>/`; host-specific integrations and plugin metadata belong under `adapters/<host>/`.
 
+## Agent collaboration contract
+
+`packages/agent-contract/` holds host-neutral Agent rules, tool names and generated Skill text. MCP owns tool schemas and implementation; apps and adapters own host-specific capabilities. Its consumers depend inward on the contract, which imports no host, transport or domain code. See [22 · Agent MCP Capability Roadmap](22-agent-mcp-capability-roadmap.md).
+
 ## Dependency direction
 
 ```mermaid
