@@ -9,14 +9,12 @@ const output = path.join(root, 'dist/dsh-plugin');
 
 await rm(output, { recursive: true, force: true });
 await Promise.all([
-  mkdir(path.join(output, 'server'), { recursive: true }),
   mkdir(path.join(output, 'locale'), { recursive: true }),
   mkdir(path.join(output, 'assets'), { recursive: true }),
 ]);
 await build({
   entryPoints: [
     path.join(adapter, 'index.js'),
-    path.join(adapter, 'server/mcp-entry.js'),
   ],
   outdir: output,
   outbase: adapter,
@@ -26,7 +24,7 @@ await build({
   platform: 'node',
   target: 'node22',
   packages: 'bundle',
-  external: ['@modelcontextprotocol/sdk', 'zod'],
+  external: ['zod', '@deepseek-ai/schemastery'],
   sourcemap: false,
   logLevel: 'info',
 });

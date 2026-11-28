@@ -5,7 +5,7 @@ import { rememberDocumentTitle, useDocumentTitle } from './document-titles.js';
 import { translate, zh } from './locale.js';
 import { documentIdFromResource } from './space-reference.js';
 import { SpaceAlertDialog } from './SpaceDialog.jsx';
-import { ReviewToolsMenu, SpaceAgentPromptDialog, SpaceDocumentPreferencesDialog, SpaceReviewSurface, SpaceSurfaceHeader, useDocumentExport, useDocumentPreferences, useSpaceReview } from './SpaceApp.jsx';
+import { ReviewToolsMenu, SpaceAgentPromptDialog, SpaceDocumentPreferencesDialog, SpaceReviewSurface, SpaceSurfaceHeader, ModeSwitch, useDocumentExport, useDocumentPreferences, useSpaceReview } from './SpaceApp.jsx';
 import { themeRootProps } from './theme/index.js';
 import { supportsCapability } from '../../adapter-contract/src/index.js';
 
@@ -18,11 +18,11 @@ const fallbackT = (key, vars) => translate(zh, key, vars);
  * is read from the tab content address rather than page navigation parameters.
  * The surface is the same review controller and the same header the Space page
  * uses, so the two entry points cannot drift: the Sidebar renders it compact
- * (no brand lockup or review/edit mode, which stay page-level) but keeps the
- * tools menu, zoom and the one send action. The document title comes from the
- * tab chip, so the body itself starts with the toolbar. Export, the Agent
- * handoff and the document preferences are document actions, so they are
- * reachable here too, through the same controllers the page uses.
+ * (no brand lockup, which stays page-level; the tab chip carries the title)
+ * but shares the tools menu, the review/edit switch, zoom and the one send
+ * action. Export, the Agent handoff and the document preferences are document
+ * actions, so they are reachable here too, through the same controllers the
+ * page uses.
  * @param {object} props - tab information hook, session id, optional creator, and locale seat.
  * @returns {React.ReactElement} the scrollable document review surface.
  */
@@ -41,12 +41,10 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme
     if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title, requestApi);
   }, [docId, review.doc?.title, requestApi]);
   const visibleComments = review.comments.filter(comment => !['sent', 'processed'].includes(comment.status));
-  // Document-scoped pending count: the tab names one document, so no
-  // conversation-to-document mapping is implied.
-  const pending = (review.suggestions || []).filter(suggestion => suggestion.status === 'pending' || suggestion.status === 'conflicted').length;
   // Export, the Agent handoff and the document preferences are document actions,
-  // so the compact header offers them too; review/edit mode stays page-only
-  // because it rewrites the whole surface rather than one document's settings.
+  // so the compact header offers them too. The review/edit switch is
+  // document-scoped through the shared controller, so the compact header
+  // offers it as well; only the brand/back cluster stays page-level.
   const tools = review.doc ? <ReviewToolsMenu
     exporting={exporting}
     onExport={format=>{void exportDocument(format).then(ok=>{if(!ok)setExportError(t('export.failed'))})}}
@@ -55,8 +53,9 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme
     onOpenPage={typeof adapter.navigation?.openDocumentInPage==='function'?()=>adapter.navigation.openDocumentInPage(docId):null}
     canExport={supportsCapability(adapter.capabilities,'files.export.save')}
     t={t}/> : null;
+  const viewTools = review.doc ? <ModeSwitch review={review} t={t}/> : null;
   return <div {...themeRootProps('sidebar', { className: 'space-app space-sidebar-app', tokens: (theme ?? adapter?.theme)?.tokens })}>
-    <SpaceSurfaceHeader surface="sidebar" pending={pending} tools={tools} review={review} sessionId={sessionId} adapter={adapter} t={t} showSend={visibleComments.length > 0}/>
+    <SpaceSurfaceHeader surface="sidebar" tools={tools} viewTools={viewTools} review={review} sessionId={sessionId} adapter={adapter} t={t} showSend={!review.editing&&visibleComments.length>0}/>
     <main className="space-sidebar-main">
       <SpaceReviewSurface review={review} user={user} t={t}/>
     </main>

@@ -1,11 +1,12 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Pause, WifiOff } from 'lucide-react';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Lock, Pause, Pencil, Send, WifiOff } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
 import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceOffsetAtDomPoint, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
+import { sortHomeDocuments } from './home-documents.js';
 import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
@@ -19,14 +20,14 @@ const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
 function HomeSelect({ label, value, options, onChange }) {
   const [open,setOpen]=useState(false);
-  const root=useRef(null);
+  const root=useRef(null), trigger=useRef(null);
   useEffect(()=>{if(!open)return;const close=event=>{if(!root.current?.contains(event.target))setOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[open]);
   const current=options.findIndex(option=>option.value===value);
   return <div className="space-home-select" ref={root}>
-    <button type="button" className="space-home-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const direction=event.key==='ArrowDown'?1:-1;onChange(options[(current+direction+options.length)%options.length].value)}}}>
+    <button ref={trigger} type="button" className="space-home-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const direction=event.key==='ArrowDown'?1:-1;onChange(options[(current+direction+options.length)%options.length].value)}}}>
       <span>{options[current]?.label}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
     </button>
-    {open&&<div className="space-home-select-menu" role="listbox" aria-label={label}>{options.map(option=><button type="button" role="option" aria-selected={value===option.value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false)}}>{option.label}{value===option.value&&<span aria-hidden="true">✓</span>}</button>)}</div>}
+    {open&&<div className="space-home-select-menu" role="listbox" aria-label={label}>{options.map(option=><button type="button" role="option" aria-selected={value===option.value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false);trigger.current?.focus()}}>{option.label}{value===option.value&&<span aria-hidden="true">✓</span>}</button>)}</div>}
   </div>;
 }
 function scrollToSourceOffset(surface, offset, markdownSource) {
@@ -41,11 +42,11 @@ function scrollToSourceOffset(surface, offset, markdownSource) {
 const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown', processed:'status.processed'};
 const suggestionStatusKeys = {pending:'suggestion.pendingStatus', accepted:'suggestion.acceptedStatus', rejected:'suggestion.rejectedStatus', conflicted:'suggestion.conflictedStatus'};
 const safeUrl = value => typeof value === 'string' && /^(https?:|mailto:)/i.test(value) ? value : null;
-const documentCardTime = (item,t) => {
-  const timestamp=item.updatedAt || item.createdAt;
-  if(!timestamp || !Number.isFinite(Date.parse(timestamp))) return t('home.timeUnknown');
+const documentCardTime = item => {
+  const timestamp=item.updatedAt;
+  if(!timestamp || !Number.isFinite(Date.parse(timestamp))) return null;
   const time=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(timestamp));
-  return t(item.updatedAt?'home.updated':'home.created',{time});
+  return time;
 };
 
 /** Fallback translator keeps the panel renderable outside a locale seat, as in the DOM smoke test. */
@@ -332,6 +333,56 @@ export function ReviewZoomControls({ review, t = defaultT }) {
   </div>;
 }
 
+// The thumb leads with the mode: review is a lock because the body cannot be
+// edited there, editing is a pencil, and the autosave cycle briefly replaces the
+// pencil with its own feedback. A dirty draft keeps the pencil but turns amber,
+// while a failed save gets the alert glyph, so the two never differ by colour only.
+const saveStateIcons={readonly:Lock,editing:Pencil,unsaved:Pencil,saving:LoaderCircle,saved:Check,error:CircleAlert};
+const saveStateKeys={readonly:'status.readonly',editing:'status.editing',unsaved:'edit.unsaved',saving:'edit.saving',saved:'edit.saved',error:'edit.autoSaveFailedShort'};
+
+/**
+ * The save lifecycle the header reports.
+ * @param {object} review - review controller from `useSpaceReview`.
+ * @returns {'readonly'|'editing'|'unsaved'|'saving'|'saved'|'error'} the state shown in the switch thumb.
+ */
+export function documentSaveState(review) {
+  if(!review?.editing) return 'readonly';
+  return ({idle:'editing',unsaved:'unsaved',saving:'saving',saved:'saved',error:'error'}[review.editSaveState])||'editing';
+}
+
+/**
+ * The one review/edit control, shared by the page and the Sidebar header.
+ *
+ * A single switch replaces the two-button segmented control: the track names the
+ * current mode in small type, the thumb sits on that mode's side, and the thumb
+ * carries the save state as one small icon. The header therefore spends one seat
+ * on both "which mode am I in" and "is what I see saved", and the thumb's fixed
+ * track keeps the controls beside it still while the state changes.
+ * @param {object} props - review controller, optional surface busy flag, and translator.
+ * @param {object} props.review - review controller from `useSpaceReview`.
+ * @param {boolean} [props.busy] - surface-level busy state (page document actions).
+ * @param {(key: string, vars?: object) => string} [props.t] - bound translator.
+ * @returns {React.ReactElement} the switch, its disabled reason, and one status line for screen readers.
+ */
+export function ModeSwitch({ review, busy = false, t = defaultT }) {
+  const tipId=useId();
+  const editing=review.editing===true;
+  const unavailable=!review.canEdit&&!editing;
+  const state=documentSaveState(review);
+  const StateIcon=saveStateIcons[state];
+  const status=t(saveStateKeys[state]);
+  const mode=editing?t('edit.editMode'):t('edit.reviewMode');
+  const hint=state==='error'?t('edit.autoSaveFailed'):unavailable?t('edit.unavailableReason'):editing?t('edit.autoSaveHint'):undefined;
+  const toggle=()=>{ if(editing) review.switchToReview(); else review.startEditing(); };
+  const control=<button type="button" role="switch" aria-checked={editing} aria-label={`${t('edit.switchLabel')}，${status}`} className="space-mode-switch" disabled={busy||review.busy||unavailable} title={hint} onClick={toggle}>
+    <span className={`space-mode-switch-knob is-${state}`} aria-hidden="true"><StateIcon size={12} strokeWidth={2.4}/></span>
+    <span className="space-mode-switch-label">{mode}</span>
+  </button>;
+  return <>{unavailable
+    ? <span className="space-edit-mode-option is-unavailable" tabIndex={0} aria-describedby={tipId} data-tooltip={t('edit.unavailableReason')}>{control}<span id={tipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span></span>
+    : control}<span className="space-visually-hidden" role="status">{status}</span></>;
+}
+
 /**
  * One comment balloon in the margin rail or the stacked mobile fallback.
  * @param {object} props - comment, active/checked state, and actions.
@@ -424,7 +475,7 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
   const confirmKey=mode==='copy'?'send.copyConfirm':mode==='new'?'send.newSessionConfirm':'send.confirm';
   if(!sendable.length || (!canCurrent&&!canCreate&&!canCopy)) return null;
   return <>
-    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint} onClick={open}><MessageSquare size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
+    <button type="button" className={`space-send ${compact?'space-send-compact':'space-send-header'}`} disabled={disabled} title={hint || t('send.buttonHint')} onClick={open}><Send size={14} aria-hidden="true"/><span>{t('send.action')}</span></button>
     <SpaceDialog open={confirming} onClose={()=>setConfirming(false)} labelledBy={titleId} title={t('send.chooseTitle')} closeLabel={t('dialog.close')} className="space-send-dialog" actions={<><button type="button" autoFocus onClick={()=>setConfirming(false)}>{t('comment.cancel')}</button><button type="button" className="is-primary" disabled={review.busy || !sendable.length || (mode==='current'&&!canCurrent) || (mode==='new'&&!canCreate)} onClick={()=>{setConfirming(false);void review.send(mode);}}>{t(confirmKey)}</button></>}>
       <p>{t('send.chooseDescription',{count:sendable.length})}</p>
       <fieldset className="space-send-options"><legend>{t('send.destination')}</legend>
@@ -440,17 +491,18 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
  * The toolbar both review surfaces share.
  *
  * The Space page and the right Sidebar tab render the same document, so their
- * chrome must not drift: this component owns the header element, the pending
- * count, the tools menu seat, zoom and the one send action. `surface` switches
- * only the shell class names; a Sidebar header is compact by construction
- * because the tab chip already carries the document title, and review/edit
- * mode is a page-level concern.
+ * chrome must not drift: this component owns the header element, the mode switch
+ * (which also reports the save state on its thumb), the tools menu seat, zoom and
+ * the one send action. `surface` switches only the shell class names; a Sidebar
+ * header is compact by construction because the tab chip already carries the
+ * document title. Seat order is the mode/zoom group first (leftmost), then the
+ * send action, and the overflow menu last — the conventional trailing "more
+ * actions" trigger.
  * @param {object} props - surface variant, optional leading/tools seats, and the review controller.
  * @param {'page'|'sidebar'} [props.surface] - which shell to render.
- * @param {React.ReactNode} [props.leading] - brand and back-control cluster; page only.
- * @param {number} [props.pending] - document-scoped pending suggestion count.
- * @param {React.ReactNode} [props.tools] - tools menu seat, rendered before the view controls.
- * @param {React.ReactNode} [props.viewTools] - review/edit mode controls; page only.
+ * @param {React.ReactNode} [props.leading] - back control; page only, the Sidebar keeps none.
+ * @param {React.ReactNode} [props.tools] - tools menu seat, rendered after the send action so the overflow trigger stays last.
+ * @param {React.ReactNode} [props.viewTools] - review/edit mode controls; shared by both surfaces.
  * @param {object} props.review - review controller from `useSpaceReview`.
  * @param {string|null} [props.sessionId] - conversation that receives sent comments.
  * @param {object} [props.adapter] - host adapter supplying the send target.
@@ -461,7 +513,6 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
 export function SpaceSurfaceHeader({
   surface = 'page',
   leading = null,
-  pending = 0,
   tools = null,
   viewTools = null,
   review,
@@ -475,10 +526,9 @@ export function SpaceSurfaceHeader({
   return <header className={sidebar ? 'space-sidebar-toolbar' : 'space-top space-preview-top'}>
     {leading && <div className="space-preview-brand">{leading}</div>}
     <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
-      {pending>0 && <span className="space-pending-chip">{t('sidebar.pending',{count:pending})}</span>}
-      {tools}
       {viewTools ? <div className="space-toolbar-group is-view">{viewTools}{zoom}</div> : zoom}
       {showSend && <ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t} compact={sidebar}/>}
+      {tools}
     </div>
   </header>;
 }
@@ -958,7 +1008,8 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
   const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(()=>adapter.navigation?.getDocumentId?.() || null), [error,setError]=useState(''), [busy,setBusy]=useState(false);
   const [autoEditDocId,setAutoEditDocId]=useState(null);
-  const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
+  const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent'), [sortAnnouncement,setSortAnnouncement]=useState('');
+  const homeTitleHeadingId=useId(), homeUpdatedHeadingId=useId();
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [promptTask,setPromptTask]=useState(null);
   const [updateInfo,setUpdateInfo]=useState(null);
@@ -970,7 +1021,6 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
     return()=>{stopped=true;clearInterval(timer)};
   },[adapter]);
   const deleteTitleId=useId();
-  const editUnavailableTipId=useId();
   const user=useCurrentUser(adapter.identity?.getCurrentUser);
   const review=useSpaceReview(api,docId,sessionId,t,adapter,autoEditDocId);
   const {exporting,exportDocument}=useDocumentExport({docId,adapter});
@@ -1026,9 +1076,7 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const shownDocuments=useMemo(()=>{
     const needle=query.trim().toLocaleLowerCase();
-    const time=item=>{const value=Date.parse(item.updatedAt || item.createdAt || '');return Number.isFinite(value)?value:0;};
-    return documents.filter(item=>(!needle || (item.title || item.id || '').toLocaleLowerCase().includes(needle)) && (filter!=='pending' || item.pending>0))
-      .sort((a,b)=>sort==='title' ? (a.title||a.id||'').localeCompare(b.title||b.id||'',undefined,{numeric:true}) : time(b)-time(a));
+    return sortHomeDocuments(documents.filter(item=>(!needle || (item.title || item.id || '').toLocaleLowerCase().includes(needle)) && (filter!=='pending' || item.pending>0)),sort);
   },[documents,query,filter,sort]);
   const home=!docId;
   const updateState=updateInfo?.update?.state || (updateInfo?.updaterEnabled===false?'disabled':'checking');
@@ -1039,8 +1087,6 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
     checking:LoaderCircle,current:CircleCheck,downloading:LoaderCircle,waiting:Download,
     switching:LoaderCircle,updated:CircleCheck,failed:CircleAlert,offline:WifiOff,disabled:Pause,
   }[updateState] || LoaderCircle;
-  const editSaveLabel=review.editSaveState==='error'?t('edit.autoSaveFailed'):review.editSaveState!=='idle'?t(`edit.${review.editSaveState}`):'';
-  const EditSaveIcon={saving:LoaderCircle,unsaved:CircleAlert,saved:CircleCheck,error:CircleAlert}[review.editSaveState] || CircleAlert;
   const compactVersion=currentVersion.match(/^(\d+\.\d+\.\d+-dev)(?:[.+-].*)?$/)?.[1] || currentVersion;
   const versionIndicator=adapter.updates
     ? <span className={`space-version-badge is-${updateState}`} role="img" title={`${t('update.versionTitle')}: v${currentVersion} · ${updateLabel}`} aria-label={`${t('update.versionTitle')}: v${currentVersion}. ${updateLabel}`} aria-live={['waiting','updated','failed','offline'].includes(updateState)?'polite':'off'}><UpdateStateIcon size={12} strokeWidth={2.2} aria-hidden="true"/><span className="space-version-number">v{compactVersion}</span></span>
@@ -1050,24 +1096,25 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
       <header className="space-home-header"><BrandLockup versionIndicator={versionIndicator}/><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
-        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
-        {shownDocuments.length ? <div className="space-home-grid">{shownDocuments.map((item,index)=><article className="space-home-card" key={item.id}>
+        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={value=>{setSort(value);setSortAnnouncement(t(value==='recent'?'home.sortedRecent':'home.sortedTitle',{count:shownDocuments.length}))}} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
+        <p className="space-visually-hidden" role="status">{sortAnnouncement}</p>
+        {shownDocuments.length ? <div className="space-home-list-shell">
+          <div className="space-home-list-header"><span id={homeTitleHeadingId}>{t('home.titleHeading')}</span><span id={homeUpdatedHeadingId}>{t('home.updatedHeading')}</span></div>
+          <ul className="space-home-list" role="list">{shownDocuments.map(item=>{const updatedAt=documentCardTime(item);return <li className="space-home-list-item" key={item.id}>
           <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>selectDocument(item.id)}>
-            <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">{BRAND.name.en.toUpperCase()}</span></span>
-            <span className="space-home-card-copy"><strong title={item.title||item.id}>{item.title||item.id}</strong><span className="space-home-card-meta">{documentCardTime(item,t)}</span></span>
-            <span className="space-home-card-footer">{item.pending>0?<span className="space-home-pending"><i aria-hidden="true"/>{t('annotations.suggestions',{count:item.pending})}</span>:<span className="space-home-clear">{t('home.noPending')}</span>}<span className="space-home-open-icon" aria-hidden="true">↗</span></span>
+            <strong className="space-home-row-title" title={item.title||item.id}>{item.title||item.id}</strong>
+            {updatedAt&&<time className="space-home-row-meta" dateTime={new Date(item.updatedAt).toISOString()} aria-describedby={homeUpdatedHeadingId}>{updatedAt}</time>}
           </button><button type="button" className="space-home-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title||item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><TrashIcon size={15}/></button>
-        </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
+        </li>
+        })}</ul>
+        </div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section>
     </main> : <>
       <SpaceSurfaceHeader
         surface="page"
-        leading={<><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton><BrandLockup versionIndicator={versionIndicator}/></>}
+        leading={<IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton>}
         tools={review.doc ? <ReviewToolsMenu exporting={exporting} onExport={format=>{void exportDocument(format).then(ok=>{if(!ok)setError(t('export.failed'))})}} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>preferences.openPreferences('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/> : null}
-        viewTools={review.doc ? <>
-          <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
-          {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} title={editSaveLabel} role="status" aria-label={editSaveLabel}><EditSaveIcon size={15} strokeWidth={2.1} aria-hidden="true"/>{review.editSaveState==='error'&&<span>{t('edit.autoSaveFailedShort')}</span>}</span>}
-        </> : null}
+        viewTools={review.doc ? <ModeSwitch review={review} busy={busy} t={t}/> : null}
         review={review} sessionId={sessionId} adapter={adapter} t={t}
         showSend={!review.editing&&visibleComments.length>0}
       />

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-space",
-  "version": "0.1.21",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,7 @@
     "dsh": ">=0.2.3-alpha.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@deepseek-ai/schemastery": "^3.20.0-alpha.1",
     "zod": "^4.6.7"
   },
   "exports": {
@@ -38,7 +38,6 @@
     "index.js",
     "client.js",
     "adapter.json",
-    "server/mcp-entry.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",

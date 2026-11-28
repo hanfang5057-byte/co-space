@@ -7,6 +7,9 @@
  * the installation has none, and create (or reuse) a blank Session there.
  * The returned identity is the exact Session the comments were sent to, so
  * the UI can open it after a successful send.
+ *
+ * The declared `engines.dsh` range guarantees the session and Workspace
+ * services; a missing service fails explicitly instead of degrading.
  */
 
 const TARGET_TIMEOUT_MS = 15_000;
@@ -52,13 +55,11 @@ export function mostRecentSessionDirectory(sessions) {
 }
 
 async function loadSessions(sessionController, signal) {
-  if (typeof sessionController?.list !== 'function') return [];
   const value = await sessionController.list({}, signal);
   return Array.isArray(value?.items) ? value.items : [];
 }
 
 async function assertSessionExists(sessionController, sessionId, signal) {
-  if (typeof sessionController?.state !== 'function') return;
   try {
     await sessionController.state({ sessionId }, signal);
   } catch (error) {
@@ -89,7 +90,11 @@ async function createSessionInWorkspace(sessionController, workspace, sessions, 
  */
 export async function resolveSendTarget({ sessionId, excludeSessionId, forceNew } = {}, services, signal) {
   const sessionController = services?.sessionController;
+  const workspaceRegistry = services?.workspaceRegistry;
+  const workspaceController = services?.workspaceController;
+  const workingDirectory = services?.workingDirectory;
   if (!sessionController) fail('SESSION_UNAVAILABLE', '当前对话服务不可用。');
+  if (!workspaceRegistry || !workspaceController || !workingDirectory) fail('SESSION_UNAVAILABLE', '当前宿主的工作区服务不可用。');
 
   const lifetime = signal ?? AbortSignal.timeout(TARGET_TIMEOUT_MS);
   if (typeof sessionId === 'string' && sessionId !== '') {
@@ -98,17 +103,12 @@ export async function resolveSendTarget({ sessionId, excludeSessionId, forceNew 
   }
 
   const sessions = await loadSessions(sessionController, lifetime);
-  let workspaces = [];
-  try {
-    workspaces = services?.workspaceRegistry?.list?.() ?? [];
-  } catch {
-    workspaces = [];
-  }
+  const workspaces = workspaceRegistry.list();
 
   let workspace = (excludeSessionId && workspaces.find(item => (item.sessionIds ?? []).includes(excludeSessionId))) || mostRecentWorkspace(workspaces, sessions);
-  if (!workspace && typeof services?.workspaceController?.initializeDefault === 'function') {
+  if (!workspace) {
     try {
-      const initialized = await services.workspaceController.initializeDefault(lifetime);
+      const initialized = await workspaceController.initializeDefault(lifetime);
       workspace = initialized?.workspace;
     } catch {
       // A failed first-use lookup falls through to the recent directory.
@@ -118,56 +118,34 @@ export async function resolveSendTarget({ sessionId, excludeSessionId, forceNew 
   if (!workspace) {
     // An installation can have sessions but no registered Workspace. Adopt the
     // directory those sessions already use instead of asking the user to choose.
-    const path = mostRecentSessionDirectory(sessions) ?? services?.workingDirectory?.defaultDirectory;
-    if (typeof path === 'string' && path !== '' && typeof services?.workspaceController?.create === 'function') {
-      try {
-        const created = await services.workspaceController.create({ path });
-        workspace = created?.workspace;
-      } catch {
-        // Creating a Workspace is best effort; the Session may still be creatable
-        // from the directory below when the Workspace services are unavailable.
-      }
+    const path = mostRecentSessionDirectory(sessions) ?? workingDirectory.defaultDirectory;
+    if (typeof path === 'string' && path !== '') {
+      const created = await workspaceController.create({ path });
+      workspace = created?.workspace;
     }
   }
 
-  if (workspace) {
-    try {
-      const created = await createSessionInWorkspace(sessionController, workspace, sessions, excludeSessionId, forceNew);
-      if (typeof created?.sessionId !== 'string' || created.sessionId === '') {
-        fail('SESSION_UNAVAILABLE', '无法新建对话。');
-      }
-      if (excludeSessionId && created.sessionId === excludeSessionId) fail('SESSION_UNAVAILABLE', '无法创建不同于当前对话的新对话。');
-      return {
-        sessionId: created.sessionId,
-        created: true,
-        workspace: {
-          workspaceId: workspaceIdOf(workspace),
-          title: workspace.title ?? null,
-          path: workspace.path ?? null,
-        },
-      };
-    } catch (error) {
-      if (error?.code === 'SESSION_UNAVAILABLE') throw error;
-      fail('SESSION_UNAVAILABLE', `无法新建对话：${error?.message || '工作区不可用'}`, { cause: error?.message });
-    }
-  }
+  if (!workspace) fail('SESSION_UNAVAILABLE', '没有可用的工作区，无法新建对话。请先打开或新建一个工作区。');
 
-  // Older or minimal hosts may have no Workspace services. A Session still
-  // needs one directory; use the deployment default before giving up.
-  const cwd = mostRecentSessionDirectory(sessions) ?? services?.workingDirectory?.defaultDirectory;
-  if (typeof cwd === 'string' && cwd !== '') {
-    try {
-      const created = await sessionController.create({ cwd });
-      if (typeof created?.sessionId === 'string' && created.sessionId !== '') {
-        if (excludeSessionId && created.sessionId === excludeSessionId) fail('SESSION_UNAVAILABLE', '无法创建不同于当前对话的新对话。');
-        return { sessionId: created.sessionId, created: true };
-      }
-    } catch (error) {
-      fail('SESSION_UNAVAILABLE', `无法新建对话：${error?.message || '目录不可用'}`, { cause: error?.message });
+  try {
+    const created = await createSessionInWorkspace(sessionController, workspace, sessions, excludeSessionId, forceNew);
+    if (typeof created?.sessionId !== 'string' || created.sessionId === '') {
+      fail('SESSION_UNAVAILABLE', '无法新建对话。');
     }
+    if (excludeSessionId && created.sessionId === excludeSessionId) fail('SESSION_UNAVAILABLE', '无法创建不同于当前对话的新对话。');
+    return {
+      sessionId: created.sessionId,
+      created: true,
+      workspace: {
+        workspaceId: workspaceIdOf(workspace),
+        title: workspace.title ?? null,
+        path: workspace.path ?? null,
+      },
+    };
+  } catch (error) {
+    if (error?.code === 'SESSION_UNAVAILABLE') throw error;
+    fail('SESSION_UNAVAILABLE', `无法新建对话：${error?.message || '工作区不可用'}`, { cause: error?.message });
   }
-
-  fail('SESSION_UNAVAILABLE', '没有可用的工作区，无法新建对话。请先打开或新建一个工作区。');
 }
 
 /**

@@ -123,14 +123,14 @@ export function suggestionListCard({ args, payload, isError = false }) {
 }
 
 const BY_TOOL = {
-  'mcp__space__space_document_read': readDocumentCard,
-  'mcp__space__space_suggest': suggestCard,
-  'mcp__space__space_suggestion_list': suggestionListCard,
+  'space_document_read': readDocumentCard,
+  'space_suggest': suggestCard,
+  'space_suggestion_list': suggestionListCard,
 };
 
 /**
  * Build the card model for one tool call.
- * @param {string} toolName - model-facing MCP tool name.
+ * @param {string} toolName - model-facing CoSpace tool name.
  * @param {{argsRaw?: string, content?: Array<object>, isError?: boolean}} data - call or result data.
  * @returns {object|null} card model, or null for an unknown tool.
  */

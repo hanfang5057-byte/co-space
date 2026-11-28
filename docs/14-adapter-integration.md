@@ -1,6 +1,6 @@
 # 14 · Adapter Integration Contract
 
-This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The DSH plugin in `adapters/dsh/` and the desktop app in `apps/desktop/` declare their capabilities. Desktop supplies its review UI and MCP service through the shared local runtime. Product shells and their build scripts belong under `apps/<product>/`; host-specific integrations and plugin metadata belong under `adapters/<host>/`.
+This document defines the supported boundary between CoSpace's host adapters, shared review UI, transports, and domain core. The DSH plugin in `adapters/dsh/` and the Desktop product in `apps/desktop/` declare their capabilities. Desktop supplies its review UI and MCP service through the shared local runtime. Desktop's WorkBuddy setup configures an Agent client; it does not make Desktop a WorkBuddy adapter. Product shells and their build scripts belong under `apps/<product>/`; host-specific integrations and plugin metadata belong under `adapters/<host>/`.
 
 ## Agent collaboration contract
 
@@ -43,7 +43,7 @@ The “full local WebApp” column is a design ceiling, not a guarantee. A brows
 
 ## Declaration and runtime negotiation
 
-Each adapter owns an `adapter.json` beside its implementation. It declares stable support, not a promise that every operation is currently available. Dynamic state such as the active DSH conversation is passed separately as `conversation.current`:
+Each product integration declaration owns an `adapter.json` beside its implementation. It declares stable support, not a promise that every operation is currently available. Dynamic state such as the active DSH conversation is passed separately as `conversation.current`:
 
 ```json
 {

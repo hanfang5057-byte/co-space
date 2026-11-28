@@ -65,7 +65,7 @@ test('the Space MCP server scopes tools to named documents and processes comment
   const home = mkdtempSync(path.join(tmpdir(), 'space-mcp-'));
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [fileURLToPath(new URL('../adapters/dsh/server/mcp-entry.js', import.meta.url))],
+    args: [fileURLToPath(new URL('../test/fixtures/mcp-stdio-entry.js', import.meta.url))],
     env: { ...process.env, DSH_SPACE_HOME: home },
   });
   const client = new Client({ name: 'space-test', version: '1.0.0' });
@@ -165,7 +165,7 @@ test('space_suggest links a comment and settles it one suggestion at a time', as
   const home = mkdtempSync(path.join(tmpdir(), 'space-mcp-link-'));
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [fileURLToPath(new URL('../adapters/dsh/server/mcp-entry.js', import.meta.url))],
+    args: [fileURLToPath(new URL('../test/fixtures/mcp-stdio-entry.js', import.meta.url))],
     env: { ...process.env, DSH_SPACE_HOME: home },
   });
   const client = new Client({ name: 'space-link-test', version: '1.0.0' });

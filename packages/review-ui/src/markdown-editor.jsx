@@ -10,7 +10,7 @@ import { linkTooltip } from '@milkdown/crepe/feature/link-tooltip';
 import { listItem } from '@milkdown/crepe/feature/list-item';
 import { placeholder } from '@milkdown/crepe/feature/placeholder';
 import { table } from '@milkdown/crepe/feature/table';
-import { toolbar } from '@milkdown/crepe/feature/toolbar';
+import { topBar } from '@milkdown/crepe/feature/top-bar';
 import '@milkdown/crepe/theme/common/prosemirror.css';
 import '@milkdown/crepe/theme/common/reset.css';
 import '@milkdown/crepe/theme/common/block-edit.css';
@@ -18,7 +18,7 @@ import '@milkdown/crepe/theme/common/cursor.css';
 import '@milkdown/crepe/theme/common/link-tooltip.css';
 import '@milkdown/crepe/theme/common/list-item.css';
 import '@milkdown/crepe/theme/common/placeholder.css';
-import '@milkdown/crepe/theme/common/toolbar.css';
+import '@milkdown/crepe/theme/common/top-bar.css';
 import '@milkdown/crepe/theme/common/table.css';
 import '@milkdown/crepe/theme/classic.css';
 import { readSourceSpans, sourceRangeToDom } from './markdown-dom.js';
@@ -91,13 +91,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
         .addFeature(listItem)
         .addFeature(linkTooltip)
         .addFeature(blockEdit)
-        .addFeature(toolbar, {
-          boldLabel: callbacksRef.current.t('edit.bold'),
-          italicLabel: callbacksRef.current.t('edit.italic'),
-          strikethroughLabel: callbacksRef.current.t('edit.strike'),
-          linkLabel: callbacksRef.current.t('edit.link'),
-          codeLabel: callbacksRef.current.t('edit.code'),
-        })
+        .addFeature(topBar)
         .addFeature(table)
         .addFeature(placeholder, { text: callbacksRef.current.t('edit.placeholder'), mode: 'block' });
       builder.on(listener => listener.markdownUpdated((_ctx, next, previous) => {
