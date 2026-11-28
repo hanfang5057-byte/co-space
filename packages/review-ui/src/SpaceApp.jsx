@@ -1,6 +1,6 @@
 import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Pause, WifiOff } from 'lucide-react';
+import { Trash2, Check, X, MessageSquare, Search, Plus, ArrowLeft, MoreHorizontal, CircleAlert, CircleCheck, Download, LoaderCircle, Lock, Pause, WifiOff } from 'lucide-react';
 import { BRAND, brandIcon as cospaceIcon } from '../../brand/brand.js';
 import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
@@ -269,6 +269,10 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     await reload(docId);
     return true;
   },{silent:true});
+  // The status slot's retry affordance reruns the same autosave path; a retry
+  // failure keeps the error on the slot because the dialog belongs to the
+  // switch-to-review flow, which retries with its own error surface.
+  const retrySave=()=>{void persistEdit().catch(()=>{});};
   const discardEditDraftAndReload=async()=>{
     try{
       const latest=await reload(docId);
@@ -320,7 +324,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,error,setError,dismissError:()=>setError(''),surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,markEditDirty};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,error,setError,dismissError:()=>setError(''),surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,retrySave,markEditDirty};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -330,6 +334,54 @@ export function ReviewZoomControls({ review, t = defaultT }) {
     <span>{Math.round(zoom*100)}%</span>
     <button type="button" aria-label={t('zoom.in')} title={t('zoom.in')} disabled={zoom>=1.5} onClick={()=>setZoom(value=>Math.min(1.5,Math.round((value+.1)*10)/10))}>＋</button>
   </div>;
+}
+
+/**
+ * The review/edit mode switch, shared by the page and the Sidebar header.
+ *
+ * Both surfaces drive the same review controller, so one component keeps the
+ * pressed states, the disabled editing reason and its tooltip from drifting.
+ * @param {object} props - review controller, optional surface busy flag, and translator.
+ * @param {object} props.review - review controller from `useSpaceReview`.
+ * @param {boolean} [props.busy] - surface-level busy state (page document actions).
+ * @param {(key: string, vars?: object) => string} [props.t] - bound translator.
+ * @returns {React.ReactElement} the mode switch group.
+ */
+export function ModeSwitch({ review, busy = false, t = defaultT }) {
+  const tipId=useId();
+  return <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}>
+    <button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button>
+    <span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?tipId:undefined} data-tooltip={t('edit.unavailableReason')}>
+      <button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>
+      {!review.canEdit&&!review.editing&&<span id={tipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}
+    </span>
+  </div>;
+}
+
+/**
+ * The one document status slot, always rendered once a document is loaded.
+ *
+ * Review and edit mode share it: in review mode it names the sync state (and
+ * explains why editing may be unavailable), in edit mode it surfaces the
+ * autosave lifecycle that used to flash in after the mode switch. Keeping the
+ * slot mounted in every state reserves its seat, avoids toolbar jitter and
+ * gives screen readers a single live region for save outcomes.
+ * @param {object} props - review controller and translator.
+ * @returns {React.ReactElement} the status indicator, or null while loading.
+ */
+export function DocStatus({ review, t = defaultT }) {
+  if(!review?.doc) return null;
+  const state=review.editing
+    ? ({idle:'synced',unsaved:'unsaved',saving:'saving',saved:'saved',error:'error'}[review.editSaveState]||'synced')
+    : (review.canEdit?'synced':'readonly');
+  const label={synced:t('status.synced'),readonly:t('status.readonly'),unsaved:t('edit.unsaved'),saving:t('edit.saving'),saved:t('edit.saved'),error:t('edit.autoSaveFailedShort')}[state];
+  const hint=state==='error'?t('edit.autoSaveFailed'):state==='readonly'?t('edit.unavailableReason'):undefined;
+  const StatusIcon={synced:CircleCheck,readonly:Lock,unsaved:CircleAlert,saving:LoaderCircle,saved:CircleCheck,error:CircleAlert}[state];
+  return <span className={`space-doc-status is-${state}`} role="status" aria-label={label} title={hint}>
+    <StatusIcon size={14} strokeWidth={2.1} aria-hidden="true"/>
+    <span>{label}</span>
+    {state==='error'&&<button type="button" className="space-doc-status-retry" disabled={review.editSaveState==='saving'} onClick={review.retrySave}>{t('status.retry')}</button>}
+  </span>;
 }
 
 /**
@@ -441,16 +493,18 @@ export function ReviewSendButton({ review, sessionId, adapter = null, t = defaul
  *
  * The Space page and the right Sidebar tab render the same document, so their
  * chrome must not drift: this component owns the header element, the pending
- * count, the tools menu seat, zoom and the one send action. `surface` switches
- * only the shell class names; a Sidebar header is compact by construction
- * because the tab chip already carries the document title, and review/edit
- * mode is a page-level concern.
+ * count, the document status slot, the tools menu seat, zoom and the one send
+ * action. `surface` switches only the shell class names; a Sidebar header is
+ * compact by construction because the tab chip already carries the document
+ * title. Seat order is status first (leftmost), then the mode/zoom group, the
+ * send action, and the overflow menu last — the conventional trailing
+ * "more actions" trigger.
  * @param {object} props - surface variant, optional leading/tools seats, and the review controller.
  * @param {'page'|'sidebar'} [props.surface] - which shell to render.
  * @param {React.ReactNode} [props.leading] - brand and back-control cluster; page only.
  * @param {number} [props.pending] - document-scoped pending suggestion count.
- * @param {React.ReactNode} [props.tools] - tools menu seat, rendered before the view controls.
- * @param {React.ReactNode} [props.viewTools] - review/edit mode controls; page only.
+ * @param {React.ReactNode} [props.tools] - tools menu seat, rendered after the send action so the overflow trigger stays last.
+ * @param {React.ReactNode} [props.viewTools] - review/edit mode controls; shared by both surfaces.
  * @param {object} props.review - review controller from `useSpaceReview`.
  * @param {string|null} [props.sessionId] - conversation that receives sent comments.
  * @param {object} [props.adapter] - host adapter supplying the send target.
@@ -476,9 +530,10 @@ export function SpaceSurfaceHeader({
     {leading && <div className="space-preview-brand">{leading}</div>}
     <div className="space-header-tools" role="group" aria-label={t('toolbar.aria')}>
       {pending>0 && <span className="space-pending-chip">{t('sidebar.pending',{count:pending})}</span>}
-      {tools}
+      <DocStatus review={review} t={t}/>
       {viewTools ? <div className="space-toolbar-group is-view">{viewTools}{zoom}</div> : zoom}
       {showSend && <ReviewSendButton review={review} sessionId={sessionId} adapter={adapter} t={t} compact={sidebar}/>}
+      {tools}
     </div>
   </header>;
 }
@@ -970,7 +1025,6 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
     return()=>{stopped=true;clearInterval(timer)};
   },[adapter]);
   const deleteTitleId=useId();
-  const editUnavailableTipId=useId();
   const user=useCurrentUser(adapter.identity?.getCurrentUser);
   const review=useSpaceReview(api,docId,sessionId,t,adapter,autoEditDocId);
   const {exporting,exportDocument}=useDocumentExport({docId,adapter});
@@ -1039,8 +1093,6 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
     checking:LoaderCircle,current:CircleCheck,downloading:LoaderCircle,waiting:Download,
     switching:LoaderCircle,updated:CircleCheck,failed:CircleAlert,offline:WifiOff,disabled:Pause,
   }[updateState] || LoaderCircle;
-  const editSaveLabel=review.editSaveState==='error'?t('edit.autoSaveFailed'):review.editSaveState!=='idle'?t(`edit.${review.editSaveState}`):'';
-  const EditSaveIcon={saving:LoaderCircle,unsaved:CircleAlert,saved:CircleCheck,error:CircleAlert}[review.editSaveState] || CircleAlert;
   const compactVersion=currentVersion.match(/^(\d+\.\d+\.\d+-dev)(?:[.+-].*)?$/)?.[1] || currentVersion;
   const versionIndicator=adapter.updates
     ? <span className={`space-version-badge is-${updateState}`} role="img" title={`${t('update.versionTitle')}: v${currentVersion} · ${updateLabel}`} aria-label={`${t('update.versionTitle')}: v${currentVersion}. ${updateLabel}`} aria-live={['waiting','updated','failed','offline'].includes(updateState)?'polite':'off'}><UpdateStateIcon size={12} strokeWidth={2.2} aria-hidden="true"/><span className="space-version-number">v{compactVersion}</span></span>
@@ -1064,10 +1116,7 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
         surface="page"
         leading={<><IconButton className="space-back" label={t('home.back')} disabled={busy||review.busy} onClick={backToHome}><ArrowLeft size={17} aria-hidden="true"/></IconButton><BrandLockup versionIndicator={versionIndicator}/></>}
         tools={review.doc ? <ReviewToolsMenu exporting={exporting} onExport={format=>{void exportDocument(format).then(ok=>{if(!ok)setError(t('export.failed'))})}} onReview={adapter.prompts?()=>setPromptTask({kind:'review',docId}):null} onPreferences={()=>preferences.openPreferences('document')} canExport={supportsCapability(adapter.capabilities,'files.export.save')} t={t}/> : null}
-        viewTools={review.doc ? <>
-          <div className="space-mode-switch" role="group" aria-label={t('edit.modeLabel')}><button type="button" aria-pressed={!review.editing} disabled={busy||review.busy} title={review.editing?t('edit.autoSaveHint'):undefined} onClick={()=>review.editing?review.switchToReview():null}>{t('edit.reviewMode')}</button><span className={`space-edit-mode-option${!review.canEdit&&!review.editing?' is-unavailable':''}`} tabIndex={!review.canEdit&&!review.editing?0:undefined} aria-describedby={!review.canEdit&&!review.editing?editUnavailableTipId:undefined} data-tooltip={t('edit.unavailableReason')}><button type="button" aria-pressed={review.editing} disabled={busy||review.busy||(!review.canEdit&&!review.editing)} onClick={()=>review.editing?null:review.startEditing()}>{t('edit.editMode')}</button>{!review.canEdit&&!review.editing&&<span id={editUnavailableTipId} role="tooltip" className="space-edit-tooltip">{t('edit.unavailableReason')}</span>}</span></div>
-          {review.editing&&review.editSaveState!=='idle'&&<span className={`space-edit-status is-${review.editSaveState}`} title={editSaveLabel} role="status" aria-label={editSaveLabel}><EditSaveIcon size={15} strokeWidth={2.1} aria-hidden="true"/>{review.editSaveState==='error'&&<span>{t('edit.autoSaveFailedShort')}</span>}</span>}
-        </> : null}
+        viewTools={review.doc ? <ModeSwitch review={review} busy={busy} t={t}/> : null}
         review={review} sessionId={sessionId} adapter={adapter} t={t}
         showSend={!review.editing&&visibleComments.length>0}
       />

@@ -16,17 +16,25 @@
 .space-main { display:flex; flex:1 1 0; flex-direction:column; min-inline-size:0; min-block-size:0; overflow:hidden; overscroll-behavior:contain; }.space-paper-wrap { position:relative; flex:1 1 0; min-inline-size:0; min-block-size:0; overflow:auto; overscroll-behavior:contain; padding:24px; }.space-paper { background:var(--cospace-surface-paper); min-block-size:420px; min-inline-size:680px; max-inline-size:none; margin:0; padding:clamp(20px,3.4vw,36px); border:1px solid var(--cospace-border); overflow-wrap:anywhere; line-height:1.8; }.space-paper p { margin-block:0 1em; }.space-paper h1,.space-paper h2,.space-paper h3 { line-height:1.3; }.space-revision { cursor:pointer; border-radius:2px; }.space-insertion { color:var(--cospace-success); text-decoration:underline; text-decoration-thickness:2px; }.space-deletion { color:var(--cospace-danger); text-decoration:line-through; }.space-modification { text-decoration:underline dotted; }.space-revision.is-active { outline:2px solid var(--cospace-accent); outline-offset:2px; }
 .space-review { min-inline-size:0; min-block-size:0; overflow-y:auto; overscroll-behavior:contain; padding:20px 16px; border-inline-start:1px solid var(--cospace-border); background:var(--cospace-surface-raised); }.space-panel-heading { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; margin-block:8px; }.space-panel-heading span,.space-muted { color:var(--cospace-text-secondary); font-size:.85rem; }.space-card { border:1px solid var(--cospace-border); border-radius:var(--cospace-radius-card); padding:12px; margin-block-end:10px; }.space-card.is-active { border-color:var(--cospace-accent); }.space-app .space-card-title { border:0; padding:0; text-align:start; color:var(--cospace-accent); font-weight:600; }.space-diff { display:grid; gap:4px; margin-block:8px; overflow-wrap:anywhere; }.space-diff span { font-size:.75rem; color:var(--cospace-text-secondary); }.space-diff ins { text-decoration:underline; }.space-actions { display:flex; gap:8px; flex-wrap:wrap; }.space-compose { max-inline-size:820px; margin:20px auto; }.space-compose label,.space-compose textarea { display:block; inline-size:100%; }.space-compose textarea { margin-block:6px 10px; border:1px solid var(--cospace-border); border-radius:6px; padding:8px; color:inherit; background:var(--cospace-surface-raised); }.space-compose p { color:var(--cospace-text-secondary); overflow-wrap:anywhere; }.space-comment { display:flex; gap:8px; align-items:start; border-block-start:1px solid var(--cospace-border); padding:10px 0; }.space-comment input { margin-block-start:5px; }.space-comment q,.space-comment-body,.space-comment small { display:block; overflow-wrap:anywhere; }.space-comment small { color:var(--cospace-text-secondary); }.space-send { inline-size:100%; margin-block-start:8px; }.space-message { flex:none; position:sticky; inset-block-end:0; background:var(--cospace-surface-raised); color:var(--cospace-text-primary); }.space-message:empty { display:none; }.space-mobile-bar { display:none; } .space-main > .space-mobile-bar, .space-sidebar-main > .space-mobile-bar { position:sticky; inset-block-start:0; z-index:1; background:var(--cospace-surface-raised); border-block-end:1px solid var(--cospace-border); padding-block-end:12px; }
 /* Right Sidebar host: the tab body is one scroll container, never a page grid. */
-.space-sidebar-app { block-size:100%; }
-.space-sidebar-toolbar { flex:none; z-index:6; display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; padding:10px 16px; border-block-end:1px solid var(--cospace-border); background:color-mix(in srgb, var(--cospace-surface-raised) 92%, transparent); backdrop-filter:blur(8px); }
+.space-sidebar-app { position:relative; block-size:100%; }
+/* The compact header floats over the paper's top-right corner instead of
+   claiming a row: ghost (translucent + blur) until hover, keyboard focus or an
+   open menu makes it solid. Touch surfaces keep it solid because they have no
+   hover, and the pill is wide enough to wrap instead of clipping. */
+.space-sidebar-toolbar { position:absolute; inset-block-start:10px; inset-inline-end:12px; z-index:6; display:flex; align-items:center; justify-content:flex-end; gap:6px; flex-wrap:wrap; max-inline-size:calc(100% - 24px); padding:5px 8px; border:1px solid var(--cospace-border); border-radius:14px; background:color-mix(in srgb, var(--cospace-surface-raised) 55%, transparent); backdrop-filter:blur(10px); box-shadow:0 1px 6px color-mix(in srgb, var(--cospace-shadow) 8%, transparent); }
+@media (hover:hover) and (prefers-reduced-motion:no-preference) {
+  .space-sidebar-toolbar { transition:background-color .16s ease, box-shadow .16s ease; }
+}
+.space-sidebar-toolbar:hover, .space-sidebar-toolbar:focus-within { background:var(--cospace-surface-raised); box-shadow:0 6px 20px color-mix(in srgb, var(--cospace-shadow) 18%, transparent); }
+@media (hover:none) { .space-sidebar-toolbar { background:var(--cospace-surface-raised); box-shadow:0 4px 16px color-mix(in srgb, var(--cospace-shadow) 14%, transparent); } }
 .space-sidebar-main { flex:1; min-block-size:0; display:block; overflow-x:auto; overflow-y:auto; overscroll-behavior:contain; }
 .space-sidebar-app .space-paper-wrap { flex:none; overflow:visible; }
 .space-sidebar-app .space-paper-wrap { padding:16px; }
 .space-sidebar-app .space-paper { min-block-size:0; padding:clamp(16px,4vw,28px); }
 .space-sidebar-app .space-compose { margin-block:16px; }
-/* The compact header reuses the page toolbar; only the menu anchor differs, so a
-   narrow pane opens the panel toward its own start edge instead of off-screen. */
-.space-sidebar-toolbar .space-tools-menu { inline-size:32px; margin-inline-end:0; padding-inline-end:0; border-inline-end:0; }
-.space-sidebar-toolbar .space-tools-menu-panel { inset-inline-start:auto; inset-inline-end:0; }
+/* The compact pill keeps the kebab chromeless: it is the pill's last item, and
+   the base menu already opens toward the start edge from the shared rule. */
+.space-sidebar-toolbar .space-tools-menu { inline-size:32px; margin-inline-start:0; padding-inline-start:0; border-inline-start:0; }
 /* A sent Space reference reads as one document card inside the conversation bubble. */
 .space-ref-card { display:inline-flex; align-items:center; gap:8px; max-inline-size:100%; margin:2px 4px; padding:6px 10px; border:1px solid var(--cospace-border); border-radius:8px; background:var(--cospace-surface-raised); color:var(--cospace-text-primary); font:inherit; line-height:1.35; text-align:start; white-space:normal; vertical-align:middle; }
 button.space-ref-card { cursor:pointer; }
@@ -632,9 +640,12 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-brand-lockup-copy { display:grid; justify-items:start; gap:2px; min-inline-size:0; line-height:1; }
 .space-brand-lockup-copy > strong { color:var(--cospace-text-primary); font-size:14px; font-weight:650; line-height:1; }
 .space-brand-lockup-version { display:flex; min-block-size:10px; align-items:center; }
-.space-brand-lockup-version .space-version-badge { gap:3px; margin:0; padding:1px 4px; border-radius:5px; }
+/* Inside the lockup the version is plain text, so its glyphs share the title's
+   left edge: badge chrome (border, padding, margin) would indent the number. */
+.space-brand-lockup-version .space-version-badge { gap:3px; margin:0; padding:0; border:0; border-radius:0; background:none; }
 .space-brand-lockup-version .space-version-badge svg { inline-size:10px; block-size:10px; }
 .space-brand-lockup-version .space-version-number { font-size:8px; }
+.space-brand-lockup-version .space-build-version { margin-inline-start:0; }
 .space-app .space-back { display:grid; flex:none; place-items:center; inline-size:30px; block-size:30px; min-block-size:30px; padding:6px; border:0; border-radius:8px; background:transparent; color:var(--cospace-text-secondary); }
 .space-back:hover { background:color-mix(in srgb, var(--cospace-shadow) 8%, transparent); }
 .space-back svg { inline-size:18px; block-size:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
@@ -724,18 +735,21 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
   }
 }
 
-/* Preview toolbar: keep frequent controls visible and tuck secondary tools away. */
+/* Preview toolbar: keep frequent controls visible and tuck secondary tools away.
+   The compact Sidebar pill shares the flattened sub-control styling. */
 .space-preview-top .space-header-tools { justify-content: flex-end; flex: 0 1 auto; gap: 6px; min-block-size: 36px; padding: 1px 3px; border: 1px solid var(--cospace-border); border-radius: 10px; background: var(--cospace-surface-raised); box-shadow: 0 2px 8px color-mix(in srgb, var(--cospace-text-primary) 5%, transparent); }
-.space-preview-top .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.space-preview-top .space-mode-switch { display: inline-flex; align-items: center; column-gap: 3px; min-block-size: 34px; block-size: 34px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 9px; background: transparent; }
-.space-app .space-preview-top .space-mode-switch button { min-block-size: 30px; padding-inline: 12px; border-radius: 7px; font-size: 12px; line-height: 1; }
-.space-preview-top .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--cospace-border); border-radius: 0; background: transparent; }
-.space-app .space-preview-top .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
-.space-preview-top .space-zoom-tools span { min-inline-size: 40px; color: var(--cospace-text-primary); font-size: 12px; }
-.space-tools-menu { position: relative; z-index: 30; display: grid; place-items: center; inline-size: 34px; block-size: 34px; margin-inline-end: 2px; padding-inline-end: 5px; border-inline-end: 1px solid var(--cospace-border); }
+.space-preview-top .space-toolbar-group, .space-sidebar-toolbar .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.space-preview-top .space-mode-switch, .space-sidebar-toolbar .space-mode-switch { display: inline-flex; align-items: center; column-gap: 3px; min-block-size: 34px; block-size: 34px; box-sizing: border-box; padding: 2px; border: 0; border-radius: 9px; background: transparent; }
+.space-app .space-preview-top .space-mode-switch button, .space-app .space-sidebar-toolbar .space-mode-switch button { min-block-size: 30px; padding-inline: 12px; border-radius: 7px; font-size: 12px; line-height: 1; }
+.space-preview-top .space-zoom-tools, .space-sidebar-toolbar .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--cospace-border); border-radius: 0; background: transparent; }
+.space-app .space-preview-top .space-zoom-tools button, .space-app .space-sidebar-toolbar .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
+.space-preview-top .space-zoom-tools span, .space-sidebar-toolbar .space-zoom-tools span { min-inline-size: 40px; color: var(--cospace-text-primary); font-size: 12px; }
+.space-tools-menu { position: relative; z-index: 30; display: grid; place-items: center; inline-size: 34px; block-size: 34px; margin-inline-start: 2px; padding-inline-start: 5px; border-inline-start: 1px solid var(--cospace-border); }
 .space-app .space-tools-menu-trigger { display: grid; place-items: center; inline-size: 30px; block-size: 30px; min-block-size: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--cospace-text-secondary); }
 .space-app .space-tools-menu-trigger:hover:not(:disabled), .space-app .space-tools-menu-trigger[aria-expanded="true"] { background: color-mix(in srgb, var(--cospace-text-primary) 5%, var(--cospace-surface-raised)); color: var(--cospace-text-primary); }
-.space-tools-menu-panel { position: absolute; inset-block-start: calc(100% + 8px); inset-inline-start: 0; z-index: 40; inline-size: 210px; padding: 6px; border: 1px solid var(--cospace-border); border-radius: 10px; background: var(--cospace-surface-raised); box-shadow: 0 10px 30px color-mix(in srgb, var(--cospace-shadow) 14%, transparent); }
+/* The overflow menu opens toward the toolbar's start edge: its trigger sits at
+   the toolbar end on every surface, so a narrow pane never pushes it off-screen. */
+.space-tools-menu-panel { position: absolute; inset-block-start: calc(100% + 8px); inset-inline-end: 0; z-index: 40; inline-size: 210px; padding: 6px; border: 1px solid var(--cospace-border); border-radius: 10px; background: var(--cospace-surface-raised); box-shadow: 0 10px 30px color-mix(in srgb, var(--cospace-shadow) 14%, transparent); }
 .space-tools-menu-panel p { margin: 5px 8px 3px; color: var(--cospace-text-secondary); font-size: 11px; font-weight: 600; }
 .space-tools-menu-divider { block-size: 1px; margin: 5px 4px; background: var(--cospace-border); }
 .space-app .space-tools-menu-panel button { display: flex; align-items: center; justify-content: space-between; inline-size: 100%; min-block-size: 36px; margin: 0; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--cospace-text-primary); font-size: 13px; text-align: start; cursor: pointer; }
@@ -744,7 +758,7 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-tools-menu-panel button span { color: var(--cospace-text-secondary); font-size: 11px; }
 .space-app .space-preview-top .space-send-header { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-block-size: 34px; block-size: 34px; box-sizing: border-box; padding-inline: 12px; border: 0; border-radius: 9px; background: var(--cospace-text-primary); color: var(--cospace-surface-paper); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; box-shadow: 0 2px 6px color-mix(in srgb, var(--cospace-shadow) 12%, transparent); }
 .space-app .space-preview-top .space-send-header:hover:not(:disabled) { filter: brightness(1.08); }
-.space-preview-top .space-header-tools :is(button, [tabindex="0"]):focus-visible { outline: 2px solid var(--cospace-accent); outline-offset: 2px; }
+.space-preview-top .space-header-tools :is(button, [tabindex="0"]):focus-visible, .space-sidebar-toolbar :is(button, [tabindex="0"]):focus-visible { outline: 2px solid var(--cospace-accent); outline-offset: 2px; }
 .space-home-header .space-header-tools { justify-content: flex-end; gap: 4px; min-block-size: 48px; margin-inline-start: auto; padding: 4px; border: 1px solid var(--cospace-border); border-radius: 14px; background: var(--cospace-surface-raised); box-shadow: 0 2px 8px color-mix(in srgb, var(--cospace-text-primary) 5%, transparent); }
 .space-app .space-home-header .space-collab-trigger { min-block-size: 38px; block-size: 38px; padding-inline: 12px; border: 0; border-radius: 9px; background: transparent; color: var(--cospace-text-primary); font-size: 13px; font-weight: 500; }
 .space-app .space-home-header .space-collab-trigger:hover:not(:disabled) { background: color-mix(in srgb, var(--cospace-text-primary) 5%, var(--cospace-surface-raised)); }
@@ -785,20 +799,27 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-app .space-mode-switch button { min-block-size:28px; padding:0 11px; border:0; border-radius:999px; background:transparent; color:var(--cospace-text-secondary); font-size:12px; cursor:pointer; }
 .space-app .space-mode-switch button[aria-pressed="true"] { background:var(--cospace-text-primary); color:var(--cospace-surface-paper); }
 .space-app .space-preview-top .space-mode-switch button:hover:not(:disabled):not([aria-pressed="true"]),
-.space-app .space-preview-top .space-zoom-tools button:hover:not(:disabled) { background:color-mix(in srgb,var(--cospace-text-primary) 5%,var(--cospace-surface-raised)); color:var(--cospace-text-primary); }
+.space-app .space-sidebar-toolbar .space-mode-switch button:hover:not(:disabled):not([aria-pressed="true"]),
+.space-app .space-preview-top .space-zoom-tools button:hover:not(:disabled),
+.space-app .space-sidebar-toolbar .space-zoom-tools button:hover:not(:disabled) { background:color-mix(in srgb,var(--cospace-text-primary) 5%,var(--cospace-surface-raised)); color:var(--cospace-text-primary); }
 .space-app .space-mode-switch button:disabled { cursor:not-allowed; opacity:.48; }
 .space-edit-mode-option { position:relative; display:inline-flex; }
 .space-edit-mode-option.is-unavailable { cursor:not-allowed; }
 .space-edit-tooltip { position:absolute; inset-block-start:calc(100% + 9px); inset-inline-start:50%; z-index:40; inline-size:max-content; max-inline-size:min(280px,80vw); padding:8px 11px; border:1px solid color-mix(in srgb,var(--cospace-text-primary) 12%,transparent); border-radius:8px; background:var(--cospace-text-primary); color:var(--cospace-surface-paper); box-shadow:0 5px 18px color-mix(in srgb, var(--cospace-shadow) 18%, transparent); font-size:11px; font-weight:500; line-height:1.45; white-space:normal; opacity:0; visibility:hidden; pointer-events:none; transform:translate(-50%,-3px); transition:opacity .14s ease,transform .14s ease,visibility .14s ease; }
 .space-edit-tooltip::before { position:absolute; inset-block-start:-5px; inset-inline-start:calc(50% - 4px); inline-size:8px; block-size:8px; border-block-start:1px solid color-mix(in srgb,var(--cospace-text-primary) 12%,transparent); border-inline-start:1px solid color-mix(in srgb,var(--cospace-text-primary) 12%,transparent); background:var(--cospace-text-primary); content:""; transform:rotate(45deg); }
 .space-edit-mode-option.is-unavailable:hover .space-edit-tooltip,.space-edit-mode-option.is-unavailable:focus .space-edit-tooltip { opacity:1; visibility:visible; transform:translate(-50%,0); }
-.space-edit-status { display:inline-flex; flex:none; align-items:center; justify-content:center; gap:5px; max-inline-size:min(45cqi,240px); min-inline-size:20px; min-block-size:20px; overflow:hidden; color:var(--cospace-text-secondary); font-size:10px; font-weight:600; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
-.space-edit-status svg { flex:none; }
-.space-edit-status.is-saving { color:var(--cospace-accent); }
-.space-edit-status.is-unsaved { color:var(--cospace-comment); }
-.space-edit-status.is-error { justify-content:flex-start; padding-inline:7px; border:1px solid color-mix(in srgb, var(--cospace-danger) 30%, transparent); border-radius:7px; background:color-mix(in srgb, var(--cospace-danger) 8%, var(--cospace-surface-raised)); color:var(--cospace-danger); }
-.space-edit-status.is-saved { color:var(--cospace-success); }
-.space-edit-status.is-saving svg { animation:space-update-spin 1.1s linear infinite; }
+/* The document status slot sits leftmost in the toolbar and stays mounted in
+   every state, so its seat never jitters and one live region reports saves. */
+.space-doc-status { display:inline-flex; flex:none; align-items:center; justify-content:center; gap:5px; max-inline-size:min(45cqi,240px); min-inline-size:20px; min-block-size:20px; overflow:hidden; color:var(--cospace-text-secondary); font-size:10px; font-weight:600; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
+.space-doc-status svg { flex:none; }
+.space-doc-status.is-synced, .space-doc-status.is-readonly { color:var(--cospace-text-secondary); }
+.space-doc-status.is-saving { color:var(--cospace-accent); }
+.space-doc-status.is-unsaved { color:var(--cospace-comment); }
+.space-doc-status.is-error { justify-content:flex-start; padding-inline:7px; border:1px solid color-mix(in srgb, var(--cospace-danger) 30%, transparent); border-radius:7px; background:color-mix(in srgb, var(--cospace-danger) 8%, var(--cospace-surface-raised)); color:var(--cospace-danger); }
+.space-doc-status.is-saved { color:var(--cospace-success); }
+.space-doc-status.is-saving svg { animation:space-update-spin 1.1s linear infinite; }
+.space-app .space-doc-status-retry { flex:none; min-block-size:18px; margin:0; padding:0 4px; border:0; border-radius:4px; background:transparent; color:inherit; font-size:10px; font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+.space-app .space-doc-status-retry:hover:not(:disabled) { background:color-mix(in srgb, var(--cospace-danger) 12%, transparent); }
 .space-milkdown-root { min-height:900px; }
 .space-paper-wrap.is-editing .space-comment-layer,.space-paper-wrap.is-editing .space-anchor-layer { display:none; }
 .space-app .space-paper { padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
@@ -812,7 +833,7 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-version-badge.is-failed, .space-version-badge.is-offline { color:var(--cospace-danger); }
 .space-version-badge.is-disabled { color:var(--cospace-text-secondary); }
 @keyframes space-update-spin { to { transform:rotate(360deg); } }
-@media (prefers-reduced-motion:reduce) { .space-version-badge.is-checking svg, .space-version-badge.is-downloading svg, .space-version-badge.is-switching svg, .space-edit-status.is-saving svg { animation:none; } }
+@media (prefers-reduced-motion:reduce) { .space-version-badge.is-checking svg, .space-version-badge.is-downloading svg, .space-version-badge.is-switching svg, .space-doc-status.is-saving svg { animation:none; } }
 @container space-app (max-width:760px) {
   .space-preview-top .space-header-tools { flex-wrap:wrap; }
   .space-preview-top .space-toolbar-group { flex-wrap:wrap; }

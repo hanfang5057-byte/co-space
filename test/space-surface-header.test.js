@@ -26,10 +26,12 @@ test('both review surfaces render the one shared header', () => {
 });
 
 test('the shared header keeps the controls a document review needs', () => {
-  // Both surfaces render zoom and the one send action; only the page adds the
-  // brand/back cluster and the review/edit mode switch.
+  // Both surfaces render zoom, the one send action and the review/edit mode
+  // switch; only the brand/back cluster stays page-only.
   const header = app.slice(app.indexOf('export function SpaceSurfaceHeader'), app.indexOf('export function useDocumentExport'));
   assert.match(header, /space-pending-chip/);
+  assert.match(header, /<DocStatus/);
+  assert.match(app, /space-doc-status/);
   assert.match(header, /ReviewZoomControls/);
   assert.match(header, /ReviewSendButton/);
   assert.match(header, /compact=\{sidebar\}/);
@@ -43,11 +45,20 @@ test('the shared header keeps the controls a document review needs', () => {
   assert.match(sidebar, /<SpaceAgentPromptDialog/);
 
   // Document preferences are document actions too, so they are reachable from
-  // the compact menu; only review/edit mode stays page-only.
+  // the compact menu; the review/edit switch is shared by both surfaces
+  // through the one ModeSwitch component.
   assert.match(sidebar, /onPreferences=/);
   assert.match(sidebar, /<SpaceDocumentPreferencesDialog/);
   assert.match(app, /<SpaceDocumentPreferencesDialog/);
-  assert.doesNotMatch(sidebar, /space-mode-switch/);
+  assert.match(sidebar, /<ModeSwitch/);
+});
+
+test('the shared header seats status first and the overflow menu last', () => {
+  // The status slot answers "is what I see saved?" leftmost, before the mode
+  // switch; the kebab is the conventional trailing "more actions" trigger.
+  const header = app.slice(app.indexOf('export function SpaceSurfaceHeader'), app.indexOf('export function useDocumentExport'));
+  const seats = [header.indexOf('<DocStatus'), header.indexOf('{viewTools'), header.indexOf('<ReviewSendButton'), header.indexOf('{tools}')];  assert.ok(seats.every(seat => seat >= 0));
+  assert.deepEqual([...seats].sort((left, right) => left - right), seats);
 });
 
 test('document preferences run through one shared controller', () => {
