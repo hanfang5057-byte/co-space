@@ -32,7 +32,7 @@ The workspace root is private and must never be published. DSH and Desktop keep 
 
 ## Pipeline configuration (one-time)
 
-Configure a GitHub environment named `desktop-release` restricted to `desktop-v*` tags. Do not require reviewers: the version bump authorizes publication after required build, smoke, checksum, and signature checks succeed. Store the persistent Tauri updater public key in the `COSPACE_UPDATER_PUBLIC_KEY` environment variable; store `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as environment secrets. Protect and back up the private key outside the repository. Windows signing secrets are not required while Windows is excluded; add the code-signing PFX and password before re-enabling its release target. macOS currently uses ad-hoc signing and is not notarized. npm trusted publishing on npmjs.com must be bound to this repository and the `.github/workflows/publish-dsh.yml` workflow file.
+Configure a GitHub environment named `desktop-release` restricted to `desktop-v*` tags. Do not require reviewers: the version change merged to `main` authorizes publication after required build, smoke, checksum, and signature checks succeed. Store the persistent Tauri updater public key in `COSPACE_UPDATER_PUBLIC_KEY`; store `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as environment secrets. For automated metadata PRs, install a repository-scoped GitHub App with Contents read/write and Pull requests read/write, save its ID as `COSPACE_RELEASE_APP_ID` and its private key as `COSPACE_RELEASE_APP_PRIVATE_KEY`, and enable repository auto-merge. Protect `main` with a ruleset requiring PRs and the always-running `CI / Verify workspace` check, with zero required approvals; block force pushes and deletions. The desktop preview matrix remains an additional, path-filtered check rather than a universal required check. Protect and back up signing keys outside the repository. Windows signing secrets are not required while Windows is excluded; add the code-signing PFX and password before re-enabling it. macOS currently uses ad-hoc signing and is not notarized. npm trusted publishing on npmjs.com must be bound to this repository and `.github/workflows/publish-dsh.yml`.
 
 Windows can be restored by adding `windows-x64` to both workflow matrices and the `COSPACE_RELEASE_TARGETS` value in the publish job, then restoring the Windows certificate import and signature verification steps. Add `WINDOWS_CERTIFICATE_PFX` and `WINDOWS_CERTIFICATE_PASSWORD` to the `desktop-release` environment and verify signed MSI/NSIS installers before staging that platform.
 
@@ -42,8 +42,8 @@ For local desktop development, run `npm run dev:desktop`; UI changes rebuild and
 
 ## Release path
 
-- **DSH**: set the intended version in `release/npm-version.json` — a prerelease such as `0.1.21-rc.1` publishes under the `rc` dist-tag and a prerelease GitHub Release without moving `latest` — pass the pre-push gate below, and push to `main`. `Publish DSH plugin` publishes with provenance, syncs and commits the market index, ensures the annotated `vX.Y.Z` tag and the GitHub Release with the staged tarball, and refreshes the Pages deployment; re-runs converge.
-- **Desktop**: set the intended stable version across all six desktop sources with `npm run version:desktop -- X.Y.Z` (`apps/desktop/package.json`, `adapter.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and both lockfiles), then push. `Build CoSpace Desktop` re-verifies the version agreement, creates the unique annotated tag `desktop-vX.Y.Z` after its checks pass, and dispatches `Stage signed desktop release` on it. That workflow builds macOS arm64 and Linux deb/AppImage, verifies Linux MCP launchers and updater signatures, then automatically publishes the GitHub Release and promotes `apps/site/desktop/latest.json` to `main`. It dispatches Pages to publish the site and update manifest. Windows is excluded from build matrices and the staged updater manifest until explicitly re-enabled.
+- **DSH**: set the intended version in `release/npm-version.json` — a prerelease such as `0.1.21-rc.1` publishes under the `rc` dist-tag and a prerelease GitHub Release without moving `latest` — then include the version change in the PR that merges the release to `main`. `Publish DSH plugin` publishes with provenance, creates a metadata PR, and auto-merges the market index after CI passes; it then ensures the annotated `vX.Y.Z` tag, GitHub Release, staged tarball, and Pages deployment. Re-runs converge.
+- **Desktop**: set the intended stable version across all six desktop sources with `npm run version:desktop -- X.Y.Z` (`apps/desktop/package.json`, `adapter.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and both lockfiles), and include the version change in the PR that merges the release to `main`. `Build CoSpace Desktop` verifies version agreement, creates the unique annotated tag `desktop-vX.Y.Z` after checks pass, and dispatches `Stage signed desktop release`. That workflow builds macOS arm64 and Linux deb/AppImage, verifies Linux MCP launchers and updater signatures, then publishes the GitHub Release and opens an automatically merged update-manifest PR after CI passes. Windows is excluded from build matrices and the staged updater manifest until explicitly re-enabled.
 
 ## Branching and daily work
 
@@ -53,13 +53,13 @@ Use `dev` as the shared integration branch. Create short-lived work branches fro
 | --- | --- |
 | Push to `main` | `CI`; changes under packages, the desktop app, scripts, or tests also run the unsigned **preview** matrix |
 | Push to `dev` or a work branch | Nothing — use pull requests to run checks |
-| Pull request to `dev` or `main` | `CI` plus the unsigned preview matrix, with 14-day artifacts for installation testing |
+| Pull request to `dev` or `main` | Always-running `CI`; desktop changes also run the unsigned preview matrix, with 14-day artifacts |
 | Push that changes the DSH release version files or the desktop version sources | That product's release route |
 | Push that changes only documentation | Nothing |
 
 Keep work branches short-lived and merge them within days. Keep `dev` current with `main` after releases so new work starts from the latest production code.
 
-**Two-stage releases.** First merge code from `dev` to `main` without changing product versions. After the merged code passes `main` checks, make a separate version-only commit on `main`: update `release/npm-version.json` for DSH or run `npm run version:desktop -- X.Y.Z` for Desktop. That commit triggers the release. Keeping the version bump separate makes release intent explicit and lets CI verify the product changes before publication.
+**Release PR.** Add the intended version change to the final PR that merges the release from `dev` to `main`. For DSH, update `release/npm-version.json`; for Desktop, run `npm run version:desktop -- X.Y.Z`. The merge to `main` triggers the release after the PR checks pass. If code is already merged and you decide to release later, use a separate version-only PR; merging it triggers the same release route.
 
 Rules that a failed attempt will not teach gently:
 
@@ -81,7 +81,7 @@ The workflow checks platform builds, smoke paths, SHA256SUMS, updater signatures
 
 ### After the desktop release is published
 
-After publishing the desktop release, the same workflow verifies its signed update assets and URLs, filters the manifest to supported targets, commits `apps/site/desktop/latest.json` directly to `main`, and dispatches Pages. Confirm the deployed manifest and URLs from the networks users actually use.
+After publishing the desktop release, the same workflow verifies its signed update assets and URLs, filters the manifest to supported targets, opens an automatically merged PR for `apps/site/desktop/latest.json`, and dispatches Pages. Confirm the deployed manifest and URLs from the networks users actually use.
 
 ### Failed or partial releases
 
