@@ -6,6 +6,7 @@ import { errorText, translate, zh } from './locale.js';
 import { MarkdownEditor } from './markdown-editor.jsx';
 import { capturePreviewSelection, rangeRects, readSourceSpans, scrollSourceRange, sourceOffsetAtDomPoint, sourceRangeToDom } from './markdown-dom.js';
 import { rememberDocumentTitle } from './document-titles.js';
+import { sortHomeDocuments } from './home-documents.js';
 import { createDocx, exportFileName } from './export.js';
 import { useCurrentUser } from './current-user.js';
 import { annotationConnector } from './annotation-connector.js';
@@ -19,14 +20,14 @@ const h = createElement;
 const requestId = () => globalThis.crypto.randomUUID();
 function HomeSelect({ label, value, options, onChange }) {
   const [open,setOpen]=useState(false);
-  const root=useRef(null);
+  const root=useRef(null), trigger=useRef(null);
   useEffect(()=>{if(!open)return;const close=event=>{if(!root.current?.contains(event.target))setOpen(false)};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[open]);
   const current=options.findIndex(option=>option.value===value);
   return <div className="space-home-select" ref={root}>
-    <button type="button" className="space-home-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const direction=event.key==='ArrowDown'?1:-1;onChange(options[(current+direction+options.length)%options.length].value)}}}>
+    <button ref={trigger} type="button" className="space-home-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={()=>setOpen(value=>!value)} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);return}if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const direction=event.key==='ArrowDown'?1:-1;onChange(options[(current+direction+options.length)%options.length].value)}}}>
       <span>{options[current]?.label}</span><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
     </button>
-    {open&&<div className="space-home-select-menu" role="listbox" aria-label={label}>{options.map(option=><button type="button" role="option" aria-selected={value===option.value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false)}}>{option.label}{value===option.value&&<span aria-hidden="true">✓</span>}</button>)}</div>}
+    {open&&<div className="space-home-select-menu" role="listbox" aria-label={label}>{options.map(option=><button type="button" role="option" aria-selected={value===option.value} key={option.value} onClick={()=>{onChange(option.value);setOpen(false);trigger.current?.focus()}}>{option.label}{value===option.value&&<span aria-hidden="true">✓</span>}</button>)}</div>}
   </div>;
 }
 function scrollToSourceOffset(surface, offset, markdownSource) {
@@ -41,11 +42,11 @@ function scrollToSourceOffset(surface, offset, markdownSource) {
 const statusKeys = {pending:'status.pending', sending:'status.sending', sent:'status.sent', failed:'status.failed', unknown:'status.unknown', processed:'status.processed'};
 const suggestionStatusKeys = {pending:'suggestion.pendingStatus', accepted:'suggestion.acceptedStatus', rejected:'suggestion.rejectedStatus', conflicted:'suggestion.conflictedStatus'};
 const safeUrl = value => typeof value === 'string' && /^(https?:|mailto:)/i.test(value) ? value : null;
-const documentCardTime = (item,t) => {
-  const timestamp=item.updatedAt || item.createdAt;
-  if(!timestamp || !Number.isFinite(Date.parse(timestamp))) return t('home.timeUnknown');
+const documentCardTime = item => {
+  const timestamp=item.updatedAt;
+  if(!timestamp || !Number.isFinite(Date.parse(timestamp))) return null;
   const time=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(timestamp));
-  return t(item.updatedAt?'home.updated':'home.created',{time});
+  return time;
 };
 
 /** Fallback translator keeps the panel renderable outside a locale seat, as in the DOM smoke test. */
@@ -1013,7 +1014,8 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
   const api=adapter.core.request;
   const [documents,setDocuments]=useState([]), [docId,setDocId]=useState(()=>adapter.navigation?.getDocumentId?.() || null), [error,setError]=useState(''), [busy,setBusy]=useState(false);
   const [autoEditDocId,setAutoEditDocId]=useState(null);
-  const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent');
+  const [query,setQuery]=useState(''), [filter,setFilter]=useState('all'), [sort,setSort]=useState('recent'), [sortAnnouncement,setSortAnnouncement]=useState('');
+  const homeTitleHeadingId=useId(), homeUpdatedHeadingId=useId();
   const [deleteTarget,setDeleteTarget]=useState(null);
   const [promptTask,setPromptTask]=useState(null);
   const [updateInfo,setUpdateInfo]=useState(null);
@@ -1080,9 +1082,7 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
   const pendingTotal=documents.reduce((total,item)=>total+(item.pending||0),0);
   const shownDocuments=useMemo(()=>{
     const needle=query.trim().toLocaleLowerCase();
-    const time=item=>{const value=Date.parse(item.updatedAt || item.createdAt || '');return Number.isFinite(value)?value:0;};
-    return documents.filter(item=>(!needle || (item.title || item.id || '').toLocaleLowerCase().includes(needle)) && (filter!=='pending' || item.pending>0))
-      .sort((a,b)=>sort==='title' ? (a.title||a.id||'').localeCompare(b.title||b.id||'',undefined,{numeric:true}) : time(b)-time(a));
+    return sortHomeDocuments(documents.filter(item=>(!needle || (item.title || item.id || '').toLocaleLowerCase().includes(needle)) && (filter!=='pending' || item.pending>0)),sort);
   },[documents,query,filter,sort]);
   const home=!docId;
   const updateState=updateInfo?.update?.state || (updateInfo?.updaterEnabled===false?'disabled':'checking');
@@ -1102,14 +1102,18 @@ export function SpaceApp({ adapter, t = defaultT, theme }) {
       <header className="space-home-header"><BrandLockup versionIndicator={versionIndicator}/><div className="space-header-tools">{adapter.prompts&&<button type="button" className="space-collab-trigger" onClick={()=>setPromptTask({kind:'create'})}>让 Agent 起草</button>}<button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div></header>
       <section className="space-home-intro"><div><p className="space-home-eyebrow">{t('home.eyebrow')}</p><h1 id="space-home-title">{t('home.title')}</h1><p className="space-home-description">{t('home.description')}</p></div><div className="space-home-stats" aria-label={t('nav.aria')}><span><strong>{documents.length}</strong>{t('home.documentCount',{count:documents.length})}</span><i aria-hidden="true"/><span><strong>{pendingTotal}</strong>{t('home.pendingCount',{count:pendingTotal})}</span></div></section>
       <section className="space-home-content" aria-label={t('nav.documents')}><div className="space-home-section-title"><h2>{t('nav.documents')}</h2>{documents.length>0&&<span>{documents.length}</span>}</div>
-        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={setSort} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
-        {shownDocuments.length ? <div className="space-home-grid">{shownDocuments.map((item,index)=><article className="space-home-card" key={item.id}>
+        {documents.length>0 && <div className="space-document-tools"><label className="space-document-search"><Search size={16} aria-hidden="true"/><span className="space-visually-hidden">{t('home.search')}</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('home.search')}/></label><span className="space-visually-hidden">{t('home.filter')}</span><HomeSelect label={t('home.filter')} value={filter} onChange={setFilter} options={[{value:'all',label:t('home.filterAll')},{value:'pending',label:t('home.filterPending')}]}/><span className="space-visually-hidden">{t('home.sort')}</span><HomeSelect label={t('home.sort')} value={sort} onChange={value=>{setSort(value);setSortAnnouncement(t(value==='recent'?'home.sortedRecent':'home.sortedTitle',{count:shownDocuments.length}))}} options={[{value:'recent',label:t('home.sortRecent')},{value:'title',label:t('home.sortTitle')}]}/></div>}
+        <p className="space-visually-hidden" role="status">{sortAnnouncement}</p>
+        {shownDocuments.length ? <div className="space-home-list-shell">
+          <div className="space-home-list-header"><span id={homeTitleHeadingId}>{t('home.titleHeading')}</span><span id={homeUpdatedHeadingId}>{t('home.updatedHeading')}</span></div>
+          <ul className="space-home-list" role="list">{shownDocuments.map(item=>{const updatedAt=documentCardTime(item);return <li className="space-home-list-item" key={item.id}>
           <button type="button" className="space-home-card-open" aria-label={t('home.openDocument',{title:item.title||item.id})} onClick={()=>selectDocument(item.id)}>
-            <span className={`space-home-card-art is-tone-${index%4}`} aria-hidden="true"><span className="space-paper-icon"><i/><i/><i/><b/></span><span className="space-home-card-art-label">{BRAND.name.en.toUpperCase()}</span></span>
-            <span className="space-home-card-copy"><strong title={item.title||item.id}>{item.title||item.id}</strong><span className="space-home-card-meta">{documentCardTime(item,t)}</span></span>
-            <span className="space-home-card-footer">{item.pending>0?<span className="space-home-pending"><i aria-hidden="true"/>{t('annotations.suggestions',{count:item.pending})}</span>:<span className="space-home-clear">{t('home.noPending')}</span>}<span className="space-home-open-icon" aria-hidden="true">↗</span></span>
+            <strong className="space-home-row-title" title={item.title||item.id}>{item.title||item.id}</strong>
+            {updatedAt&&<time className="space-home-row-meta" dateTime={new Date(item.updatedAt).toISOString()} aria-describedby={homeUpdatedHeadingId}>{updatedAt}</time>}
           </button><button type="button" className="space-home-delete" disabled={busy} aria-label={t('nav.deleteDocumentLabel',{title:item.title||item.id})} title={t('nav.deleteDocument')} onClick={()=>setDeleteTarget(item)}><TrashIcon size={15}/></button>
-        </article>)}</div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
+        </li>
+        })}</ul>
+        </div> : documents.length ? <p className="space-document-no-results" role="status">{t('home.noResults')}</p> : <div className="space-home-empty"><span className="space-empty-mark" aria-hidden="true"><span/><span/><span/></span><h2>{t('home.emptyTitle')}</h2><p>{t('home.emptyDescription')}</p><button type="button" className="space-home-new" disabled={busy} onClick={newDocument}><Plus size={16} aria-hidden="true"/>{t('nav.newDocument')}</button></div>}
       </section>
     </main> : <>
       <SpaceSurfaceHeader
