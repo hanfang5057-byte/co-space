@@ -591,7 +591,12 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
 .space-preview-top .space-header-tools { justify-content: flex-end; flex: 0 1 auto; gap: 6px; min-block-size: 34px; }
 .space-sidebar-toolbar .space-header-tools { gap: 4px; max-inline-size: 100%; min-block-size: 34px; padding: 3px 5px; border: 1px solid var(--cospace-border); border-radius: 12px; background: var(--cospace-surface-raised); box-shadow: 0 1px 6px color-mix(in srgb, var(--cospace-shadow) 8%, transparent); }
 .space-preview-top .space-toolbar-group, .space-sidebar-toolbar .space-toolbar-group { display: inline-flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.space-preview-top .space-zoom-tools, .space-sidebar-toolbar .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline: 5px; gap: 2px; border: 0; border-inline: 1px solid var(--cospace-border); border-radius: 0; background: transparent; }
+.space-preview-top .space-zoom-tools, .space-sidebar-toolbar .space-zoom-tools { block-size: 30px; min-block-size: 30px; margin-inline-start: 3px; padding-inline-start: 5px; gap: 2px; border: 0; border-inline-start: 1px solid var(--cospace-border); border-radius: 0; background: transparent; }
+/* The rule after the capsule exists only while the send action does: with the
+   button hidden there would otherwise be two rules in a row, the capsule's and
+   the overflow menu's. */
+.space-preview-top .space-toolbar-group:has(+ .space-send) .space-zoom-tools,
+.space-sidebar-toolbar .space-toolbar-group:has(+ .space-send) .space-zoom-tools { padding-inline-end: 5px; border-inline-end: 1px solid var(--cospace-border); }
 .space-app .space-preview-top .space-zoom-tools button, .space-app .space-sidebar-toolbar .space-zoom-tools button { inline-size: 27px; min-block-size: 27px; border-radius: 7px; font-size: 16px; }
 .space-preview-top .space-zoom-tools span, .space-sidebar-toolbar .space-zoom-tools span { min-inline-size: 40px; color: var(--cospace-text-primary); font-size: 12px; }
 .space-tools-menu { position: relative; z-index: 30; display: grid; place-items: center; inline-size: 34px; block-size: 34px; margin-inline-start: 2px; padding-inline-start: 5px; border-inline-start: 1px solid var(--cospace-border); }
