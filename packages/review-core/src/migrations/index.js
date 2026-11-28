@@ -202,8 +202,15 @@ function makePreMigrationBackup(db, databasePath) {
     return;
   }
   const escaped = backupPath.replaceAll("'", "''");
-  try { db.exec(`VACUUM INTO '${escaped}'`); }
+  // Run VACUUM on a separate connection. The caller holds BEGIN IMMEDIATE so
+  // concurrent migrators cannot race to create or inspect a partial backup.
+  const source = new DatabaseSync(databasePath, { timeout: 5000 });
+  try {
+    source.exec('PRAGMA busy_timeout=5000');
+    source.exec(`VACUUM INTO '${escaped}'`);
+  }
   catch (error) { if (!existsSync(backupPath)) throw error; }
+  finally { source.close(); }
   const backup = new DatabaseSync(backupPath, { readOnly: true, timeout: 5000 });
   try {
     if (backup.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok') fail('DATA_MIGRATION_INVALID', 'Pre-v3 backup failed integrity validation', { backupPath });
@@ -226,8 +233,6 @@ function migrateReviewSchema(db, databasePath) {
   if (hasTable(db, 'cospace_data_layout') && (!Number.isInteger(oldLayout) || oldLayout < 1)) fail('DATA_LAYOUT_MISMATCH', 'Invalid CoSpace data layout marker');
   if (Number.isInteger(oldLayout) && oldLayout > DATA_LAYOUT) fail('DATA_LAYOUT_MISMATCH', 'CoSpace data was created by a newer runtime');
   if (version === REVIEW_SCHEMA && Number(oldLayout) === DATA_LAYOUT) return;
-  if (version === 'markdown-text-v1' || version === 'markdown-text-v2') makePreMigrationBackup(db, databasePath);
-
   db.exec('BEGIN IMMEDIATE');
   try {
     const lockedVersion = hasTable(db, 'space_meta') ? db.prepare("SELECT value FROM space_meta WHERE key='schema'").get()?.value : null;
@@ -236,6 +241,7 @@ function migrateReviewSchema(db, databasePath) {
       db.exec('COMMIT');
       return;
     }
+    if (lockedVersion === 'markdown-text-v1' || lockedVersion === 'markdown-text-v2') makePreMigrationBackup(db, databasePath);
     const sourceVersion = version ?? 'new';
     const snapshot = snapshotTables(db);
     if (version === 'markdown-text-v1' || version === 'markdown-text-v2') {
