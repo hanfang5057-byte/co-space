@@ -70,10 +70,10 @@ function suggestionPlugin(surface, markdown, suggestions, onReady) {
   });
 }
 
-export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsReady, t, readOnly = false, suggestions = [], autoFocus = false }) {
+export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsReady, onEditorReady, t, readOnly = false, suggestions = [], autoFocus = false }) {
   const rootRef = useRef(null);
-  const callbacksRef = useRef({ onChange, onDecorationsReady, t });
-  callbacksRef.current = { onChange, onDecorationsReady, t };
+  const callbacksRef = useRef({ onChange, onDecorationsReady, onEditorReady, t });
+  callbacksRef.current = { onChange, onDecorationsReady, onEditorReady, t };
   const activeSuggestions = readOnly ? suggestions : NO_SUGGESTIONS;
 
   useEffect(() => {
@@ -119,6 +119,7 @@ export function MarkdownEditor({ markdown, editorRef, onChange, onDecorationsRea
         view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(end), 1)));
         view.focus();
       });
+      callbacksRef.current.onEditorReady?.();
     };
 
     initialize().catch(error => {
