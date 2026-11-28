@@ -1,13 +1,13 @@
 {
-  "version": "0.1.21",
+  "version": "0.2.0",
   "platforms": {
     "darwin-aarch64-app": {
-      "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.1.21/macos-arm64--CoSpace.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVVrV1NxcTVXb2JlbnBIU0cxcHg3TEtTQWlteks2R0F4VFp6Y291MHRzdVNMQjZxekphb1UwRjdwUDh4aGVYLzdpbXRXOHdBYzFJN0VUbGowVkIxR2c4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzkzNDk5CWZpbGU6Q29TcGFjZS5hcHAudGFyLmd6CXZlcnNpb246MC4xLjIxCkpjQk5zTDBmV05yRzV4WXVtQmZUNXFTYmlXY2ZBbFVOdm1WZVhtR0d3cE1HYXRJS2t2U2Z5YWprSXRPdmhuNUFicjBKamtabk51R2VaMS85Y1JCNkRnPT0K"
+      "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.2.0/macos-arm64--CoSpace.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVR5Rlh4V3c2SVhGNTJzNW1KclB5TmRVUjkzbC9RVlBSNlZKRTNvN3VCdlR2LzN0S3NwR01TbExHbkswWVl4WTROWnJUdFVMS2MzYkFJUnByaXVaZWdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1ODY4MTcwCWZpbGU6Q29TcGFjZS5hcHAudGFyLmd6CXZlcnNpb246MC4yLjAKVzYwTTdrWjhOVHc2bE5zVElmeW5YZ05yb2g0dlUvZE1BR2oycTNTZmxXVW9lZzNPTm9vL3F4KzNKcUhBVGx6TDVwQnhhL2pIdkZpZk1BeDJrUXlpQ0E9PQo="
     },
     "linux-x86_64-appimage": {
-      "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.1.21/linux-x64--CoSpace_0.1.21_amd64.AppImage",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVhYNDBlV1FKelE4bTllY0NWSS8xNEtjdjEwNldyS2VKd1JTNDlvSTFWSGJkOFlPbHgrOTl4d09mb1BrN002dHJ4OWd2SVRqNVEwSEFDMnpjNTltY2dvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzkzNjQyCWZpbGU6Q29TcGFjZV8wLjEuMjFfYW1kNjQuQXBwSW1hZ2UJdmVyc2lvbjowLjEuMjEKN0tQazhOQm0yUkE4WXFJVG8yN0ZLanR4a0czcHVId1htaVZOZE5UcW9HN1FuRHEzdVhWYVYwQ3ZzNGpsUk8yd24vcS9kNTg3WWtEUGxMY0V3bXJoQnc9PQo="
+      "url": "https://github.com/hanfang5057-byte/co-space/releases/download/desktop-v0.2.0/linux-x64--CoSpace_0.2.0_amd64.AppImage",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVzIvZHFLU0d3ZVRkV0hXNFhoYWgyekZkYWFSVllsQWtRNDI1RnFORUFqQzlJamEycTlSMC9rWS9qNTVNR0NZMGVpNXpiYjNQbTVwT1V1VURWNFNXck52NXZ4aE5DQXdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1ODY3OTU4CWZpbGU6Q29TcGFjZV8wLjIuMF9hbWQ2NC5BcHBJbWFnZQl2ZXJzaW9uOjAuMi4wCm5wVFFuOEF3cnlpM0dxNmsxZXNVUlZYUk84bGVHVlBDcWVPWGRNekU5cnZObjU5NGZUUTZsaERsMDIzN0QvekpEQWpWMlZnaEdISGRGcThHYVN0WkR3PT0K"
     }
   }
 }
