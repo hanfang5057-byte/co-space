@@ -6,6 +6,10 @@
 
 CoSpace 面向 Agent 与个人文档协作。Agent 可以读取你指定的文档、创建新文档，或对已有内容提出带版本和位置的修改建议。已有文档只有在用户接受建议后才会改变；冲突修改会被拒绝，避免覆盖彼此的工作。
 
+[![CoSpace 桌面端：左侧文档工作台与 Agent 接入，右侧文档中高亮标出评论位置并浮出评论卡片。](assets/preview-desktop.png)](assets/preview-desktop.png)
+
+*桌面端：独立窗口里的文档工作台，圈出位置直接留评论，Agent 的修改逐条由你决定。*
+
 ## 开始使用
 
 CoSpace 提供两个产品入口，当前可用状态和安装方式见[官网](https://hanfang5057-byte.github.io/co-space/)：
@@ -16,6 +20,10 @@ CoSpace 提供两个产品入口，当前可用状态和安装方式见[官网](
 | 桌面端 | 为支持 stdio MCP 的 Agent 提供本地文档工作台 | 已发布：macOS（Apple 芯片）与 Linux（deb/AppImage）安装包见 [Releases](https://github.com/hanfang5057-byte/co-space/releases)；Intel Mac 不受支持。安装与迁移说明见[官网](https://hanfang5057-byte.github.io/co-space/)与[桌面端说明](apps/desktop/README.md)。旧版 Local Server 已停止分发，其数据可在桌面端首次启动时导入。 |
 
 如需从插件市场发现 DSH 插件，可将[市场索引](https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json)添加到 DSH 的 Custom plugin indexes。
+
+在 DSH 中，同一套审阅是这样：
+
+[![在 DeepSeek Harness 中打开 CoSpace：左侧对话提出修改建议，右侧正文用红绿高亮标出增删改，可逐条接受或拒绝。](assets/preview.png)](assets/preview.png)
 
 ## 工作方式
 

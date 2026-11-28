@@ -1,3 +1,5 @@
+import { RULES } from '../../../packages/agent-contract/src/index.js';
+
 /**
  * Review decision card: the Agent offers one card after finishing a review pass
  * so the user can accept the submitted suggestions without leaving the chat.
@@ -33,7 +35,7 @@ const detailsSchema = {
 
 const SKILL_BODY = `# CoSpace review decision card
 
-Use this skill only after \`space_suggest\` submitted suggestions for a document in this turn. Do not offer a card for ordinary reads, for suggestions from an earlier turn you did not just submit, or when the user declined a card.
+Use this skill only after \`space_suggest\` or \`space_suggest_batch\` submitted suggestions for a document in this turn. Do not offer a card for ordinary reads, for suggestions from an earlier turn you did not just submit, or when the user declined a card.
 
 Offer exactly one card by ending the answer with a fenced block:
 
@@ -42,9 +44,10 @@ Offer exactly one card by ending the answer with a fenced block:
 \`\`\`
 
 Rules:
+- ${RULES.decisions}
 - \`action\` is always \`cospace-review\`.
-- \`docId\` and every \`suggestionIds\` entry come from this turn's tool results; never invent them.
-- List at most 50 suggestion ids and only suggestions whose current status is pending or conflicted.
+- \`docId\` and every \`suggestionIds\` entry come from this turn's tool results; never invent them. Convert numeric suggestion IDs to decimal strings for the card.
+- List at most 50 suggestion ids and only successfully submitted suggestions whose current status is pending or conflicted. Omit failed batch items.
 - The card's accept action is a user decision: never claim suggestions were accepted until a later tool result reports it.
 - Keep the title and brief in the user's language. Do not repeat the card anywhere else in the answer.`;
 
