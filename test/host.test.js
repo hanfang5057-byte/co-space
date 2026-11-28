@@ -130,28 +130,31 @@ test('client bundle registers Space panel, picker action, and reference serializ
  adapter.navigation.openDocumentInPage('doc-4');
  assert.equal(followed,'doc-4');unsubscribe();
  assert.deepEqual(registrations.filter(x=>x.options.name==='tool.call.toolview').map(x=>x.options.key),
-   ['mcp__space__space_document_read','mcp__space__space_suggest','mcp__space__space_suggestion_list']);
+   ['space_document_read','space_suggest','space_suggestion_list']);
  assert.deepEqual(registrations.filter(x=>x.options.name==='sidebar.right.tab.menu.item').map(x=>x.options.id),
    ['space-copy-reference','space-copy-link','space-open-in-page','space-export-markdown','space-export-docx']);
  assert.equal(cardBodies.length,1);assert.equal(cardBodies[0].action,'cospace-review');assert.equal(typeof cardBodies[0].Body,'function');
 });
 
-test('plugin registers MCP and web route against the same home and disposes them', async () => {
-  const { apply, mcpReady } = await import('../adapters/dsh/index.js');
+test('plugin registers native agent tools and the web route against the same home and disposes them', async () => {
+  const { apply } = await import('../adapters/dsh/index.js');
   const home = mkdtempSync(path.join(tmpdir(), 'space-apply-'));
-  const old = process.env.DSH_SPACE_HOME;
-  process.env.DSH_SPACE_HOME = home;
-  const regs = [];
   const disposers = [];
+  const registeredTools = [];
+  const routes = [];
+  const sections = [];
   const kinds = [];
   const providers = [];
-  const tools = { get: name => (name === 'mcp__space__space_document_read' ? {} : undefined) };
   const ctx = {
-    get: name => (name === 'tools' ? tools : undefined),
+    get: () => undefined,
     inject: (_deps, fn) => fn(ctx),
     effect: fn => { disposers.push(fn()); },
-    mcpManager: { register: (name, config) => { regs.push({ name, config }); return () => {}; } },
-    webServer: { register: route => { regs.push({ route }); return () => {}; } },
+    tools: { register: definition => { registeredTools.push(definition); return () => {}; } },
+    webServer: { register: route => { routes.push(route); return () => {}; } },
+    systemPrompt: {
+      section: section => { sections.push(section); return () => {}; },
+      getSectionOrder: name => (name === 'MCP_SERVERS' ? 3100 : 0),
+    },
     actionCards: {
       register: kind => { kinds.push(kind); return () => {}; },
       record: () => {},
@@ -161,19 +164,26 @@ test('plugin registers MCP and web route against the same home and disposes them
   };
 
   try {
-    apply(ctx);
-    assert.equal(regs[0].name, 'space');
-    assert.equal(regs[0].config.env.DSH_SPACE_HOME, home);
-    assert.equal(regs[0].config.toolLoading, 'eager');
-    const mcpEntry = regs[0].config.args[0];
-    assert.equal(path.basename(path.dirname(mcpEntry)), 'server');
-    assert.equal(path.basename(mcpEntry), 'mcp-entry.js');
-    assert.equal(regs[1].route.path, '/cospace-api');
-    // Readiness follows the tool registry, so the review page hides its prompt
-    // entry exactly when the MCP tools are missing.
-    assert.equal(mcpReady(ctx), true);
-    assert.equal(mcpReady({ get: () => ({ get: () => undefined }) }), false);
-    assert.equal(mcpReady({ get: () => undefined }), true);
+    apply(ctx, { home });
+    assert.deepEqual(registeredTools.map(definition => definition.name).sort(), [
+      'space_comment_complete', 'space_comment_list', 'space_document_create', 'space_document_find',
+      'space_document_outline', 'space_document_read', 'space_document_read_range', 'space_review_summary',
+      'space_suggest', 'space_suggest_batch', 'space_suggestion_get', 'space_suggestion_list',
+    ]);
+    for (const definition of registeredTools) {
+      assert.equal(typeof definition.description, 'string');
+      assert.ok(definition.parameters && definition.parameters.type === 'object');
+      assert.equal(definition.output.schema.type, 'object');
+    }
+    // Success renders one JSON text block, the payload the client cards parse.
+    const read = registeredTools.find(definition => definition.name === 'space_document_read');
+    assert.deepEqual(read.output.render({}, { id: 'doc-1' }), [{ type: 'text', text: '{"id":"doc-1"}' }]);
+    // A failure carries the public error code in the thrown message.
+    await assert.rejects(read.execute({ id: 'space:missing' }), /DOCUMENT_NOT_FOUND/);
+    assert.equal(routes[0].path, '/cospace-api');
+    // The behavioral guidance reaches the assembled system prompt.
+    assert.match(sections[0].text, /space_document_create/);
+    assert.match(sections[0].text, /Existing documents are never edited directly/);
     // The review card kind and its model-only skill are registered on the same
     // document service as the UI API.
     assert.equal(kinds.length, 1);
@@ -186,9 +196,40 @@ test('plugin registers MCP and web route against the same home and disposes them
     assert.match(definition.content, /"action":"cospace-review"/);
   } finally {
     for (const dispose of disposers.reverse()) dispose?.();
-    if (old === undefined) delete process.env.DSH_SPACE_HOME;
-    else process.env.DSH_SPACE_HOME = old;
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('the one-shot migration adopts a legacy DSH_SPACE_HOME override into Config', async () => {
+  const { adoptLegacyHome, defaultHome, resolveSpaceHome } = await import('../adapters/dsh/server/migration.js');
+  assert.equal(resolveSpaceHome(), path.resolve(defaultHome()));
+  const legacy = mkdtempSync(path.join(tmpdir(), 'space-legacy-'));
+  const previous = process.env.DSH_SPACE_HOME;
+  process.env.DSH_SPACE_HOME = legacy;
+  const edits = [];
+  const editor = { edit: async (_entry, change) => { edits.push(change({})); } };
+  const ctx = { get: name => (name === 'configEditor' ? editor : undefined), fiber: { entry: { id: 'dsh-space' } } };
+  try {
+    // Resolution keeps the legacy store until Config owns the value.
+    assert.equal(resolveSpaceHome(), path.resolve(legacy));
+    assert.equal(resolveSpaceHome({ home: '  ' }), path.resolve(legacy));
+    assert.equal(await adoptLegacyHome(ctx), true);
+    assert.deepEqual(edits, [{ home: path.resolve(legacy) }]);
+    // A configured, default, or absent override never writes.
+    assert.equal(await adoptLegacyHome(ctx, { home: legacy }), false);
+    assert.equal(edits.length, 1);
+    process.env.DSH_SPACE_HOME = path.resolve(defaultHome());
+    assert.equal(await adoptLegacyHome(ctx), false);
+    delete process.env.DSH_SPACE_HOME;
+    assert.equal(await adoptLegacyHome(ctx), false);
+    assert.equal(edits.length, 1);
+    // A profile without the editor keeps the environment fallback instead of failing.
+    assert.equal(await adoptLegacyHome({ get: () => undefined }), false);
+    assert.equal(resolveSpaceHome({ home: '/configured' }), path.resolve('/configured'));
+  } finally {
+    if (previous === undefined) delete process.env.DSH_SPACE_HOME;
+    else process.env.DSH_SPACE_HOME = previous;
+    rmSync(legacy, { recursive: true, force: true });
   }
 });
 
@@ -309,16 +350,4 @@ test('new conversation choice resolves a different target and preserves it on re
     assert.deepEqual(resolved,[{operationId:'new-send',forceNew:true,excludeSessionId:'current'}]);
     await host.dispatch('sendComments',payload);assert.equal(resolved.length,1);assert.equal(sent.length,1);
   } finally {host.close();rmSync(home,{recursive:true,force:true});}
-});
-
-test('the UI can ask the host whether its MCP tools are ready', async () => {
-  const home=mkdtempSync(path.join(tmpdir(),'space-status-'));
-  const ready=createHostApi({home,status:async()=>({mcpReady:true})});
-  const cold=createHostApi({home,status:async()=>({mcpReady:false})});
-  const plain=createHostApi({home});
-  try {
-    assert.deepEqual(await ready.dispatch('status'),{mcpReady:true});
-    assert.deepEqual(await cold.dispatch('status'),{mcpReady:false});
-    assert.deepEqual(await plain.dispatch('status'),{});
-  } finally {ready.close();cold.close();plain.close();rmSync(home,{recursive:true,force:true});}
 });

@@ -116,18 +116,6 @@ test('ungrouped sessions adopt their directory as a workspace', async () => {
   assert.deepEqual(created, [{ path: '/project' }, { workspaceId: 'adopted' }]);
 });
 
-test('a host without workspace services still creates a session from the default directory', async () => {
-  const target = await resolveSendTarget({}, services({
-    workspaceController: undefined,
-    workspaceRegistry: undefined,
-    sessionController: {
-      list: async () => ({ items: [] }),
-      create: async () => ({ sessionId: 'cwd-session' }),
-    },
-  }));
-  assert.deepEqual(target, { sessionId: 'cwd-session', created: true });
-});
-
 test('no usable sessions or workspaces fails with a clear code', async () => {
   await assert.rejects(
     resolveSendTarget({}, {

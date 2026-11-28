@@ -20,7 +20,7 @@ for (const target of ['dsh', 'local']) {
     let server, daemon;
     try {
       if (target === 'dsh') {
-        await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../adapters/dsh/server/mcp-entry.js', import.meta.url))], env: { ...process.env, DSH_SPACE_HOME: dataHome } }));
+        await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../test/fixtures/mcp-stdio-entry.js', import.meta.url))], env: { ...process.env, DSH_SPACE_HOME: dataHome } }));
       } else {
         daemon = await startLocalService({ dataHome, runtimeHome: path.join(root, 'runtime'), versionHome: root });
         const { space, collaboration } = createRemoteServices(daemon);

@@ -29,7 +29,7 @@ for (const target of ['direct', 'local', 'dsh']) {
       }
       client = new Client({ name: 'capabilities-test', version: '1' });
       if (target === 'dsh') {
-        await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../adapters/dsh/server/mcp-entry.js', import.meta.url))], env: { ...process.env, DSH_SPACE_HOME: home } }));
+        await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../test/fixtures/mcp-stdio-entry.js', import.meta.url))], env: { ...process.env, DSH_SPACE_HOME: home } }));
       } else {
         server = createMcpServer(service, collaboration, { reviewUrl: 'http://127.0.0.1:1234/' });
         const [a, b] = InMemoryTransport.createLinkedPair();

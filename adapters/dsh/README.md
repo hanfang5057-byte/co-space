@@ -20,7 +20,7 @@ Requires DSH `0.2.3-alpha.2` or later and Node.js 24 or later. Offline installs 
 
 ## Data
 
-Documents, suggestions, comments, and comment-handling results are stored locally in `$DSH_HOME/space/review.sqlite`. Set `DSH_SPACE_HOME` to choose another directory. Agent-proposed edits do not change accepted content until the user accepts them. Comment text is not sent in the prompt; the agent reads it through the MCP tools after an explicit user action.
+Documents, suggestions, comments, and comment-handling results are stored locally in `$DSH_HOME/space/review.sqlite`. Set the plugin's `home` configuration to choose another directory. Upgrades from 0.1.x adopt a legacy `DSH_SPACE_HOME` override into that configuration automatically. Agent-proposed edits do not change accepted content until the user accepts them. Comment text is not sent in the prompt; the agent reads it through the document tools after an explicit user action.
 
 ## Links
 

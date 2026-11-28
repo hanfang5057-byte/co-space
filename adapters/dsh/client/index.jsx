@@ -151,7 +151,8 @@ export function apply(ctx) {
     capabilities,
     conversation:sendBridge,
     // The review page gates its "let the Agent draft/review" actions on this
-    // object; `mcpReady` follows the Host's tool registration probe.
+    // object; native tools register synchronously at activation, so readiness
+    // is a static capability rather than a probed state.
     prompts:{mcpReady:true},
     identity:{getCurrentUser:()=>api('getUser',{locale:ctx.locale.getSnapshot().active})},
     files:{saveExport},
@@ -166,7 +167,6 @@ export function apply(ctx) {
       openDocumentInPage:docId=>{mainDocument.set(docId);selectSpacesPanel(ctx);},
     },
   };
-  void api('status').then(status=>{adapter.prompts.mcpReady=status?.mcpReady!==false;}).catch(()=>{});
   registerSpaceToolViews(ctx);
   registerSpaceTabMenu(ctx,adapter);
   ctx.inject(['actionCards'],scope=>{

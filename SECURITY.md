@@ -14,9 +14,9 @@ Include the plugin version, DSH version, operating system, reproduction steps, a
 
 CoSpace is a local-first plugin:
 
-- Documents, suggestions, comments, and comment-handling results live in a local SQLite database under `$DSH_HOME/space/review.sqlite` (or `DSH_SPACE_HOME`).
-- The plugin registers MCP tools and a host HTTP API. The HTTP route registers with `auth: 'required'`, so DSH applies its Host/Origin source check and browser credential admission before dispatch: requests without a valid credential are rejected, and a host that cannot decide authentication fails closed with 503. The plugin does not enumerate documents, and accepted text changes only after a user accepts a suggestion.
-- Comment text is read by the agent through the MCP tools only after an explicit user action; it is not included in the prompt sent to the conversation.
+- Documents, suggestions, comments, and comment-handling results live in a local SQLite database under `$DSH_HOME/space/review.sqlite` (or the directory the plugin's `home` configuration selects).
+- The plugin registers native agent tools and a host HTTP API. The HTTP route registers with `auth: 'required'`, so DSH applies its Host/Origin source check and browser credential admission before dispatch: requests without a valid credential are rejected, and a host that cannot decide authentication fails closed with 503. The plugin does not enumerate documents, and accepted text changes only after a user accepts a suggestion.
+- Comment text is read by the agent through the document tools only after an explicit user action; it is not included in the prompt sent to the conversation.
 - The plugin runs with the permissions of the DSH process. DSH tool approvals and sandbox settings do not sandbox plugin code, so review the source before installing a build you did not produce.
 
 Out of scope: vulnerabilities in DSH itself, third-party MCP servers, and issues that require the attacker to already control the user's DSH profile or filesystem.

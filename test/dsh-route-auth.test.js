@@ -19,7 +19,8 @@ function createHarness() {
       const dispose = callback();
       if (typeof dispose === 'function') disposers.push(dispose);
     },
-    mcpManager: { register: () => () => {} },
+    tools: { register: () => () => {} },
+    systemPrompt: { section: () => () => {}, getSectionOrder: () => 0 },
     webServer: {
       register: value => {
         route = value;
