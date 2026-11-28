@@ -189,7 +189,7 @@ jobs:
           fi
           for asset in "$tarball" "$tarball.sha256"; do
             name="$(basename "$asset")"
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.[].name' | grep -qx "$name"; then
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx "$name"; then
               echo "Asset $name is already attached to $tag."
             else
               gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY"
