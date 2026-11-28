@@ -153,7 +153,9 @@ jobs:
           if git ls-remote --tags origin "refs/tags/$tag" | grep -q .; then
             echo "Tag $tag already exists; keeping the original (release tags are never moved)."
           else
-            git tag -a "$tag" -m "dsh-plugin-space $DSH_VERSION"
+            git -c user.name=github-actions[bot] \
+              -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+              tag -a "$tag" -m "dsh-plugin-space $DSH_VERSION"
             git push origin "$tag"
           fi
       - name: Ensure the GitHub release and tarball assets
@@ -187,7 +189,7 @@ jobs:
           fi
           for asset in "$tarball" "$tarball.sha256"; do
             name="$(basename "$asset")"
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.[].name' | grep -qx "$name"; then
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx "$name"; then
               echo "Asset $name is already attached to $tag."
             else
               gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY"
