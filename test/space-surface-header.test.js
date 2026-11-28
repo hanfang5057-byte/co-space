@@ -98,7 +98,7 @@ test('the switch thumb reports the save state, in sight and to a screen reader',
   // The thumb is 22px of header real estate, so the state rides there as one icon
   // and the header keeps a single seat for mode and save state together.
   const block = app.slice(app.indexOf('const saveStateIcons'), app.indexOf('* One comment balloon'));
-  assert.match(block, /synced:Check,readonly:Lock,unsaved:Pencil,saving:LoaderCircle,saved:Check,error:CircleAlert/);
+  assert.match(block, /readonly:Lock,editing:Pencil,unsaved:Pencil,saving:LoaderCircle,saved:Check,error:CircleAlert/);
   assert.match(block, /space-mode-switch-knob is-\$\{state\}/);
   assert.match(block, /aria-label=\{\`\$\{t\('edit\.switchLabel'\)\}，\$\{status\}\`\}/);
   // The state also stays a live region, so a save outcome is announced once.
@@ -106,7 +106,7 @@ test('the switch thumb reports the save state, in sight and to a screen reader',
 
   // Every reported state has a dictionary entry for the icon's tooltip and label.
   const zhBlock = locale.slice(locale.indexOf('export const zh'), locale.indexOf('export const en'));
-  for (const key of ['status.synced', 'status.readonly', 'edit.unsaved', 'edit.saving', 'edit.saved', 'edit.autoSaveFailedShort']) {
+  for (const key of ['status.readonly', 'status.editing', 'edit.unsaved', 'edit.saving', 'edit.saved', 'edit.autoSaveFailedShort']) {
     const escaped = key.replace('.', '\\.');
     assert.ok(new RegExp(`'${escaped}': '([^']+)'`).test(zhBlock), `${key} is missing from the Chinese dictionary`);
   }

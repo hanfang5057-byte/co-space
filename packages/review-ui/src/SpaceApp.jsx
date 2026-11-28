@@ -333,19 +333,21 @@ export function ReviewZoomControls({ review, t = defaultT }) {
   </div>;
 }
 
-// A dirty draft is a pencil, not a second alert: the glyph then tells 'not saved yet'
-// apart from 'save failed' without relying on colour alone.
-const saveStateIcons={synced:Check,readonly:Lock,unsaved:Pencil,saving:LoaderCircle,saved:Check,error:CircleAlert};
-const saveStateKeys={synced:'status.synced',readonly:'status.readonly',unsaved:'edit.unsaved',saving:'edit.saving',saved:'edit.saved',error:'edit.autoSaveFailedShort'};
+// The thumb leads with the mode: review is a lock because the body cannot be
+// edited there, editing is a pencil, and the autosave cycle briefly replaces the
+// pencil with its own feedback. A dirty draft keeps the pencil but turns amber,
+// while a failed save gets the alert glyph, so the two never differ by colour only.
+const saveStateIcons={readonly:Lock,editing:Pencil,unsaved:Pencil,saving:LoaderCircle,saved:Check,error:CircleAlert};
+const saveStateKeys={readonly:'status.readonly',editing:'status.editing',unsaved:'edit.unsaved',saving:'edit.saving',saved:'edit.saved',error:'edit.autoSaveFailedShort'};
 
 /**
  * The save lifecycle the header reports.
  * @param {object} review - review controller from `useSpaceReview`.
- * @returns {'synced'|'readonly'|'unsaved'|'saving'|'saved'|'error'} the state shown in the switch thumb.
+ * @returns {'readonly'|'editing'|'unsaved'|'saving'|'saved'|'error'} the state shown in the switch thumb.
  */
 export function documentSaveState(review) {
-  if(!review?.editing) return review?.canEdit===false?'readonly':'synced';
-  return ({idle:'synced',unsaved:'unsaved',saving:'saving',saved:'saved',error:'error'}[review.editSaveState])||'synced';
+  if(!review?.editing) return 'readonly';
+  return ({idle:'editing',unsaved:'unsaved',saving:'saving',saved:'saved',error:'error'}[review.editSaveState])||'editing';
 }
 
 /**

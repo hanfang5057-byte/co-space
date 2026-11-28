@@ -666,12 +666,25 @@ button.space-ref-card:focus-visible { outline:3px solid var(--cospace-accent); o
    instead of a separate status text next to it. */
 .space-mode-switch-knob { position:absolute; inset-block-start:2px; inset-inline-start:2px; display:grid; place-items:center; inline-size:22px; block-size:22px; border-radius:50%; background:var(--cospace-surface-raised); box-shadow:0 1px 2px color-mix(in srgb,var(--cospace-shadow) 20%,transparent); transition:inset-inline-start .16s ease; }
 .space-mode-switch-knob svg { inline-size:12px; block-size:12px; }
-.space-mode-switch-knob.is-synced, .space-mode-switch-knob.is-readonly { color:var(--cospace-text-secondary); }
+.space-mode-switch-knob.is-readonly, .space-mode-switch-knob.is-editing { color:var(--cospace-text-secondary); }
 .space-mode-switch-knob.is-unsaved { color:var(--cospace-comment); }
 .space-mode-switch-knob.is-saving { color:var(--cospace-accent); }
 .space-mode-switch-knob.is-saved { color:var(--cospace-success); }
 .space-mode-switch-knob.is-error { color:var(--cospace-danger); }
 .space-mode-switch-knob.is-saving svg { animation:space-update-spin 1.1s linear infinite; }
+
+/* Chrome 139+ lets a host reshape every corner: DSH paints a superellipse on
+   `*`, which turns this thumb into a rounded square. A thumb, a capsule and an
+   avatar are geometry rather than a corner style, so CoSpace keeps those round
+   while ordinary rounded rectangles still follow the host's shape language. */
+.space-app .space-mode-switch,
+.space-mode-switch-knob,
+.space-zoom-tools,
+.space-app .space-comment-fab,
+.space-app .space-annotation-avatar,
+.space-dialog-close,
+.space-rail-counts i,
+.space-header-counts i { corner-shape: round; }
 .space-mode-switch[aria-checked="true"] .space-mode-switch-knob { inset-inline-start:calc(100% - 24px); }
 /* The label takes the half the knob leaves free, so it sits in the middle of
    the remaining space instead of the middle of the whole track. */
