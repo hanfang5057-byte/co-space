@@ -1,4 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
+import { migrateDatabase } from './migrations/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { ReviewError } from './review-core.js';
 const fail=(code,message)=>{throw new ReviewError(code,message)};
@@ -82,28 +84,10 @@ export class CommentStore {
     this.ownsDatabase = typeof database === 'string';
     this.db = this.ownsDatabase ? new DatabaseSync(database,{timeout:5000}) : database;
     if (!this.db?.prepare || !this.db?.exec) throw new TypeError('CommentStore requires a database path or SQLite connection');
-    if (this.ownsDatabase) this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL');
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS space_comments(id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, quote TEXT NOT NULL, body TEXT NOT NULL, from_pos INTEGER NOT NULL, to_pos INTEGER NOT NULL, doc_version INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', request_id TEXT, context_before TEXT NOT NULL DEFAULT '', context_after TEXT NOT NULL DEFAULT '', created_at TEXT);
-        CREATE TABLE IF NOT EXISTS space_comment_sends(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, session_id TEXT NOT NULL, doc_id TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error TEXT);
-        CREATE TABLE IF NOT EXISTS space_comment_completions(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, doc_id TEXT NOT NULL, result TEXT NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS space_comment_results(comment_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, suggestion_ids TEXT NOT NULL, operation_id TEXT NOT NULL, updated_at TEXT NOT NULL);`);
-      const columns=new Set(this.db.prepare('PRAGMA table_info(space_comments)').all().map(column=>column.name));
-      if(!columns.has('context_before')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_before TEXT NOT NULL DEFAULT ''");
-      if(!columns.has('context_after')) this.db.exec("ALTER TABLE space_comments ADD COLUMN context_after TEXT NOT NULL DEFAULT ''");
-      if(!columns.has('created_at')) this.db.exec('ALTER TABLE space_comments ADD COLUMN created_at TEXT');
-      const legacy=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_comment_processing'").get();
-      if(legacy){
-        this.db.exec('DELETE FROM space_comments; DELETE FROM space_comment_sends; DELETE FROM space_comment_results; DELETE FROM space_comment_completions; DROP TABLE space_comment_processing');
-      }
-      this.db.exec('COMMIT');
-    } catch(error) {
-      try { this.db.exec('ROLLBACK'); } catch {}
-      if(this.ownsDatabase) this.db.close();
-      throw error;
-    }
+    if (this.ownsDatabase) {
+      try { migrateDatabase(this.db,path.dirname(path.resolve(database)),{journalMode:true,databasePath:database}); }
+      catch(error) { this.db.close(); throw error; }
+    } else this.db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000');
   }
   close(){if(this.ownsDatabase)this.db.close()}
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const result=fn();this.db.exec('COMMIT');return result}catch(e){try{this.db.exec('ROLLBACK')}catch{}throw e}}
@@ -170,7 +154,7 @@ export class CommentStore {
       const state=results.get(r.id);
       const suggestionIds=state?parse(state.suggestion_ids):[];
       const suggestions=suggestionIds.map(id=>this.db.prepare('SELECT id,status FROM review_suggestions WHERE id=? AND doc_id=?').get(id,r.doc_id)).filter(Boolean);
-      return {id:r.id,docId:r.doc_id,quote:r.quote,body:r.body,anchor:{from:r.from_pos,to:r.to_pos,version:r.doc_version},resolved,status:r.status,stale:resolved===null,requestId:r.request_id,createdAt:r.created_at||null,processing:{suggestionIds,suggestions,operationId:state?.operation_id??null,updatedAt:state?.updated_at??null}};
+      return {id:r.id,docId:r.doc_id,quote:r.quote,body:r.body,anchor:{from:r.from_pos,to:r.to_pos,version:r.doc_version},resolved,status:r.status,stale:resolved===null,requestId:r.request_id,createdAt:r.created_at||null,processing:{status:state?.status??(r.status==='processed'?'processed':'pending'),suggestionIds,suggestions,reason:state?.reason??null,operationId:state?.operation_id??null,updatedAt:state?.updated_at??null}};
     });
   }
   completeProcessing({docId,operationId,results}) {
@@ -201,9 +185,9 @@ export class CommentStore {
         }
       }
       const updatedAt=new Date().toISOString();
-      const upsert=this.db.prepare(`INSERT INTO space_comment_results(comment_id,doc_id,suggestion_ids,operation_id,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(comment_id) DO UPDATE SET suggestion_ids=excluded.suggestion_ids,operation_id=excluded.operation_id,updated_at=excluded.updated_at`);
+      const upsert=this.db.prepare(`INSERT INTO space_comment_results(comment_id,doc_id,suggestion_ids,operation_id,updated_at,status,reason) VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(comment_id) DO UPDATE SET suggestion_ids=excluded.suggestion_ids,operation_id=excluded.operation_id,updated_at=excluded.updated_at,status=excluded.status,reason=NULL`);
       const updateStatus=this.db.prepare('UPDATE space_comments SET status=? WHERE id=? AND doc_id=?');
-      for(const result of normalizedResults){upsert.run(result.commentId,docId,JSON.stringify(result.suggestionIds),operationId,updatedAt);updateStatus.run(result.suggestionIds.length?'processed':'pending',result.commentId,docId)}
+      for(const result of normalizedResults){upsert.run(result.commentId,docId,JSON.stringify(result.suggestionIds),operationId,updatedAt,result.suggestionIds.length?'processed':'pending');updateStatus.run(result.suggestionIds.length?'processed':'pending',result.commentId,docId)}
       const result={docId,operationId,results:normalizedResults.map(({commentId,suggestionIds})=>({commentId,suggestionIds}))};
       this.db.prepare('INSERT INTO space_comment_completions(id,fingerprint,doc_id,result,created_at) VALUES(?,?,?,?,?)').run(operationId,fingerprint,docId,JSON.stringify(result),updatedAt);
       return {...result,replay:false};
@@ -224,7 +208,8 @@ export class CommentStore {
       const existing=prior?parse(prior.suggestion_ids):[];
       const replay=existing.includes(suggestionId);
       const suggestionIds=replay?existing:[...existing,suggestionId].sort((a,b)=>a-b);
-      if(!replay) this.db.prepare('INSERT INTO space_comment_results(comment_id,doc_id,suggestion_ids,operation_id,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(comment_id) DO UPDATE SET suggestion_ids=excluded.suggestion_ids,operation_id=excluded.operation_id,updated_at=excluded.updated_at').run(commentId,docId,JSON.stringify(suggestionIds),nonempty(operationId)?operationId:(prior?.operation_id||`link:${suggestionId}`),new Date().toISOString());
+      if(!replay) this.db.prepare("INSERT INTO space_comment_results(comment_id,doc_id,suggestion_ids,operation_id,updated_at,status,reason) VALUES(?,?,?,?,?,'processed',NULL) ON CONFLICT(comment_id) DO UPDATE SET suggestion_ids=excluded.suggestion_ids,operation_id=excluded.operation_id,updated_at=excluded.updated_at,status='processed',reason=NULL").run(commentId,docId,JSON.stringify(suggestionIds),nonempty(operationId)?operationId:(prior?.operation_id||`link:${suggestionId}`),new Date().toISOString());
+      else this.db.prepare("UPDATE space_comment_results SET status='processed',reason=NULL WHERE comment_id=?").run(commentId);
       this.db.prepare("UPDATE space_comments SET status='processed' WHERE id=? AND doc_id=?").run(commentId,docId);
       return {commentId,suggestionIds,replay};
     });

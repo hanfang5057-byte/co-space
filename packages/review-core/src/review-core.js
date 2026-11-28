@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
+import path from 'node:path';
+import { migrateDatabase } from './migrations/index.js';
 
 export class ReviewError extends Error { constructor(code,message,details={}) { super(message); this.code=code; this.details=details; } }
 const fail=(code,message,details)=>{throw new ReviewError(code,message,details)};
@@ -12,38 +14,10 @@ const fingerprint=x=>createHash('sha256').update(json(x)).digest('hex');
 const boundarySafe=(s,n)=>!(n>0&&n<s.length&&s.charCodeAt(n-1)>=0xD800&&s.charCodeAt(n-1)<=0xDBFF&&s.charCodeAt(n)>=0xDC00&&s.charCodeAt(n)<=0xDFFF);
 const context=(s,from,to)=>({before:s.slice(Math.max(0,from-32),from),after:s.slice(to,to+32)});
 export class ReviewStore {
-  constructor(path) {
-    this.db=new DatabaseSync(path,{timeout:5000});
-    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000');
-    const old=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='review_documents'").get();
-    const marker=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='space_meta'").get();
-    const schemaVersion=marker?this.db.prepare("SELECT value FROM space_meta WHERE key='schema'").get()?.value:null;
-    if(old&&schemaVersion!=='markdown-text-v1'&&schemaVersion!=='markdown-text-v2') {
-      this.db.close();
-      throw new ReviewError('UNSUPPORTED_SCHEMA','Unmarked or unsupported review database; back it up and migrate explicitly',{schema:schemaVersion??null});
-    }
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      this.db.exec(`CREATE TABLE IF NOT EXISTS space_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      INSERT OR IGNORE INTO space_meta VALUES('schema','markdown-text-v2');
-      CREATE TABLE IF NOT EXISTS review_documents(id TEXT PRIMARY KEY, version INTEGER NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
-      CREATE TABLE IF NOT EXISTS review_suggestions(id INTEGER PRIMARY KEY AUTOINCREMENT,doc_id TEXT NOT NULL,status TEXT NOT NULL,base_version INTEGER NOT NULL,from_pos INTEGER NOT NULL,to_pos INTEGER NOT NULL,expected TEXT NOT NULL,replacement TEXT NOT NULL,before_context TEXT NOT NULL,after_context TEXT NOT NULL,created_order INTEGER NOT NULL,author TEXT NOT NULL DEFAULT 'Agent',created_at TEXT NOT NULL DEFAULT '');
-      CREATE TABLE IF NOT EXISTS review_operations(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,result TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS review_changes(doc_id TEXT NOT NULL,version INTEGER NOT NULL,from_pos INTEGER NOT NULL,to_pos INTEGER NOT NULL,inserted_length INTEGER NOT NULL,suggestion_order INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(doc_id,version));`);
-      const documentColumns=new Set(this.db.prepare('PRAGMA table_info(review_documents)').all().map(column=>column.name));
-      if(!documentColumns.has('created_at'))this.db.exec("ALTER TABLE review_documents ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
-      if(!documentColumns.has('updated_at'))this.db.exec("ALTER TABLE review_documents ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
-      const suggestionColumns=new Set(this.db.prepare('PRAGMA table_info(review_suggestions)').all().map(column=>column.name));
-      if(!suggestionColumns.has('author'))this.db.exec("ALTER TABLE review_suggestions ADD COLUMN author TEXT NOT NULL DEFAULT 'Agent'");
-      if(!suggestionColumns.has('created_at'))this.db.exec("ALTER TABLE review_suggestions ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
-      if(!suggestionColumns.has('explanation'))this.db.exec("ALTER TABLE review_suggestions ADD COLUMN explanation TEXT NOT NULL DEFAULT ''");
-      this.db.prepare("UPDATE space_meta SET value='markdown-text-v2' WHERE key='schema'").run();
-      this.db.exec('COMMIT');
-    } catch(error) {
-      try { this.db.exec('ROLLBACK'); } catch {}
-      this.db.close();
-      throw error;
-    }
+  constructor(databasePath) {
+    this.db=new DatabaseSync(databasePath,{timeout:5000});
+    try { migrateDatabase(this.db,databasePath===':memory:'?null:path.dirname(path.resolve(databasePath)),{journalMode:true,databasePath}); }
+    catch(error) { this.db.close(); throw error; }
   }
   close(){this.db.close()}
   operation(id,payload,fn){if(!validId(id))fail('INVALID_INPUT','Stable operationId required');const fp=fingerprint(payload);this.db.exec('BEGIN IMMEDIATE');try{const old=this.db.prepare('SELECT * FROM review_operations WHERE id=?').get(id);if(old){if(old.fingerprint!==fp)fail('OPERATION_ID_CONFLICT','Operation ID reused');this.db.exec('COMMIT');return parse(old.result)}const result=fn();this.db.prepare('INSERT INTO review_operations VALUES(?,?,?)').run(id,fp,json(result));this.db.exec('COMMIT');return result}catch(e){try{this.db.exec('ROLLBACK')}catch{}throw e}}
