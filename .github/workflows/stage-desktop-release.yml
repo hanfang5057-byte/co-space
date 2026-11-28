@@ -52,8 +52,6 @@ jobs:
         include:
           - os: macos-15
             target: macos-arm64
-          - os: macos-15-intel
-            target: macos-x64
           - os: ubuntu-22.04
             target: linux-x64
     runs-on: ${{ matrix.os }}
@@ -92,11 +90,11 @@ jobs:
           path: dist/releases/desktop/**
           if-no-files-found: error
 
-  draft:
+  publish:
     needs: package
     environment: desktop-release
     env:
-      COSPACE_RELEASE_TARGETS: macos-arm64,macos-x64,linux-x64
+      COSPACE_RELEASE_TARGETS: macos-arm64,linux-x64
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,8 +118,75 @@ jobs:
         run: |
           node apps/desktop/scripts/assemble-release.mjs dist/desktop-release-input dist/desktop-release
           node apps/desktop/scripts/verify-release.mjs dist/desktop-release
-      - name: Create draft release
+      - name: Create or resume release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "CoSpace Desktop ${GITHUB_REF_NAME#desktop-v}" --notes 'Draft: complete platform installation and upgrade acceptance before publishing. macOS builds are ad-hoc signed and not notarized.' dist/desktop-release/*
+          tag="$GITHUB_REF_NAME"
+          title="CoSpace Desktop ${GITHUB_REF_NAME#desktop-v}"
+          notes='Automated release: platform builds, smoke checks, SHA-256 checksums, and updater signatures passed. macOS is ad-hoc signed and not notarized.'
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --verify-tag --draft --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes"
+          fi
+          assets="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name')"
+          for asset in dist/desktop-release/*; do
+            name="$(basename "$asset")"
+            if printf '%s\n' "$assets" | grep -Fxq "$name"; then
+              echo "Release already contains $name."
+            else
+              gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
+          expected="$(find dist/desktop-release -maxdepth 1 -type f -printf '%f\n' | sort)"
+          actual="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | sort)"
+          while IFS= read -r name; do
+            if ! printf '%s\n' "$actual" | grep -Fxq "$name"; then
+              echo "::error::Published release is missing $name"
+              exit 1
+            fi
+          done <<< "$expected"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+
+  promote:
+    needs: publish
+    name: Promote the verified update manifest
+    environment: desktop-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PROMOTION_TAG: ${{ github.ref_name }}
+      COSPACE_UPDATER_PUBLIC_KEY: ${{ vars.COSPACE_UPDATER_PUBLIC_KEY }}
+      COSPACE_SUPPORTED_TARGETS: macos-arm64,linux-x64
+      COSPACE_VERIFY_UPDATE: ${{ github.workspace }}/apps/desktop/tools/verify-update/target/release/cospace-verify-update
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+      - run: npm ci
+      - name: Build the update verifier
+        run: cargo build --locked --release --manifest-path apps/desktop/tools/verify-update/Cargo.toml
+      - name: Verify release and prepare the supported update manifest
+        run: node apps/desktop/scripts/prepare-promotion.mjs "$PROMOTION_TAG"
+      - name: Confirm the npm package referenced by the site resolves
+        run: npm view dsh-plugin-space version --silent
+      - name: Commit and deploy the update manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git status --porcelain -- apps/site/desktop/latest.json | grep -q .; then
+            git add apps/site/desktop/latest.json
+            git commit -m "chore(site): promote desktop ${PROMOTION_TAG#desktop-v}"
+            git push origin HEAD:main
+          else
+            echo "The supported update manifest is already current."
+          fi
+          gh workflow run pages.yml --ref main
