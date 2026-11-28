@@ -12,8 +12,8 @@ The pipeline serves three distinct needs with `dev` integration and `main` relea
 
 The mapping to industry practice:
 
-- **Release-on-demand with a protected release branch.** `main` is always releasable; every pull request is verified. A release is *not* "every push" — it is an explicit version bump commit, exactly like release-please/changesets treat the version PR as the release intent, but without the ceremony of a separate release branch.
-- **Version files are the trigger contract.** `release/npm-version.json` is the single DSH release intent; the six synchronized desktop version sources are the desktop release intent. the release workflow inspects the pushed range and routes accordingly, so a daily progress push and a release push are distinguished by content, not by who remembers to run a command.
+- **Release-on-demand with a protected release branch.** `main` is always releasable; every pull request into `dev` or `main` is verified. A release is *not* "every push" — it is an explicit version bump commit, exactly like release-please/changesets treat the version PR as the release intent, but without the ceremony of a separate release branch.
+- **Version files are the trigger contract.** `release/npm-version.json` is the single DSH release intent; the six synchronized desktop version sources are the desktop release intent. The release workflow inspects the pushed range and routes accordingly, so a daily progress push and a release push are distinguished by content, not by who remembers to run a command.
 - **Convergent (idempotent) release runs.** Publishing workflows may re-run at any time and end in the same state: the version is on npm, `market/index.json` is committed, the annotated tag exists, and the GitHub Release carries the staged tarball. A partially failed release is repaired by re-running, never by re-creating tags or hand-editing generated files.
 - **Signed artifacts publish only after verification.** Desktop installers ship through a signed updater. The `desktop-release` environment provides signing keys and tag restrictions; after build, smoke, checksum, signature, and URL verification succeed, the pipeline publishes the release and promotes the update manifest.
 - **OIDC, not tokens.** The npm publish uses trusted publishing with provenance, bound to the `publish-dsh.yml` workflow filename. No `NPM_TOKEN` secret exists to leak or rotate.
@@ -23,12 +23,12 @@ The mapping to industry practice:
 
 | Situation | Trigger | What runs | Publication |
 | --- | --- | --- | --- |
-| Progress save, shared code only | push to `main` (paths) | `CI` verify + desktop sidecar smoke | None |
-| Progress save touching desktop code | push to `main` (paths) | `CI` + `Build CoSpace Desktop` preview matrix (unsigned, 14-day artifacts) | None |
+| Progress save, shared code only | PR merge to `main` (matching paths) | `CI` verify + desktop sidecar smoke | None |
+| Progress save touching desktop code | PR merge to `main` (matching paths) | `CI` + `Build CoSpace Desktop` preview matrix (unsigned, 14-day artifacts) | None |
 | Integration pull request | PR into `dev` or `main` | `CI`; desktop changes also run the `Build CoSpace Desktop` preview matrix | None |
-| DSH prerelease preview | push with `release/npm-version.json` = `X.Y.Z-rc.n` | `Publish DSH plugin` | npm dist-tag `rc` + prerelease GitHub Release; `latest` untouched |
-| DSH stable release | push with `release/npm-version.json` = `X.Y.Z` | `Publish DSH plugin` | npm `latest` + automatically merged market metadata PR + tag `vX.Y.Z` + GitHub Release |
-| Desktop release | merge to `main` that bumps the six desktop version sources | `Build CoSpace Desktop` verify → authorize tag → `Stage signed desktop release` | Published signed GitHub Release + verified manifest PR auto-merge and Pages deployment |
+| DSH prerelease preview | merge to `main` with `release/npm-version.json` = `X.Y.Z-rc.n` | `Publish DSH plugin` | npm dist-tag `rc` + prerelease GitHub Release; `latest` untouched |
+| DSH stable release | merge to `main` with `release/npm-version.json` = `X.Y.Z` | `Publish DSH plugin` | npm `latest` + automatically merged market metadata PR + tag `vX.Y.Z` + GitHub Release |
+| Desktop release | merge a release PR to `main` that bumps the six desktop version sources | `Build CoSpace Desktop` verify → authorize tag → `Stage signed desktop release` | Published signed GitHub Release + verified manifest PR auto-merge and Pages deployment |
 
 Version-source contracts:
 
@@ -41,11 +41,11 @@ Version-source contracts:
 
 ### `CI` (ci.yml)
 
-Runs on path-filtered pushes to `main` and on every PR into `dev` or `main`. The always-running PR check verifies `npm run check`, the staged DSH package (`verify:dsh-package`), market index invariants (`sync-market --check`), and the install site build; it is the required `main` ruleset check. On matching pushes it also runs the desktop sidecar smoke (`prepare:tauri` + `smoke`) on Linux. Concurrency cancels superseded runs per ref.
+Runs on path-filtered `main` push events (normally created by PR merges) and on every PR into `dev` or `main`. The always-running PR check verifies `npm run check`, the staged DSH package (`verify:dsh-package`), market index invariants (`sync-market --check`), and the install site build; it is the required `main` ruleset check. On matching pushes it also runs the desktop sidecar smoke (`prepare:tauri` + `smoke`) on Linux. Concurrency cancels superseded runs per ref.
 
 ### `Publish DSH plugin` (publish-dsh.yml)
 
-Triggers on `main` pushes that change `release/npm-version.json`, the synchronized `adapters/dsh/package.json`, or the workflow itself, plus manual dispatch. One convergent job:
+Triggers on `main` push events from merged PRs that change `release/npm-version.json`, the synchronized `adapters/dsh/package.json`, or the workflow itself, plus manual dispatch. One convergent job:
 
 1. `npm run check`, then `npm run pack:dsh` — the only build path; publishes happen from `dist/dsh-plugin`, never the workspace root.
 2. Version agreement check across the three DSH version sources.
@@ -90,7 +90,7 @@ Unchanged. Deploys on `main` pushes that change the site or market metadata, and
 
 ## Failure and recovery playbook
 
-- **A verify step failed during a release push.** Nothing was published or tagged. Fix on `main`; for DSH re-run the workflow (dispatch converges on the new head); for desktop dispatch `Build CoSpace Desktop` with `route: release`.
+- **A release verification step failed after its PR merged to `main`.** Nothing was published or tagged. Fix through a PR to `main`; for DSH re-run the workflow (dispatch converges on the new head); for desktop dispatch `Build CoSpace Desktop` with `route: release`.
 - **npm published, but the run failed before market sync / tag / release.** Re-run the workflow; every remaining step is an ensure step and will complete the release without republishing.
 - **Signed staging failed before a release was published (for example, misconfigured signing-secret values).** Fix the environment configuration, then re-dispatch `Stage signed desktop release` on the same tag. No version bump is needed if the release was not published; the same tag can be rerun after fixing configuration.
 - **The release was published but manifest promotion failed.** Fix the cause and re-run `Stage signed desktop release` on the same tag; asset upload and manifest generation are idempotent.

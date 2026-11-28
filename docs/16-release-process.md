@@ -9,7 +9,7 @@ The former hand-run release sequences are deprecated and must not be used for a 
 | Deprecated hand-run step | Superseded by |
 | --- | --- |
 | `npm publish ./dist/dsh-plugin` and hand-managed dist-tags | `Publish DSH plugin` (npm trusted publishing with provenance) |
-| `node scripts/sync-market.mjs` after publishing and hand-committing `market/index.json` | The publish workflow's convergent market-sync step; hand-running the script remains only a recovery tool when branch protection blocks the bot push |
+| `node scripts/sync-market.mjs` after publishing and hand-committing `market/index.json` | The publish workflow's market-sync automation PR; hand-running the script is reserved for recovery when that automation cannot produce the correct metadata |
 | Hand-created annotated tags `vX.Y.Z` / `desktop-vX.Y.Z`, and tarballs attached to releases by hand | Tag and release creation inside the pipelines; tags are never moved or reused |
 | Hand-built signed installers or hand-running `prepare-promotion` locally | `Stage signed desktop release` (tag-triggered, protected environment) builds, verifies, publishes, and promotes the manifest automatically; manual dispatch on an existing tag reruns the convergent flow |
 
@@ -17,18 +17,18 @@ The former hand-run release sequences are deprecated and must not be used for a 
 
 ## Release tracks and shared rules
 
-The workspace root is private and must never be published. DSH and Desktop keep independent version sources, tags, artifacts and release gates. A coordinated release may intentionally assign the same version to both products (the current release aligns both tracks at `0.1.21`), but each product still follows its own publish or release sequence; never move or reuse a tag. A matching number does not mean the artifacts must ship together.
+The workspace root is private and must never be published. DSH and Desktop keep independent version sources, tags, artifacts and release gates. A coordinated release may intentionally assign the same version to both products, but each product still follows its own publish or release sequence; never move or reuse a tag. A matching number does not mean the artifacts must ship together.
 
 | Product | Artifact | Version source | Git tag |
 | --- | --- | --- | --- |
 | DSH plugin | `dsh-plugin-space` npm package | `release/npm-version.json` | `vX.Y.Z` |
 | Desktop | Signed platform installers and updater assets | Desktop package, Tauri configuration and Cargo manifest | `desktop-vX.Y.Z` |
 
-1. Choose the artifact and version. A version bump pushed to `main` authorizes the configured pipeline to publish after all required checks succeed.
-2. Build and publish from a clean release commit, preserving unrelated worktree changes. Resolve unexplained `npm run check` failures before pushing a version bump.
+1. Choose the artifact and version. A version bump included in a release PR and merged to `main` authorizes the configured pipeline to publish after all required checks succeed.
+2. Build and publish from a clean release commit, preserving unrelated worktree changes. Resolve unexplained `npm run check` failures before merging a version bump.
 3. Publish DSH only from `dist/dsh-plugin/`, never the private workspace root. Desktop releases only through the protected staging workflow.
 4. Do not hand-edit generated files under `dist/` or generated market metadata. Verify published artifacts and tags before declaring a release complete.
-5. Before pushing a `main` commit that changes `apps/site/`, publish and verify every npm package referenced by the site; Pages deploys automatically. Do not advertise unpublished desktop downloads.
+5. Before merging a PR to `main` that changes `apps/site/`, publish and verify every npm package referenced by the site; Pages deploys automatically. Do not advertise unpublished desktop downloads.
 
 ## Pipeline configuration (one-time)
 
@@ -51,11 +51,11 @@ Use `dev` as the shared integration branch. Create short-lived work branches fro
 
 | Work | What runs |
 | --- | --- |
-| Push to `main` | `CI`; changes under packages, the desktop app, scripts, or tests also run the unsigned **preview** matrix |
-| Push to `dev` or a work branch | Nothing — use pull requests to run checks |
+| PR merge to `main` | `CI`; changes under packages, the desktop app, scripts, or tests also run the unsigned **preview** matrix |
+| Direct push to `dev` or a work branch | Nothing — use pull requests to run checks |
 | Pull request to `dev` or `main` | Always-running `CI`; desktop changes also run the unsigned preview matrix, with 14-day artifacts |
-| Push that changes the DSH release version files or the desktop version sources | That product's release route |
-| Push that changes only documentation | Nothing |
+| Merge to `main` that changes the DSH release version files or the desktop version sources | That product's release route |
+| PR merge that changes only documentation | Nothing |
 
 Keep work branches short-lived and merge them within days. Keep `dev` current with `main` after releases so new work starts from the latest production code.
 
@@ -67,9 +67,9 @@ Rules that a failed attempt will not teach gently:
 - **Tags are immutable.** Fix a released defect with a new version; never re-point or reuse a tag.
 - **Do not develop on a tag.** Release tags must keep matching the version sources they were cut from.
 
-## Pre-push checks
+## Before release PRs
 
-### Before pushing a DSH version bump
+### Before merging a DSH version bump
 
 1. Verify `engines.dsh` names the range actually tested; widen it only after rechecking route admission (`webServer.register` `auth` and `ctx.connection.admit`), MCP tool registration, and client slots in a clean profile.
 2. Confirm install surfaces stay aligned: `README.md`, `README.en.md`, `adapters/dsh/README.md`, `apps/site/index.html`, and `market/index.json`.
