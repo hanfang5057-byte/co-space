@@ -41,9 +41,6 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme
     if (review.doc?.title) rememberDocumentTitle(docId, review.doc.title, requestApi);
   }, [docId, review.doc?.title, requestApi]);
   const visibleComments = review.comments.filter(comment => !['sent', 'processed'].includes(comment.status));
-  // Document-scoped pending count: the tab names one document, so no
-  // conversation-to-document mapping is implied.
-  const pending = (review.suggestions || []).filter(suggestion => suggestion.status === 'pending' || suggestion.status === 'conflicted').length;
   // Export, the Agent handoff and the document preferences are document actions,
   // so the compact header offers them too. The review/edit switch is
   // document-scoped through the shared controller, so the compact header
@@ -58,7 +55,7 @@ export function SpaceSidebarDocument({ useTabInfo, adapter, t = fallbackT, theme
     t={t}/> : null;
   const viewTools = review.doc ? <ModeSwitch review={review} t={t}/> : null;
   return <div {...themeRootProps('sidebar', { className: 'space-app space-sidebar-app', tokens: (theme ?? adapter?.theme)?.tokens })}>
-    <SpaceSurfaceHeader surface="sidebar" pending={pending} tools={tools} viewTools={viewTools} review={review} sessionId={sessionId} adapter={adapter} t={t} showSend={!review.editing&&visibleComments.length>0}/>
+    <SpaceSurfaceHeader surface="sidebar" tools={tools} viewTools={viewTools} review={review} sessionId={sessionId} adapter={adapter} t={t} showSend={!review.editing&&visibleComments.length>0}/>
     <main className="space-sidebar-main">
       <SpaceReviewSurface review={review} user={user} t={t}/>
     </main>
