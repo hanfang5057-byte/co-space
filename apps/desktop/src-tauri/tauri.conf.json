@@ -46,6 +46,9 @@
     },
     "externalBin": [
       "binaries/cospace-node"
-    ]
+    ],
+    "macOS": {
+      "entitlements": "./Entitlements.plist"
+    }
   }
 }
