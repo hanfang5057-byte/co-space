@@ -86,7 +86,7 @@ Unchanged. Deploys on `main` pushes that change the site or market metadata, and
 | `desktop-release` environment | repo settings | Restricted to `desktop-v*` tags and holds updater key material. Do not configure required reviewers; publication follows successful automated verification. |
 | `COSPACE_UPDATER_PUBLIC_KEY` | `desktop-release` environment variable | Persistent updater public key. |
 | `TAURI_SIGNING_PRIVATE_KEY` / `..._PASSWORD` | `desktop-release` environment secrets | Updater signing key; back it up outside the repository. |
-| Workflow permissions | repo settings | DSH and Desktop metadata PRs use the scoped GitHub App token. `GITHUB_TOKEN` is retained for explicit `pages.yml` dispatch and has only the workflow-declared `actions:write` permission. |
+| Workflow permissions | repo settings | Metadata branches and PRs use the scoped GitHub App token. `GITHUB_TOKEN` permissions are set per job for tag/release operations and explicit workflow dispatch; only dispatching jobs need `actions:write`. |
 
 ## Failure and recovery playbook
 
