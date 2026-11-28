@@ -57,7 +57,7 @@ Use `dev` as the shared integration branch. Create short-lived work branches fro
 | Merge to `main` that changes the DSH release version files or the desktop version sources | That product's release route |
 | PR merge that changes only documentation | Nothing |
 
-Keep work branches short-lived and merge them within days. Keep `dev` current with `main` after releases so new work starts from the latest production code.
+Keep work branches short-lived and merge them within days. Keep `dev` current with `main` after releases so new work starts from the latest production code. When syncing a release back to `dev`, preserve `main`'s ancestry with a merge commit; squashing the sync can make the next release PR report conflicts in version files already present on both branches.
 
 **Release PR.** Add the intended version change to the final PR that merges the release from `dev` to `main`. For DSH, update `release/npm-version.json`; for Desktop, run `npm run version:desktop -- X.Y.Z`. The merge to `main` triggers the release after the PR checks pass. If code is already merged and you decide to release later, use a separate version-only PR; merging it triggers the same release route.
 
