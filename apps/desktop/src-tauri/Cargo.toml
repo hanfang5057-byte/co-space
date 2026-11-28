@@ -1,6 +1,6 @@
 [package]
 name = "cospace-desktop"
-version = "0.2.0"
+version = "0.2.1"
 description = "CoSpace local review workbench"
 authors = ["CoSpace"]
 edition = "2021"

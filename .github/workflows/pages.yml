@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -27,15 +28,22 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      market_version: ${{ steps.market_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run build:site
       - run: npm run build:market
+      - id: market_version
+        name: Record expected market version
+        run: |
+          version="$(node -p "require('./market/index.json').plugins.find(plugin => plugin.name === 'dsh-plugin-space').versions.at(-1).version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Assemble Pages artifact
         run: |
           mkdir -p _site/market
@@ -43,9 +51,13 @@ jobs:
           cp market/index.json _site/market/index.json
           cp -R market/icons _site/market/icons
           touch _site/.nojekyll
-      - uses: actions/upload-pages-artifact@v3
+          tar --dereference --hard-dereference --directory _site -cvf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github --exclude=".[^/]*" .
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          path: _site
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     needs: build
@@ -55,4 +67,42 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+      - name: Purge CDN and verify market mirrors
+        env:
+          EXPECTED_MARKET_VERSION: ${{ needs.build.outputs.market_version }}
+        run: |
+          node --input-type=module <<'NODE'
+          const expectedVersion = process.env.EXPECTED_MARKET_VERSION;
+          const urls = [
+            'https://raw.githubusercontent.com/hanfang5057-byte/co-space/main/market/index.json',
+            'https://cdn.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json',
+            'https://hanfang5057-byte.github.io/co-space/market/index.json',
+          ];
+          const purgeUrl = 'https://purge.jsdelivr.net/gh/hanfang5057-byte/co-space@main/market/index.json';
+          const purgeResponse = await fetch(purgeUrl, { redirect: 'manual' });
+          if (purgeResponse.status < 200 || purgeResponse.status >= 300) {
+            throw new Error(`jsDelivr purge failed with HTTP ${purgeResponse.status}`);
+          }
+          console.log(`Requested jsDelivr cache purge for market index at ${expectedVersion}.`);
+
+          for (let attempt = 1; attempt <= 20; attempt += 1) {
+            const checks = await Promise.allSettled(urls.map(async url => {
+              const response = await fetch(url, { cache: 'no-store', redirect: 'manual' });
+              if (response.status !== 200) throw new Error(`${url} returned HTTP ${response.status}`);
+              const index = await response.json();
+              const plugin = index.plugins?.find(item => item.name === 'dsh-plugin-space');
+              const version = plugin?.versions?.at(-1)?.version;
+              if (version !== expectedVersion) throw new Error(`${url} lists ${version ?? 'no version'}, expected ${expectedVersion}`);
+              return url;
+            }));
+            const failures = checks.filter(check => check.status === 'rejected');
+            if (!failures.length) {
+              console.log(`All market sources serve dsh-plugin-space@${expectedVersion}: ${checks.map(check => check.value).join(', ')}`);
+              process.exit(0);
+            }
+            console.log(`Market sources are still converging (attempt ${attempt}/20): ${failures.map(check => check.reason.message).join('; ')}`);
+            await new Promise(resolve => setTimeout(resolve, 15_000));
+          }
+          throw new Error(`Market mirrors did not converge to ${expectedVersion}`);
+          NODE
