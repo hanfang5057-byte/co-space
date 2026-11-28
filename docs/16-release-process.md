@@ -45,6 +45,28 @@ For local desktop development, run `npm run dev:desktop`; UI changes rebuild and
 - **DSH**: set the intended version in `release/npm-version.json` — a prerelease such as `0.1.21-rc.1` publishes under the `rc` dist-tag and a prerelease GitHub Release without moving `latest` — pass the pre-push gate below, and push to `main`. `Publish DSH plugin` publishes with provenance, syncs and commits the market index, ensures the annotated `vX.Y.Z` tag and the GitHub Release with the staged tarball, and refreshes the Pages deployment; re-runs converge.
 - **Desktop**: on a reviewed release commit, set the intended stable version across all six desktop sources with `npm run version:desktop -- X.Y.Z` (`apps/desktop/package.json`, `adapter.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and both lockfiles), then push. `Build CoSpace Desktop` re-verifies the version agreement, creates the unique annotated tag `desktop-vX.Y.Z` after its checks pass, and dispatches `Stage signed desktop release` on it, which builds macOS arm64/x64 and Linux deb/AppImage, verifies both Linux MCP launchers, and validates each updater signature against the configured public key and its signed version. It creates a **draft** GitHub Release only after all jobs succeed. The `latest.json` in the draft is not the live update channel; staging does not authorize publication. Windows is excluded from both build matrices and the staged updater manifest until explicitly re-enabled.
 
+## Branching and daily work
+
+Releases are decided by version files, not by branches, so the repository has no long-lived integration branch.
+
+| Work | What runs |
+| --- | --- |
+| Push to `main` | `CI`; changes under packages, the desktop app, scripts, or tests also run the unsigned **preview** matrix |
+| Push to any other branch | Nothing — use a short-lived branch to park work in progress without spending CI |
+| Pull request to `main` | `CI` plus the unsigned preview matrix, with 14-day artifacts for installation testing |
+| Push that changes the DSH release version files or the desktop version sources | That product's release route |
+| Push that changes only documentation | Nothing |
+
+Keep feature branches short-lived and merge them within days. A long-running integration branch makes the desktop release intent compare a very wide commit range, and raises review and conflict cost.
+
+**Two-stage releases.** Push the content first so `CI` and the preview matrix verify it, then push the version-only commit to trigger the release. The desktop decision compares the version before and after the pushed range, so a squash merge that carries the bump still releases correctly.
+
+Rules that a failed attempt will not teach gently:
+
+- **Versions only increase.** Never move a version backwards to "undo" a bump: a desktop bump below the newest `desktop-v*` tag and a DSH version below the current `latest` are both rejected. Continue upward with a new version instead.
+- **Tags are immutable.** Fix a released defect with a new version; never re-point or reuse a tag.
+- **Do not develop on a tag.** Release tags must keep matching the version sources they were cut from.
+
 ## Human gates
 
 ### Before pushing a DSH version bump
