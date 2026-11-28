@@ -210,9 +210,22 @@ export async function localServiceStatus({ dataHome = resolveDataHome(), runtime
   return endpoint ? { running: true, compatible: endpoint.protocolVersion === LOCAL_PROTOCOL_VERSION, ...endpoint, url: `http://${endpoint.host}:${endpoint.port}/` } : { running: false, dataHome, runtimeHome };
 }
 
-export async function stopLocalDaemon({ dataHome = resolveDataHome(), runtimeHome = resolveRuntimeHome({ dataHome }), timeoutMs = 8000 } = {}) {
+export async function stopLocalDaemon({ dataHome = resolveDataHome(), runtimeHome = resolveRuntimeHome({ dataHome }), timeoutMs = 8000, allowActiveUiSessions = false } = {}) {
   const endpoint = await reachableEndpoint(runtimeHome);
   if (!endpoint) return { stopped: true, wasRunning: false };
+  if (allowActiveUiSessions && endpoint.activeMcpClients === 0 && endpoint.activeUiSessions > 0) {
+    // Development refreshes may interrupt open review pages. SIGTERM lets the
+    // daemon finish in-flight requests and close its stores before restarting.
+    try { process.kill(endpoint.pid, 'SIGTERM'); }
+    catch (error) { if (error.code !== 'ESRCH') throw error; }
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try { await stat(endpointFile(runtimeHome)); }
+      catch (error) { if (error.code === 'ENOENT') return { stopped: true, wasRunning: true }; throw error; }
+      await sleep(150);
+    }
+    throw Object.assign(new Error('CoSpace Local Server did not stop before the timeout'), { code: 'LOCAL_SERVER_STOP_TIMEOUT' });
+  }
   const secrets = await readSecrets(runtimeHome);
   const response = await fetch(`http://${endpoint.host}:${endpoint.port}/__cospace/control/stop`, {
     method: 'POST',

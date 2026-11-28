@@ -143,7 +143,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
   const [editRevision,setEditRevision]=useState(0);
   const [editInitialContent,setEditInitialContent]=useState(null);
   const [editSaveState,setEditSaveState]=useState('idle');
-  const surface=useRef(null), cardRefs=useRef(new Map()), commentRefs=useRef(new Map()), loadSequence=useRef(0);
+  const surface=useRef(null), cardRefs=useRef(new Map()), commentRefs=useRef(new Map()), loadSequence=useRef(0), modeScrollPositions=useRef(null);
   const editorRef=useRef(null);
   const editSessionRef=useRef(null);
   const autoEditInitialized=useRef(new Set());
@@ -261,9 +261,20 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     const timer=setTimeout(()=>setEditSaveState(state=>state==='saved'?'idle':state),2200);
     return()=>clearTimeout(timer);
   },[editSaveState]);
-  const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}setMessage('');setEditSaveError('');setSelection(null);editSessionRef.current={docId,baseVersion:doc.version,baseContent:doc.content,revision:0,dirty:false,saving:null};setEditInitialContent(doc.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditing(true)};
+  const captureModeScroll=()=>{
+    const positions=[];
+    for(let element=surface.current;element&&element!==document.documentElement;element=element.parentElement){
+      const overflowY=getComputedStyle(element).overflowY;
+      if((overflowY==='auto'||overflowY==='scroll'||overflowY==='overlay')&&element.scrollHeight>element.clientHeight){
+        positions.push({element,top:element.scrollTop,left:element.scrollLeft});
+      }
+    }
+    modeScrollPositions.current=positions.length?positions:null;
+  };
+  const startEditing=()=>{if(!canEdit){setMessage(t('edit.unavailable'));return}captureModeScroll();setMessage('');setEditSaveError('');setSelection(null);editSessionRef.current={docId,baseVersion:doc.version,baseContent:doc.content,revision:0,dirty:false,saving:null};setEditInitialContent(doc.content);setEditDirty(false);setEditRevision(0);setEditSaveState('idle');setEditing(true)};
   // `persistEdit({showError:true})` owns its own dialog, so this action stays silent to avoid stacking two modals.
   const switchToReview=()=>perform(async()=>{
+    captureModeScroll();
     await persistEdit({showError:true});
     setEditing(false);editSessionRef.current=null;setEditInitialContent(null);setEditDirty(false);setEditSaveState('idle');editorRef.current=null;
     setEditSaveError('');
@@ -321,7 +332,7 @@ export function useSpaceReview(api, docId, sessionId, t = defaultT, adapter = nu
     } finally { await reload(docId);setActiveComment(null); }
   });
   const deleteComment=id=>perform(async()=>{await call('deleteComment',{docId,commentId:id});setActiveComment(null);await reload(docId);});
-  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,error,setError,dismissError:()=>setError(''),surface,cardRefs,commentRefs,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,markEditDirty};
+  return {doc,setDoc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,setZoom,busy,message,setMessage,error,setError,dismissError:()=>setError(''),surface,cardRefs,commentRefs,modeScrollPositions,reload,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,send,canCopy,canSend,canCreate,canEdit,editing,autoFocus:doc?.id===autoEditDocId,editSaveError,editDirty,editSaveState,editInitialContent,dismissEditSaveError,discardEditDraftAndReload,editorRef,startEditing,switchToReview,markEditDirty};
 }
 
 export function ReviewZoomControls({ review, t = defaultT }) {
@@ -710,7 +721,23 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   // was measured for, and `selectionHints` is re-derived while the dialog is open.
   const [fabPosition,setFabPosition]=useState(null);
   const [selectionHints,setSelectionHints]=useState(null);
-  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,editing,editInitialContent,editorRef,markEditDirty}=review;
+  const {doc,comments,active,setActive,activeComment,setActiveComment,draft,setDraft,selection,setSelection,zoom,busy,message,setMessage,surface,cardRefs,commentRefs,modeScrollPositions,suggestions,statusText,chooseCard,chooseFromText,decide,addComment,deleteComment,editing,editInitialContent,editorRef,markEditDirty}=review;
+  // The controller captures scroll synchronously before changing mode. Restore
+  // it once the asynchronously recreated Milkdown editor is ready.
+  const restoreModeScroll=()=>{
+    const positions=modeScrollPositions.current;
+    if(!positions?.length)return;
+    modeScrollPositions.current=null;
+    const restore=()=>{
+      for(const {element,top,left} of positions){
+        if(!element.isConnected)continue;
+        element.scrollTop=top;
+        element.scrollLeft=left;
+      }
+    };
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(restore);
+    else setTimeout(restore,0);
+  };
   const visibleComments=useMemo(()=>comments.filter(comment=>!['sent','processed'].includes(comment.status)),[comments]);
   const liveComments=useMemo(()=>visibleComments.filter(comment=>commentRange(comment)),[visibleComments]);
   const staleComments=useMemo(()=>visibleComments.filter(comment=>!commentRange(comment)),[visibleComments]);
@@ -964,7 +991,7 @@ export function SpaceReviewSurface({ review, user = null, t = defaultT }) {
   const positionedFab=fabPosition&&selection&&fabPosition.from===selection.from&&fabPosition.to===selection.to?{left:fabPosition.left,top:fabPosition.top}:null;
   return <section className={`space-paper-wrap${editing?' is-editing':''}`} aria-label={t('paper.aria')} ref={scrollRef}>
     <div className={`space-doc-stage${hasAnnotations?' has-annotations':''}`} ref={stageRef} style={{zoom}}>
-      <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={editing?(editInitialContent??doc.content):doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
+      <div ref={surface} onClickCapture={handleMarkdownLinkClick} onPointerMove={editing?undefined:trackHover} onPointerLeave={closeHover} className={`space-paper${doc.content.replace(/^# [^\r\n]*(?:\r?\n)+/,'').trim()?'':' is-empty'}`} tabIndex={-1}><MarkdownEditor key={editing?'edit':`review-${doc.version}`} markdown={editing?(editInitialContent??doc.content):doc.content} editorRef={editorRef} onChange={markEditDirty} onDecorationsReady={()=>setResizeTick(tick=>tick+1)} onEditorReady={restoreModeScroll} t={t} readOnly={!editing} autoFocus={review.autoFocus} suggestions={suggestions}/></div>
       <div className="space-anchor-layer" aria-hidden="true">{layout.highlights?.map(highlight=><span key={highlight.key} className={`space-anchor-rect is-${highlight.kind}${highlight.deleted?' is-deleted':''}${highlight.active?' is-active':''}${highlight.caret?' is-caret':''}${highlight.outline?' is-outline':''}`} style={{left:highlight.left,top:highlight.top,width:highlight.width,height:highlight.height}}/>)}</div>
       {hasAnnotations && <aside className="space-comment-rail" ref={railRef} aria-label={t('annotations.title')} style={{minHeight:layout.minHeight||undefined}}>
         <div className="space-comment-spacer" style={{height:layout.height||0}} />

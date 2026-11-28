@@ -127,7 +127,7 @@ export const zh = {
   'export.failed': '导出失败，请重试。',
   'paper.aria': '文档正文',
   'comment.bubble': '评论',
-  'comment.author': '用户',
+  'comment.author': '我',
   'comment.accountUser': '已登录用户',
   'comment.addTitle': '添加评论',
   'comment.selected': '已选：{quote}',

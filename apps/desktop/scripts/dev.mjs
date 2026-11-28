@@ -1,7 +1,11 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rm, stat } from 'node:fs/promises';
 import { reconcileLocalServiceVersion } from './reconcile-local-service.mjs';
+import { localServiceStatus, stopLocalDaemon } from '../../../packages/local-runtime/src/manager.js';
+import { endpointFile, resolveDataHome, resolveRuntimeHome } from '../../../packages/local-runtime/src/paths.js';
+import desktop from '../package.json' with { type: 'json' };
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tauriCli = path.resolve(appDir, '../../node_modules/@tauri-apps/cli/tauri.js');
@@ -17,6 +21,25 @@ const prepareCode = await new Promise(resolve => prepare.once('exit', resolve));
 if (prepareCode !== 0) process.exit(prepareCode || 1);
 
 await reconcileLocalServiceVersion();
+
+// The dev build can change while keeping the product version. Stop any idle
+// daemon before replacing that version's cached assets; never touch user data.
+const dataHome = resolveDataHome();
+const runtimeHome = resolveRuntimeHome({ dataHome });
+const service = await localServiceStatus({ dataHome, runtimeHome });
+if (service.running) {
+  if (service.activeMcpClients > 0) {
+    throw new Error(`CoSpace service ${service.version} has ${service.activeMcpClients} active Agent connection(s). Disconnect Agents before starting the development app.`);
+  }
+  await stopLocalDaemon({ dataHome, runtimeHome, allowActiveUiSessions: true });
+}
+try {
+  await stat(endpointFile(runtimeHome));
+  throw new Error('CoSpace service state is uncertain; refusing to replace its development runtime. Check the running service and retry.');
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+await rm(path.join(runtimeHome, 'versions', desktop.version), { recursive: true, force: true });
 
 const watcher = run(process.execPath, ['scripts/build-webapp.mjs', '--watch']);
 const tauri = run(process.execPath, [tauriCli, 'dev', '--config', 'src-tauri/tauri.conf.json']);
